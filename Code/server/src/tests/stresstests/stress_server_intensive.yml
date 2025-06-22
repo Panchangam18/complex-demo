@@ -1,0 +1,49 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+config:
+  target: "http://alb-a37-demo-ser-1441792879.us-east-1.elb.amazonaws.com"
+  phases:
+    # Warm-up phase
+    - duration: 30
+      arrivalRate: 5
+      name: "Warm-up"
+    # Gradual ramp-up
+    - duration: 60
+      arrivalRate: 10
+      rampTo: 50
+      name: "Ramp-up"
+    # Sustained high load
+    - duration: 120
+      arrivalRate: 50
+      name: "Sustained load"
+    # Spike test
+    - duration: 30
+      arrivalRate: 100
+      name: "Spike"
+    # Cool-down
+    - duration: 60
+      arrivalRate: 50
+      rampTo: 5
+      name: "Cool-down"
+  http:
+    timeout: 10
+    pool: 100
+scenarios:
+  - name: "API Load Test"
+    weight: 80
+    flow:
+      - loop:
+          - get:
+              url: "/api/getAllProducts"
+              capture:
+                - json: "$"
+                  as: "products"
+        count: 15
+  - name: "Health Check"
+    weight: 20
+    flow:
+      - loop:
+          - get:
+              url: "/status"
+        count: 5 

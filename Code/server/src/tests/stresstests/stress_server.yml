@@ -1,0 +1,18 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+config:
+  target: "http://alb-a37-demo-ser-1441792879.us-east-1.elb.amazonaws.com" # Updated with actual server ALB URL
+  phases:
+    - duration: 100
+      arrivalRate: 20
+  http:
+    timeout: 5 # Wait 5 sec before aborting the request
+    pool: 50 # Fixed number of pool connection, to be reused
+scenarios:
+  - name: "Generating load on the server fleet of tasks"
+    flow:
+      - loop:
+          - get:
+              url: "/api/getAllProducts" # Change me to "/" if necessary
+        count: 10

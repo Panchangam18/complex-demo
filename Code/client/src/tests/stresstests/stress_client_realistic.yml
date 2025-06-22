@@ -1,0 +1,52 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+config:
+  target: "http://alb-a37-demo-cli-474961134.us-east-1.elb.amazonaws.com"
+  phases:
+    # Business hours simulation
+    - duration: 300  # 5 minutes
+      arrivalRate: 1
+      rampTo: 30
+      name: "Morning ramp-up"
+    - duration: 600  # 10 minutes
+      arrivalRate: 30
+      name: "Peak hours"
+    - duration: 300  # 5 minutes  
+      arrivalRate: 30
+      rampTo: 5
+      name: "Evening wind-down"
+  http:
+    timeout: 30
+    pool: 50
+  payload:
+    path: "./user-data.csv"
+    fields:
+      - "userId"
+      - "sessionId"
+scenarios:
+  - name: "Regular User Journey"
+    weight: 70
+    flow:
+      # Landing page
+      - get:
+          url: "/"
+      - think: 2
+      # Browse products (simulated)
+      - get:
+          url: "/"
+      - think: 5
+      # Repeat browsing (simulate user engagement)
+      - loop:
+          - get:
+              url: "/"
+          - think: 3
+        count: 3
+        
+  - name: "Quick Visitor"
+    weight: 30
+    flow:
+      # Quick visit and bounce
+      - get:
+          url: "/"
+      - think: 1 
