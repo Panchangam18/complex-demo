@@ -1,0 +1,85 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prometheus-stack
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 51.2.0
+    helm:
+      values: |
+        fullnameOverride: prometheus
+        
+        prometheus:
+          prometheusSpec:
+            replicas: 1
+            retention: 2h
+            # No persistent storage for lightweight deployment
+            storageSpec: {}
+              
+        grafana:
+          enabled: true
+          replicas: 1
+          admin:
+            existingSecret: grafana-admin-secret
+          # No persistent storage for lightweight deployment
+          persistence:
+            enabled: false
+          datasources:
+            datasources.yaml:
+              apiVersion: 1
+              datasources:
+              - name: Prometheus
+                type: prometheus
+                url: http://prometheus-kube-prometheus-prometheus:9090
+                access: proxy
+                isDefault: true
+                
+        alertmanager:
+          alertmanagerSpec:
+            replicas: 1
+            # No persistent storage for lightweight deployment
+            storage: {}
+                      
+        nodeExporter:
+          enabled: true
+          
+        kubeStateMetrics:
+          enabled: true
+          
+        defaultRules:
+          create: true
+          rules:
+            alertmanager: true
+            general: true
+            k8s: true
+            kubeApiserver: true
+            kubelet: true
+            kubernetesApps: true
+            kubernetesResources: true
+            node: true
+            prometheus: true
+            prometheusOperator: true
+            
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-admin-secret
+  namespace: observability
+type: Opaque
+data:
+  admin-user: YWRtaW4=  # admin
+  admin-password: YWRtaW4xMjM=  # admin123 

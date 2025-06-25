@@ -33,6 +33,13 @@ resource "null_resource" "argocd_install" {
       
       # Apply the GitOps bootstrap applications
       kubectl apply -f ${var.k8s_manifests_path}/envs/dev/applications.yaml
+      
+      # Wait a moment for ArgoCD to process the applications
+      sleep 30
+      
+      # Apply observability stack for automatic deployment
+      kubectl create namespace observability --dry-run=client -o yaml | kubectl apply -f -
+      kubectl apply -f ${var.k8s_manifests_path}/envs/dev/aws/observability/prometheus-lite.yaml
     EOT
   }
 
@@ -40,6 +47,7 @@ resource "null_resource" "argocd_install" {
     when    = destroy
     command = <<-EOT
       kubectl delete namespace argocd --ignore-not-found=true
+      kubectl delete namespace observability --ignore-not-found=true
     EOT
   }
 } 
