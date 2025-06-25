@@ -61,6 +61,7 @@ terraform {
 # AWS Provider Configuration
 provider "aws" {
   region = var.aws_region
+  profile = "sandbox-permanent"
   
   default_tags {
     tags = var.common_tags

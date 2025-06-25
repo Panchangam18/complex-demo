@@ -57,6 +57,12 @@ variable "environment_tags" {
   default     = {}
 }
 
+variable "gcp_labels" {
+  description = "GCP-specific labels (must be lowercase)"
+  type        = map(string)
+  default     = {}
+}
+
 # EKS Variables
 variable "eks_cluster_version" {
   description = "Kubernetes version for EKS cluster"
@@ -106,4 +112,10 @@ variable "rds_backup_retention_period" {
   description = "Backup retention period in days"
   type        = number
   default     = 30
+}
+
+variable "aws_profile" {
+  description = "AWS profile to use for authentication"
+  type        = string
+  default     = "default"
 }

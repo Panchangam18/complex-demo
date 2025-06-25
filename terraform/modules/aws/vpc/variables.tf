@@ -41,3 +41,9 @@ variable "common_tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "eks_cluster_names" {
+  description = "List of EKS cluster names to tag subnets for"
+  type        = list(string)
+  default     = []
+}

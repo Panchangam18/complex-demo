@@ -56,7 +56,10 @@ resource "aws_subnet" "public" {
     {
       Name = "${var.environment}-public-${local.azs[count.index]}"
       Type = "Public"
-    }
+      "kubernetes.io/role/elb" = "1"
+    },
+    # Add tags for each EKS cluster
+    { for cluster in var.eks_cluster_names : "kubernetes.io/cluster/${cluster}" => "shared" }
   )
 }
 
@@ -73,7 +76,10 @@ resource "aws_subnet" "private" {
     {
       Name = "${var.environment}-private-${local.azs[count.index]}"
       Type = "Private"
-    }
+      "kubernetes.io/role/internal-elb" = "1"
+    },
+    # Add tags for each EKS cluster
+    { for cluster in var.eks_cluster_names : "kubernetes.io/cluster/${cluster}" => "shared" }
   )
 }
 

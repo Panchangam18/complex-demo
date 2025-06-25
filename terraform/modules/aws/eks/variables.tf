@@ -95,6 +95,24 @@ variable "enable_ebs_csi_driver" {
   default     = true
 }
 
+variable "enable_vpc_cni_addon" {
+  description = "Enable vpc-cni addon (disable if addon already exists)"
+  type        = bool
+  default     = false
+}
+
+variable "enable_kube_proxy_addon" {
+  description = "Enable kube-proxy addon (disable if addon already exists)"
+  type        = bool
+  default     = false
+}
+
+variable "enable_coredns_addon" {
+  description = "Enable coredns addon (disable if addon already exists)"
+  type        = bool
+  default     = false
+}
+
 variable "enable_efs_csi_driver" {
   description = "Enable EFS CSI Driver"
   type        = bool

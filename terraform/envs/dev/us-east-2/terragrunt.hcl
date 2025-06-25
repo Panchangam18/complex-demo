@@ -7,6 +7,7 @@ include "root" {
 inputs = {
   environment = "dev"
   aws_region  = "us-east-2"  # Using Ohio region which is empty
+  aws_profile = get_env("AWS_PROFILE", "default")
   
   # Network configuration per multicloud strategy
   # AWS: 10.0.0.0/16 - 10.15.0.0/16
@@ -26,9 +27,15 @@ inputs = {
   azure_location       = "eastus"
   azure_vnet_cidr      = "10.32.0.0/16"  # Azure Dev VNet
   
-  # Environment-specific tags
+  # Environment-specific tags (AWS uses uppercase, GCP uses lowercase)
   environment_tags = {
-    environment = "dev"
+    Environment = "dev"      # AWS tags (uppercase)
+    Region      = "us-east-2"
+  }
+  
+  # GCP-specific labels (must be lowercase)
+  gcp_labels = {
+    environment = "dev"      # GCP labels (lowercase)
     region      = "us-east-2"
   }
 }

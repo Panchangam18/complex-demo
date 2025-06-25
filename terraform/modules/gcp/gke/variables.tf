@@ -236,6 +236,12 @@ variable "common_tags" {
   default     = {}
 }
 
+variable "gcp_labels" {
+  description = "GCP-specific labels (must be lowercase) to apply to GCP resources"
+  type        = map(string)
+  default     = {}
+}
+
 variable "database_encryption" {
   description = "Database encryption configuration"
   type = object({

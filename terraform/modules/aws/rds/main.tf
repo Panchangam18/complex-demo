@@ -136,8 +136,18 @@ resource "aws_db_parameter_group" "this" {
   dynamic "parameter" {
     for_each = var.parameters
     content {
-      name  = parameter.key
-      value = parameter.value
+      name         = parameter.key
+      value        = parameter.value
+      apply_method = contains([
+        "shared_preload_libraries",
+        "max_connections",
+        "shared_buffers",
+        "effective_cache_size",
+        "wal_level",
+        "max_wal_senders",
+        "wal_keep_segments",
+        "archive_mode"
+      ], parameter.key) ? "pending-reboot" : "immediate"
     }
   }
 
@@ -208,6 +218,11 @@ resource "aws_db_instance" "this" {
   final_snapshot_identifier = var.final_snapshot_identifier != null ? var.final_snapshot_identifier : "${var.identifier}-final-snapshot-${formatdate("YYYY-MM-DD-hhmm", timestamp())}"
 
   tags = var.tags
+
+  # Ignore changes to final_snapshot_identifier since timestamp() always changes
+  lifecycle {
+    ignore_changes = [final_snapshot_identifier]
+  }
 
   timeouts {
     create = "40m"

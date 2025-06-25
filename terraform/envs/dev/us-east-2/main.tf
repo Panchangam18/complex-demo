@@ -24,6 +24,7 @@ module "aws_vpc" {
   environment        = local.environment
   enable_nat_gateway = true
   enable_flow_logs   = true
+  eks_cluster_names  = ["${local.environment}-eks-${local.region}"]
   common_tags        = local.tags
 }
 
@@ -137,7 +138,7 @@ module "gcp_gke" {
     }
   ]
   
-  common_tags = local.tags
+  gcp_labels = var.gcp_labels
 }
 
 # AWS ECR Repositories
@@ -453,3 +454,41 @@ output "gke_get_credentials_command" {
 #   description = "Azure internal subnet ID"
 #   value       = module.azure_vnet.internal_subnet_id
 # }
+
+# Outputs for ArgoCD and Observability Stack
+output "argocd_url" {
+  description = "ArgoCD server public URL"
+  value       = module.argocd.argocd_url
+}
+
+output "argocd_admin_password" {
+  description = "ArgoCD admin password"
+  value       = module.argocd.argocd_admin_password
+  sensitive   = true
+}
+
+output "grafana_url" {
+  description = "Grafana public URL"
+  value       = module.argocd.grafana_url
+}
+
+output "grafana_admin_username" {
+  description = "Grafana admin username"
+  value       = module.argocd.grafana_admin_username
+}
+
+output "grafana_admin_password" {
+  description = "Grafana admin password"
+  value       = module.argocd.grafana_admin_password
+  sensitive   = true
+}
+
+output "prometheus_url" {
+  description = "Prometheus internal URL"
+  value       = module.argocd.prometheus_url
+}
+
+output "observability_summary" {
+  description = "Complete observability stack summary with URLs and credentials"
+  value       = module.argocd.observability_summary
+}

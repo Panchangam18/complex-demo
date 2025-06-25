@@ -28,15 +28,7 @@ spec:
           # No persistent storage for lightweight deployment
           persistence:
             enabled: false
-          datasources:
-            datasources.yaml:
-              apiVersion: 1
-              datasources:
-              - name: Prometheus
-                type: prometheus
-                url: http://prometheus-kube-prometheus-prometheus:9090
-                access: proxy
-                isDefault: true
+          # Let the chart auto-configure the Prometheus datasource
                 
         alertmanager:
           alertmanagerSpec:

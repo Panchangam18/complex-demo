@@ -129,6 +129,20 @@ resource "aws_security_group" "eks_pods" {
   )
 }
 
+# Security group rules for cluster-to-node communication
+# NOTE: Removed cluster_to_nodes rule as it's redundant with the inline rule above
+# that already allows ALL traffic from cluster to pods (0-0/-1 covers 443/tcp)
+
+resource "aws_security_group_rule" "nodes_to_cluster" {
+  type                     = "ingress"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.eks_pods.id
+  security_group_id        = aws_security_group.eks_cluster.id
+  description              = "Allow nodes to communicate with cluster API server"
+}
+
 # EKS Cluster
 resource "aws_eks_cluster" "main" {
   name                          = var.cluster_name
@@ -233,6 +247,57 @@ resource "aws_iam_role_policy_attachment" "eks_nodes_ssm" {
   role       = aws_iam_role.eks_nodes.name
 }
 
+# Launch template for node groups
+resource "aws_launch_template" "eks_nodes" {
+  for_each = var.node_groups
+
+  name_prefix = "${var.cluster_name}-${each.key}-"
+  
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 1
+    instance_metadata_tags      = "enabled"
+  }
+
+  network_interfaces {
+    security_groups = [aws_security_group.eks_pods.id]
+    delete_on_termination = true
+  }
+
+  block_device_mappings {
+    device_name = "/dev/xvda"
+    
+    ebs {
+      volume_size = each.value.disk_size
+      volume_type = "gp3"
+      iops        = 3000
+      encrypted   = true
+      delete_on_termination = true
+    }
+  }
+
+  monitoring {
+    enabled = true
+  }
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = merge(
+      var.common_tags,
+      {
+        Name        = "${var.cluster_name}-node-${each.key}"
+        Environment = var.environment
+        NodeGroup   = each.key
+      }
+    )
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
 # EKS Managed Node Groups
 resource "aws_eks_node_group" "main" {
   for_each = var.node_groups
@@ -244,7 +309,11 @@ resource "aws_eks_node_group" "main" {
   version         = var.cluster_version
 
   instance_types = each.value.instance_types
-  disk_size      = each.value.disk_size
+
+  launch_template {
+    id      = aws_launch_template.eks_nodes[each.key].id
+    version = aws_launch_template.eks_nodes[each.key].latest_version
+  }
 
   scaling_config {
     desired_size = each.value.desired_size
@@ -290,6 +359,75 @@ resource "aws_eks_node_group" "main" {
       Name        = "${var.cluster_name}-node-group-${each.key}"
       Environment = var.environment
       NodeGroup   = each.key
+    }
+  )
+}
+
+# EKS Add-ons
+resource "aws_eks_addon" "vpc_cni" {
+  count = var.enable_vpc_cni_addon ? 1 : 0
+  
+  cluster_name = aws_eks_cluster.main.name
+  addon_name   = "vpc-cni"
+  
+  resolve_conflicts_on_create = "OVERWRITE"
+  
+  tags = merge(
+    var.common_tags,
+    {
+      Name = "${var.cluster_name}-vpc-cni"
+    }
+  )
+}
+
+resource "aws_eks_addon" "kube_proxy" {
+  count = var.enable_kube_proxy_addon ? 1 : 0
+  
+  cluster_name = aws_eks_cluster.main.name
+  addon_name   = "kube-proxy"
+  
+  resolve_conflicts_on_create = "OVERWRITE"
+  
+  tags = merge(
+    var.common_tags,
+    {
+      Name = "${var.cluster_name}-kube-proxy"
+    }
+  )
+}
+
+resource "aws_eks_addon" "coredns" {
+  count = var.enable_coredns_addon ? 1 : 0
+  
+  cluster_name = aws_eks_cluster.main.name
+  addon_name   = "coredns"
+  
+  resolve_conflicts_on_create = "OVERWRITE"
+  
+  depends_on = [
+    aws_eks_node_group.main
+  ]
+  
+  tags = merge(
+    var.common_tags,
+    {
+      Name = "${var.cluster_name}-coredns"
+    }
+  )
+}
+
+resource "aws_eks_addon" "ebs_csi_driver" {
+  count = var.enable_ebs_csi_driver ? 1 : 0
+  
+  cluster_name = aws_eks_cluster.main.name
+  addon_name   = "aws-ebs-csi-driver"
+  
+  resolve_conflicts_on_create = "OVERWRITE"
+  
+  tags = merge(
+    var.common_tags,
+    {
+      Name = "${var.cluster_name}-ebs-csi-driver"
     }
   )
 }

@@ -50,6 +50,10 @@ plan: ## Run Terraform plan for the specified environment
 apply: ## Apply Terraform changes for the specified environment
 	@echo "Applying Terraform changes for $(ENV)/$(REGION)..."
 	@cd $(TG_PATH) && $(TG_CMD) apply -auto-approve
+	@echo ""
+	@echo "🎉 Deployment Complete! Here are your service URLs and credentials:"
+	@echo "================================================================="
+	@cd $(TG_PATH) && $(TG_CMD) output observability_summary
 
 cleanup: ## Clean up cloud resources that might block Terraform destroy
 	@echo "Running pre-destroy cleanup for $(ENV)/$(REGION)..."

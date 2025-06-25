@@ -171,9 +171,9 @@ resource "google_container_cluster" "main" {
     }
   }
 
-  # Resource labels
+  # Resource labels (use GCP-specific lowercase labels)
   resource_labels = merge(
-    var.common_tags,
+    var.gcp_labels,
     {
       environment = var.environment
       cluster     = var.cluster_name

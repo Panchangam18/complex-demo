@@ -40,14 +40,87 @@ resource "null_resource" "argocd_install" {
       # Apply observability stack for automatic deployment
       kubectl create namespace observability --dry-run=client -o yaml | kubectl apply -f -
       kubectl apply -f ${var.k8s_manifests_path}/envs/dev/aws/observability/prometheus-lite.yaml
+      
+      # Wait for Helm installation to complete (direct deployment)
+      echo "Installing Prometheus stack directly via Helm..."
+      helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+      helm repo update
+      
+      # Install prometheus stack with public access
+      helm upgrade --install prometheus-stack prometheus-community/kube-prometheus-stack \
+        -n observability \
+        --set fullnameOverride=prometheus \
+        --set prometheus.prometheusSpec.replicas=1 \
+        --set prometheus.prometheusSpec.retention=2h \
+        --set prometheus.prometheusSpec.storageSpec={} \
+        --set grafana.enabled=true \
+        --set grafana.replicas=1 \
+        --set grafana.adminPassword=admin123 \
+        --set grafana.persistence.enabled=false \
+        --set grafana.service.type=LoadBalancer \
+        --set grafana.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="classic" \
+        --set alertmanager.alertmanagerSpec.replicas=1 \
+        --set alertmanager.alertmanagerSpec.storage={} \
+        --set nodeExporter.enabled=true \
+        --set kubeStateMetrics.enabled=true \
+        --set defaultRules.create=true \
+        --wait --timeout=600s
+        
+      echo "Observability stack deployed successfully!"
     EOT
   }
 
   provisioner "local-exec" {
     when    = destroy
     command = <<-EOT
+      # Clean up Helm releases
+      helm uninstall prometheus-stack -n observability --ignore-not-found=true || true
+      
+      # Clean up namespaces
       kubectl delete namespace argocd --ignore-not-found=true
       kubectl delete namespace observability --ignore-not-found=true
+      
+      # Clean up any remaining CRDs
+      kubectl delete crd -l app.kubernetes.io/name=kube-prometheus-stack --ignore-not-found=true || true
     EOT
   }
+}
+
+# Get ArgoCD URL and credentials
+data "external" "argocd_info" {
+  program = ["bash", "-c", <<-EOT
+    # Update kubeconfig first
+    aws eks update-kubeconfig --region ${var.region} --name ${var.cluster_name} --profile ${var.aws_profile} > /dev/null 2>&1
+    
+    # Get ArgoCD URL
+    ARGOCD_URL=""
+    for i in {1..30}; do
+      ARGOCD_URL=$(kubectl get svc argocd-server -n argocd -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+      if [ ! -z "$ARGOCD_URL" ]; then
+        break
+      fi
+      sleep 10
+    done
+    
+    # Get ArgoCD admin password
+    ARGOCD_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" 2>/dev/null | base64 -d)
+    
+    # Get Grafana URL
+    GRAFANA_URL=""
+    for i in {1..30}; do
+      GRAFANA_URL=$(kubectl get svc prometheus-stack-grafana -n observability -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+      if [ ! -z "$GRAFANA_URL" ]; then
+        break
+      fi
+      sleep 10
+    done
+    
+    # Get Prometheus URL (internal)
+    PROMETHEUS_URL="prometheus-prometheus.observability.svc.cluster.local:9090"
+    
+    echo "{\"argocd_url\":\"$ARGOCD_URL\",\"argocd_password\":\"$ARGOCD_PASSWORD\",\"grafana_url\":\"$GRAFANA_URL\",\"prometheus_url\":\"$PROMETHEUS_URL\"}"
+  EOT
+  ]
+  
+  depends_on = [null_resource.argocd_install]
 } 
