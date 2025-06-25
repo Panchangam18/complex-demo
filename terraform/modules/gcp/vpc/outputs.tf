@@ -67,3 +67,13 @@ output "gke_service_ranges" {
   description = "Secondary IP ranges for GKE services"
   value       = { for subnet in google_compute_subnetwork.internal : subnet.name => subnet.secondary_ip_range[1].ip_cidr_range }
 }
+
+output "gke_pods_range_names" {
+  description = "Secondary IP range names for GKE pods"
+  value       = [for subnet in google_compute_subnetwork.internal : subnet.secondary_ip_range[0].range_name]
+}
+
+output "gke_services_range_names" {
+  description = "Secondary IP range names for GKE services"
+  value       = [for subnet in google_compute_subnetwork.internal : subnet.secondary_ip_range[1].range_name]
+}

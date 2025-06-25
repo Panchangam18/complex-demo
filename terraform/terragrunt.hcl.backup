@@ -5,9 +5,8 @@
 locals {
   # Parse the path to get environment and region
   path_parts = split("/", path_relative_to_include())
-  # Expect path structure envs/<env>/<region>
-  environment = local.path_parts[1]
-  region      = local.path_parts[2]
+  environment = local.path_parts[0]
+  region = local.path_parts[1]
   
   # Backend bucket name - created by bootstrap
   backend_bucket = "complex-demo-tfstate-hp9dga"
@@ -88,5 +87,9 @@ inputs = {
   # Region will be set by child terragrunt.hcl files
   
   # Common tags applied to all resources
-  common_tags = {}
+  common_tags = {
+    managed_by   = "terraform"
+    repository   = "complex-demo"
+    cost_center  = "engineering"
+  }
 }

@@ -28,7 +28,7 @@ inputs = {
   
   # Environment-specific tags
   environment_tags = {
-    Environment = "dev"
-    Region      = "us-east-2"
+    environment = "dev"
+    region      = "us-east-2"
   }
 }

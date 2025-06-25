@@ -1,6 +1,6 @@
 # Terraform Multicloud DevOps Stack Makefile
 
-.PHONY: help init plan apply destroy fmt validate clean
+.PHONY: help init plan apply destroy fmt validate clean import
 
 # Default environment
 ENV ?= dev
@@ -11,6 +11,12 @@ CLOUD ?= aws
 
 # Terragrunt paths
 TG_PATH = envs/$(ENV)/$(REGION)
+
+# AWS profile to use for authentication (override when needed, e.g. `make apply AWS_PROFILE=my-profile`)
+AWS_PROFILE ?= default
+
+# Common Terragrunt command prefix (non-interactive to avoid prompts)
+TG_CMD = AWS_PROFILE=$(AWS_PROFILE) TG_NON_INTERACTIVE=true terragrunt
 
 help: ## Show this help message
 	@echo "Terraform Multicloud DevOps Stack"
@@ -35,19 +41,27 @@ install-tools: ## Install required tools (terragrunt, tflint, etc.)
 
 init: ## Initialize Terraform for the specified environment
 	@echo "Initializing Terraform for $(ENV)/$(REGION)..."
-	@cd $(TG_PATH) && terragrunt init
+	@cd $(TG_PATH) && $(TG_CMD) init
 
 plan: ## Run Terraform plan for the specified environment
 	@echo "Running Terraform plan for $(ENV)/$(REGION)..."
-	@cd $(TG_PATH) && terragrunt plan
+	@cd $(TG_PATH) && $(TG_CMD) plan
 
 apply: ## Apply Terraform changes for the specified environment
 	@echo "Applying Terraform changes for $(ENV)/$(REGION)..."
-	@cd $(TG_PATH) && terragrunt apply -auto-approve
+	@cd $(TG_PATH) && $(TG_CMD) apply -auto-approve
 
-destroy: ## Destroy Terraform resources for the specified environment
+cleanup: ## Clean up cloud resources that might block Terraform destroy
+	@echo "Running pre-destroy cleanup for $(ENV)/$(REGION)..."
+	@AWS_PROFILE=$(AWS_PROFILE) ENV=$(ENV) AWS_REGION=$(REGION) ./scripts/pre-destroy-cleanup.sh
+
+destroy: cleanup ## Destroy Terraform resources for the specified environment (with pre-cleanup)
 	@echo "Destroying Terraform resources for $(ENV)/$(REGION)..."
-	@cd $(TG_PATH) && terragrunt destroy -auto-approve
+	@cd $(TG_PATH) && $(TG_CMD) destroy -auto-approve
+
+destroy-force: ## Destroy Terraform resources WITHOUT pre-cleanup (use with caution)
+	@echo "Destroying Terraform resources for $(ENV)/$(REGION) WITHOUT cleanup..."
+	@cd $(TG_PATH) && $(TG_CMD) destroy -auto-approve
 
 fmt: ## Format all Terraform files
 	@echo "Formatting Terraform files..."
@@ -55,7 +69,7 @@ fmt: ## Format all Terraform files
 
 validate: ## Validate Terraform configuration
 	@echo "Validating Terraform configuration..."
-	@cd $(TG_PATH) && terragrunt validate
+	@cd $(TG_PATH) && $(TG_CMD) validate
 
 lint: ## Run tflint on all modules
 	@echo "Running tflint..."
@@ -73,7 +87,7 @@ clean: ## Clean up Terraform cache and lock files
 
 show-outputs: ## Show outputs for the specified environment
 	@echo "Showing outputs for $(ENV)/$(REGION)..."
-	@cd $(TG_PATH) && terragrunt output
+	@cd $(TG_PATH) && $(TG_CMD) output
 
 create-workspace: ## Create a new environment workspace
 	@echo "Creating workspace structure for $(ENV)/$(REGION)..."
@@ -83,5 +97,18 @@ create-workspace: ## Create a new environment workspace
 
 graph: ## Generate dependency graph
 	@echo "Generating dependency graph for $(ENV)/$(REGION)..."
-	@cd $(TG_PATH) && terragrunt graph | dot -Tpng > ../../../docs/$(ENV)-$(REGION)-graph.png
+	@cd $(TG_PATH) && $(TG_CMD) graph | dot -Tpng > ../../../docs/$(ENV)-$(REGION)-graph.png
 	@echo "Graph saved to docs/$(ENV)-$(REGION)-graph.png"
+
+# --------------------------------------------------
+# Resource import helper
+# --------------------------------------------------
+
+import: ## Import an existing resource into the state (usage: make import ADDRESS=<addr> ID=<id>)
+	@if [ -z "$(ADDRESS)" ] || [ -z "$(ID)" ]; then \
+	  echo "ERROR: ADDRESS and ID variables are required."; \
+	  echo "Example: make import ADDRESS=module.aws_vpc.aws_subnet.private[0] ID=subnet-012345"; \
+	  exit 1; \
+	fi
+	@echo "Importing $(ADDRESS) (ID=$(ID)) into $(ENV)/$(REGION) using profile $(AWS_PROFILE)..."
+	@cd $(TG_PATH) && $(TG_CMD) import '$(ADDRESS)' $(ID)

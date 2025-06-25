@@ -3,7 +3,7 @@
 
 terraform {
   backend "gcs" {
-    bucket = "complex-demo-tfstate-c61tvk"
+    bucket = "complex-demo-tfstate-hp9dga"
     prefix = "terraform/state"
   }
 }
