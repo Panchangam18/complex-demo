@@ -1,0 +1,79 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: dev-applications
+  namespace: argocd
+spec:
+  generators:
+  - list:
+      elements:
+      - cluster: dev-eks-us-east-2
+        url: https://kubernetes.default.svc
+        environment: dev
+        region: us-east-2
+        cloud: aws
+      - cluster: dev-gke-us-east1
+        url: https://gke-cluster-endpoint
+        environment: dev
+        region: us-east1
+        cloud: gcp
+  template:
+    metadata:
+      name: '{{cluster}}-observability'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/Panchangam18/complex-demo
+        targetRevision: HEAD
+        path: k8s/envs/{{environment}}/{{cloud}}/observability
+      destination:
+        server: '{{url}}'
+        namespace: observability
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: frontend-dev
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Panchangam18/complex-demo
+    targetRevision: HEAD
+    path: k8s/envs/dev/frontend
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: frontend-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: backend-dev
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Panchangam18/complex-demo
+    targetRevision: HEAD
+    path: k8s/envs/dev/backend
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: backend-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true 

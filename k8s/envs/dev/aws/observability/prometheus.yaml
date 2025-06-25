@@ -1,0 +1,140 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prometheus-stack
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 51.2.0
+    helm:
+      values: |
+        fullnameOverride: prometheus
+        
+        prometheus:
+          prometheusSpec:
+            replicas: 2
+            retention: 7d
+            storageSpec:
+              volumeClaimTemplate:
+                spec:
+                  storageClassName: gp3
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 50Gi
+                      
+            # Thanos sidecar for long-term storage
+            thanos:
+              image: quay.io/thanos/thanos:v0.32.5
+              objectStorageConfig:
+                secretName: thanos-objstore-config
+                secretKey: objstore.yml
+              
+        grafana:
+          enabled: true
+          replicas: 2
+          admin:
+            existingSecret: grafana-admin-secret
+          persistence:
+            enabled: true
+            storageClassName: gp3
+            size: 10Gi
+          datasources:
+            datasources.yaml:
+              apiVersion: 1
+              datasources:
+              - name: Prometheus
+                type: prometheus
+                url: http://prometheus-kube-prometheus-prometheus:9090
+                access: proxy
+                isDefault: true
+              - name: Thanos
+                type: prometheus
+                url: http://thanos-query:9090
+                access: proxy
+              - name: Elasticsearch
+                type: elasticsearch
+                url: http://elasticsearch:9200
+                access: proxy
+                database: logstash-*
+                
+        alertmanager:
+          alertmanagerSpec:
+            replicas: 3
+            storage:
+              volumeClaimTemplate:
+                spec:
+                  storageClassName: gp3
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 10Gi
+                      
+        nodeExporter:
+          enabled: true
+          
+        kubeStateMetrics:
+          enabled: true
+          
+        defaultRules:
+          create: true
+          rules:
+            alertmanager: true
+            etcd: true
+            configReloaders: true
+            general: true
+            k8s: true
+            kubeApiserver: true
+            kubeApiserverAvailability: true
+            kubeApiserverSlos: true
+            kubelet: true
+            kubeProxy: true
+            kubePrometheusGeneral: true
+            kubePrometheusNodeRecording: true
+            kubernetesApps: true
+            kubernetesResources: true
+            kubernetesStorage: true
+            kubernetesSystem: true
+            node: true
+            nodeExporterAlerting: true
+            nodeExporterRecording: true
+            prometheus: true
+            prometheusOperator: true
+            
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: thanos-objstore-config
+  namespace: observability
+type: Opaque
+stringData:
+  objstore.yml: |
+    type: S3
+    config:
+      bucket: thanos-metrics-dev
+      endpoint: s3.us-east-2.amazonaws.com
+      region: us-east-2
+      aws_sdk_auth: true
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-admin-secret
+  namespace: observability
+type: Opaque
+data:
+  admin-user: YWRtaW4=  # admin
+  admin-password: YWRtaW4xMjM=  # admin123 
