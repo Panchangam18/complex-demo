@@ -20,7 +20,7 @@ spec:
             storageSpec:
               volumeClaimTemplate:
                 spec:
-                  storageClassName: gp3
+                  storageClassName: gp2
                   accessModes: ["ReadWriteOnce"]
                   resources:
                     requests:
@@ -40,7 +40,7 @@ spec:
             existingSecret: grafana-admin-secret
           persistence:
             enabled: true
-            storageClassName: gp3
+            storageClassName: gp2
             size: 10Gi
           datasources:
             datasources.yaml:
@@ -67,7 +67,7 @@ spec:
             storage:
               volumeClaimTemplate:
                 spec:
-                  storageClassName: gp3
+                  storageClassName: gp2
                   accessModes: ["ReadWriteOnce"]
                   resources:
                     requests:
