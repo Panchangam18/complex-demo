@@ -26,7 +26,7 @@ output "grafana_admin_password" {
 }
 
 output "prometheus_url" {
-  description = "Prometheus internal URL (accessible within cluster)"
+  description = "Prometheus public URL"
   value       = "http://${data.external.argocd_info.result.prometheus_url}"
 }
 
@@ -49,7 +49,7 @@ output "observability_summary" {
 ║                                                                            ║
 ║  📈 Prometheus (Metrics Database)                                         ║
 ║     URL:      http://${data.external.argocd_info.result.prometheus_url}
-║     Access:   Internal cluster access only                                ║
+║     Access:   Public                                                      ║
 ║                                                                            ║
 ║  🔔 AlertManager (Alert Management)                                       ║
 ║     URL:      prometheus-alertmanager.observability.svc.cluster.local:9093║

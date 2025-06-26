@@ -67,6 +67,9 @@ resource "null_resource" "argocd_install" {
         --set nodeExporter.enabled=true \
         --set kubeStateMetrics.enabled=true \
         --set defaultRules.create=true \
+        --set prometheus.service.type=LoadBalancer \
+        --set prometheus.service.port=80 \
+        --set prometheus.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="classic" \
         --wait --timeout=600s
         
       echo "Observability stack deployed successfully!"
@@ -118,8 +121,19 @@ data "external" "argocd_info" {
       sleep 10
     done
     
-    # Get Prometheus URL (internal)
-    PROMETHEUS_URL="prometheus-prometheus.observability.svc.cluster.local:9090"
+    # Retrieve public LB hostname for prometheus-prometheus service (wait up to 15 min)
+    for i in {1..90}; do
+      PROMETHEUS_URL=$(kubectl -n observability get svc prometheus-prometheus -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+      if [ ! -z "$PROMETHEUS_URL" ]; then
+        for h in {1..30}; do
+          if curl -s --max-time 2 http://$PROMETHEUS_URL:9090/-/ready >/dev/null; then
+            break 2
+          fi
+          sleep 2
+        done
+      fi
+      sleep 10
+    done
     
     echo "{\"argocd_url\":\"$ARGOCD_URL\",\"argocd_password\":\"$ARGOCD_PASSWORD\",\"grafana_url\":\"$GRAFANA_URL\",\"prometheus_url\":\"$PROMETHEUS_URL\"}"
   EOT

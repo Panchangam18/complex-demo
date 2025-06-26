@@ -143,6 +143,17 @@ resource "aws_security_group_rule" "nodes_to_cluster" {
   description              = "Allow nodes to communicate with cluster API server"
 }
 
+# Allow NodePort traffic from external load balancers (e.g., Classic/ALB) to the worker nodes
+resource "aws_security_group_rule" "nodes_nodeport_ingress" {
+  type              = "ingress"
+  from_port         = 30000
+  to_port           = 32767
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.eks_pods.id
+  description       = "Allow Kubernetes NodePorts from anywhere"
+}
+
 # EKS Cluster
 resource "aws_eks_cluster" "main" {
   name                          = var.cluster_name
