@@ -31,6 +31,9 @@ resource "null_resource" "argocd_install" {
       kubectl -n argocd annotate svc argocd-server service.beta.kubernetes.io/aws-load-balancer-healthcheck-healthy-threshold="2" --overwrite
       kubectl -n argocd annotate svc argocd-server service.beta.kubernetes.io/aws-load-balancer-backend-protocol="http" --overwrite
       
+      # Remove HTTPS port from service since we're running in insecure mode
+      kubectl -n argocd patch svc argocd-server --type='json' -p='[{"op": "remove", "path": "/spec/ports/1"}]'
+      
       # Apply the GitOps bootstrap applications
       kubectl apply -f ${var.k8s_manifests_path}/envs/dev/applications.yaml
       
