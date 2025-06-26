@@ -272,17 +272,18 @@ resource "google_container_node_pool" "main" {
 }
 
 # Enable GKE Hub registration if requested
-resource "google_gke_hub_membership" "main" {
-  count = var.enable_gke_hub ? 1 : 0
+# Temporarily disabled due to cluster in STOPPING state from interrupted destroy
+# resource "google_gke_hub_membership" "main" {
+#   count = var.enable_gke_hub ? 1 : 0
 
-  membership_id = var.cluster_name
-  project       = var.gcp_project_id
+#   membership_id = var.cluster_name
+#   project       = var.gcp_project_id
 
-  endpoint {
-    gke_cluster {
-      resource_link = google_container_cluster.main.id
-    }
-  }
+#   endpoint {
+#     gke_cluster {
+#       resource_link = google_container_cluster.main.id
+#     }
+#   }
 
-  depends_on = [google_container_cluster.main]
-}
+#   depends_on = [google_container_cluster.main]
+# }

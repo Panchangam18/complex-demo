@@ -100,7 +100,8 @@ output "get_credentials_command" {
   value       = "gcloud container clusters get-credentials ${google_container_cluster.main.name} --region ${google_container_cluster.main.location} --project ${var.gcp_project_id}"
 }
 
-output "hub_membership_id" {
-  description = "GKE Hub membership ID"
-  value       = var.enable_gke_hub ? google_gke_hub_membership.main[0].membership_id : null
-}
+# Temporarily disabled due to GKE hub membership being commented out
+# output "hub_membership_id" {
+#   description = "GKE Hub membership ID"
+#   value       = var.enable_gke_hub ? google_gke_hub_membership.main[0].membership_id : null
+# }
