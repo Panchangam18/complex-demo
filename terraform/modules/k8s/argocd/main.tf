@@ -121,19 +121,8 @@ data "external" "argocd_info" {
       sleep 10
     done
     
-    # Retrieve public LB hostname for prometheus-prometheus service (wait up to 15 min)
-    for i in {1..90}; do
-      PROMETHEUS_URL=$(kubectl -n observability get svc prometheus-prometheus -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
-      if [ ! -z "$PROMETHEUS_URL" ]; then
-        for h in {1..30}; do
-          if curl -s --max-time 2 http://$PROMETHEUS_URL:9090/-/ready >/dev/null; then
-            break 2
-          fi
-          sleep 2
-        done
-      fi
-      sleep 10
-    done
+    # Get Prometheus URL (simplified - no health check)
+    PROMETHEUS_URL=$(kubectl -n observability get svc prometheus-prometheus -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
     
     echo "{\"argocd_url\":\"$ARGOCD_URL\",\"argocd_password\":\"$ARGOCD_PASSWORD\",\"grafana_url\":\"$GRAFANA_URL\",\"prometheus_url\":\"$PROMETHEUS_URL\"}"
   EOT

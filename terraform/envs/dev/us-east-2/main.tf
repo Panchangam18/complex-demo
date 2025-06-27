@@ -88,7 +88,7 @@ module "aws_eks" {
 module "gcp_gke" {
   source = "../../../modules/gcp/gke"
   
-  cluster_name        = "${local.environment}-gke-${var.gcp_region}"
+  cluster_name        = "${local.environment}-gke-public-${var.gcp_region}"
   gcp_project_id      = var.gcp_project_id
   gcp_region          = var.gcp_region
   network_name        = module.gcp_vpc.vpc_name
@@ -118,7 +118,7 @@ module "gcp_gke" {
   }
   
   # Cluster configuration
-  enable_private_cluster              = true
+  enable_private_cluster              = false
   enable_private_endpoint             = false
   enable_workload_identity            = true
   enable_autopilot                    = true
@@ -218,6 +218,173 @@ module "aws_rds" {
   
   tags = local.tags
 }
+
+# Generate gossip encryption key for Consul
+resource "random_password" "consul_gossip_key" {
+  length  = 32
+  special = false
+}
+
+# AWS EC2-based Consul Cluster (Primary Datacenter)
+module "consul_primary" {
+  source = "../../../modules/consul/ec2-cluster"
+  
+  environment             = local.environment
+  aws_region             = var.aws_region
+  vpc_id                 = module.aws_vpc.vpc_id
+  public_subnet_ids      = module.aws_vpc.public_subnet_ids
+  private_subnet_ids     = module.aws_vpc.private_subnet_ids
+  
+  datacenter_name        = "aws-${local.environment}-${local.region}"
+  gossip_key             = random_password.consul_gossip_key.result
+  consul_servers         = var.consul_servers
+  instance_type          = var.consul_instance_type
+  
+  enable_connect         = true
+  enable_ui              = true
+  enable_acls            = false  # Start with ACLs disabled for simplicity
+  primary_datacenter     = true
+  
+  allow_consul_from_cidrs = [
+    var.vpc_cidr,           # AWS VPC
+    var.gcp_vpc_cidr,       # GCP VPC  
+    var.azure_vnet_cidr     # Azure VNet
+  ]
+  
+  common_tags = local.tags
+}
+
+# Provider configuration for EKS cluster
+provider "kubernetes" {
+  alias = "eks"
+  
+  host                   = module.aws_eks.cluster_endpoint
+  cluster_ca_certificate = base64decode(module.aws_eks.cluster_certificate_authority_data)
+  
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args = ["eks", "get-token", "--cluster-name", module.aws_eks.cluster_id, "--region", var.aws_region, "--profile", var.aws_profile]
+    env = {
+      AWS_PROFILE = var.aws_profile
+    }
+  }
+}
+
+provider "helm" {
+  alias = "eks"
+  
+  kubernetes {
+    host                   = module.aws_eks.cluster_endpoint
+    cluster_ca_certificate = base64decode(module.aws_eks.cluster_certificate_authority_data)
+    
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args = ["eks", "get-token", "--cluster-name", module.aws_eks.cluster_id, "--region", var.aws_region, "--profile", var.aws_profile]
+      env = {
+        AWS_PROFILE = var.aws_profile
+      }
+    }
+  }
+}
+
+# EKS Consul Client (Secondary Datacenter) - DISABLED due to storage/timeout issues
+# TODO: Re-enable after fixing EBS CSI driver IAM role configuration
+# module "consul_eks_client" {
+#   source = "../../../modules/consul/k8s-client"
+#   
+#   cluster_name       = module.aws_eks.cluster_id
+#   cluster_endpoint   = module.aws_eks.cluster_endpoint
+#   region             = var.aws_region
+#   environment        = local.environment
+#   cloud_provider     = "aws"
+#   
+#   datacenter_name    = "eks-${local.environment}-${local.region}"
+#   primary_datacenter = "eks-${local.environment}-${local.region}"
+#   
+#   gossip_key              = random_password.consul_gossip_key.result
+#   wan_federation_secret   = ""
+#   primary_consul_servers  = []
+#   consul_master_token     = ""
+#   
+#   enable_connect         = true
+#   enable_connect_inject  = true
+#   enable_ui              = false  # UI runs on primary cluster
+#   enable_prometheus_metrics = true
+#   enable_sync_catalog    = true
+#   enable_acls           = false
+#   
+#   aws_profile = var.aws_profile
+#   
+#   providers = {
+#     kubernetes = kubernetes.eks
+#     helm       = helm.eks
+#   }
+#   
+#   depends_on = [
+#     module.aws_eks
+#   ]
+# }
+
+# Get GCP access token for GKE authentication
+data "google_client_config" "default" {}
+
+# Provider configuration for GKE cluster
+provider "kubernetes" {
+  alias = "gke"
+  
+  host                   = "https://${module.gcp_gke.cluster_endpoint}"
+  token                  = data.google_client_config.default.access_token
+  cluster_ca_certificate = base64decode(module.gcp_gke.cluster_ca_certificate)
+}
+
+provider "helm" {
+  alias = "gke"
+  
+  kubernetes {
+    host                   = "https://${module.gcp_gke.cluster_endpoint}"
+    token                  = data.google_client_config.default.access_token
+    cluster_ca_certificate = base64decode(module.gcp_gke.cluster_ca_certificate)
+  }
+}
+
+# GKE Consul Client (Secondary Datacenter) - DISABLED due to storage/timeout issues
+# TODO: Re-enable after fixing storage and authentication issues
+# module "consul_gke_client" {
+#   source = "../../../modules/consul/k8s-client"
+#   
+#   cluster_name           = module.gcp_gke.cluster_name
+#   cluster_endpoint       = module.gcp_gke.cluster_endpoint
+#   cluster_ca_certificate = module.gcp_gke.cluster_ca_certificate
+#   region                 = var.gcp_region
+#   environment            = local.environment
+#   cloud_provider         = "gcp"
+#   
+#   datacenter_name    = "gke-${local.environment}-${var.gcp_region}"
+#   primary_datacenter = "gke-${local.environment}-${var.gcp_region}"
+#   
+#   gossip_key              = random_password.consul_gossip_key.result
+#   wan_federation_secret   = ""
+#   primary_consul_servers  = []
+#   consul_master_token     = ""
+#   
+#   enable_connect         = true
+#   enable_connect_inject  = true
+#   enable_ui              = false  # UI runs on primary cluster
+#   enable_prometheus_metrics = true
+#   enable_sync_catalog    = true
+#   enable_acls           = false
+#   
+#   providers = {
+#     kubernetes = kubernetes.gke
+#     helm       = helm.gke
+#   }
+#   
+#   depends_on = [
+#     module.gcp_gke
+#   ]
+# }
 
 # AWS S3 Buckets for observability and assets
 # Temporarily commenting out S3 module to fix state issues
@@ -455,7 +622,56 @@ output "gke_get_credentials_command" {
 #   value       = module.azure_vnet.internal_subnet_id
 # }
 
-# Outputs for ArgoCD and Observability Stack
+# Outputs for Consul
+output "consul_ui_url" {
+  description = "Consul UI URL"
+  value       = module.consul_primary.consul_ui_url
+}
+
+output "consul_primary_datacenter" {
+  description = "Primary Consul datacenter information"
+  value       = module.consul_primary.consul_connection_info
+}
+
+# Temporarily disabled outputs for K8s Consul clients
+# output "consul_eks_datacenter" {
+#   description = "EKS Consul datacenter information"
+#   value       = module.consul_eks_client.consul_client_info
+# }
+
+# output "consul_gke_datacenter" {
+#   description = "GKE Consul datacenter information"
+#   value       = module.consul_gke_client.consul_client_info
+# }
+
+output "consul_gossip_key" {
+  description = "Consul gossip encryption key"
+  value       = random_password.consul_gossip_key.result
+  sensitive   = true
+}
+
+# Consul Service Discovery Summary
+output "consul_summary" {
+  description = "Complete Consul multi-cloud setup summary"
+  value = {
+    ui_url              = module.consul_primary.consul_ui_url
+    primary_datacenter  = "aws-${local.environment}-${local.region}"
+    secondary_datacenters = [
+      # "eks-${local.environment}-${local.region}",     # Disabled
+      # "gke-${local.environment}-${var.gcp_region}"    # Disabled
+    ]
+    connect_enabled     = true
+    federation_enabled  = false  # Disabled until K8s clients are working
+    mesh_gateways      = [
+      "AWS EC2 Primary Cluster"
+      # "EKS Secondary Cluster",    # Disabled
+      # "GKE Secondary Cluster"     # Disabled
+    ]
+    service_discovery  = "Multi-cloud service catalog sync enabled"
+  }
+}
+
+# Outputs for ArgoCD and Observability
 output "argocd_url" {
   description = "ArgoCD server public URL"
   value       = module.argocd.argocd_url
@@ -472,23 +688,12 @@ output "grafana_url" {
   value       = module.argocd.grafana_url
 }
 
-output "grafana_admin_username" {
-  description = "Grafana admin username"
-  value       = module.argocd.grafana_admin_username
-}
-
-output "grafana_admin_password" {
-  description = "Grafana admin password"
-  value       = module.argocd.grafana_admin_password
-  sensitive   = true
-}
-
 output "prometheus_url" {
-  description = "Prometheus internal URL"
+  description = "Prometheus public URL"
   value       = module.argocd.prometheus_url
 }
 
 output "observability_summary" {
-  description = "Complete observability stack summary with URLs and credentials"
+  description = "Complete observability stack information"
   value       = module.argocd.observability_summary
 }

@@ -61,7 +61,7 @@ resource "google_container_cluster" "main" {
   private_cluster_config {
     enable_private_nodes    = var.enable_private_cluster
     enable_private_endpoint = var.enable_private_endpoint
-    master_ipv4_cidr_block = var.master_ipv4_cidr_block
+    master_ipv4_cidr_block = var.enable_private_cluster ? var.master_ipv4_cidr_block : null
   }
 
   # Master authorized networks
@@ -188,6 +188,9 @@ resource "google_container_cluster" "main" {
   lifecycle {
     ignore_changes = [node_pool, initial_node_count]
   }
+
+  # Disable deletion protection so the cluster can be recreated in dev
+  deletion_protection = false
 }
 
 # Node pools for Standard clusters

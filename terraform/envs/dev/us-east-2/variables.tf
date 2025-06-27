@@ -119,3 +119,21 @@ variable "aws_profile" {
   type        = string
   default     = "default"
 }
+
+# Consul Variables
+variable "consul_servers" {
+  description = "Number of Consul server nodes"
+  type        = number
+  default     = 3
+  
+  validation {
+    condition     = var.consul_servers == 3 || var.consul_servers == 5
+    error_message = "Consul servers must be 3 or 5 for proper consensus."
+  }
+}
+
+variable "consul_instance_type" {
+  description = "EC2 instance type for Consul servers"
+  type        = string
+  default     = "t3.small"
+}

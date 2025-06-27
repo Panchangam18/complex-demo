@@ -51,9 +51,20 @@ apply: ## Apply Terraform changes for the specified environment
 	@echo "Applying Terraform changes for $(ENV)/$(REGION)..."
 	@cd $(TG_PATH) && $(TG_CMD) apply -auto-approve
 	@echo ""
-	@echo "🎉 Deployment Complete! Here are your service URLs and credentials:"
-	@echo "================================================================="
-	@cd $(TG_PATH) && $(TG_CMD) output observability_summary
+	@echo "🎉 Deployment Complete! Here are your infrastructure details:"
+	@echo "=============================================================="
+	@echo ""
+	@echo "🔗 Consul Service Discovery & Service Mesh:"
+	@cd $(TG_PATH) && $(TG_CMD) output consul_summary 2>/dev/null || echo "Consul deployment in progress..."
+	@echo ""
+	@echo "📊 Multi-Cloud Infrastructure:"
+	@echo "- EKS Cluster: $$(cd $(TG_PATH) && $(TG_CMD) output -raw eks_cluster_id 2>/dev/null || echo 'Not deployed')"
+	@echo "- GKE Cluster: $$(cd $(TG_PATH) && $(TG_CMD) output -raw gke_cluster_name 2>/dev/null || echo 'Not deployed')"
+	@echo "- Consul UI: $$(cd $(TG_PATH) && $(TG_CMD) output -raw consul_ui_url 2>/dev/null || echo 'Not available')"
+	@echo ""
+	@echo "🚀 Next Steps:"
+	@echo "- Check Consul status: make consul-status ENV=$(ENV) REGION=$(REGION)"
+	@echo "- View all outputs: make show-outputs ENV=$(ENV) REGION=$(REGION)"
 
 cleanup: ## Clean up cloud resources that might block Terraform destroy
 	@echo "Running pre-destroy cleanup for $(ENV)/$(REGION)..."
@@ -92,6 +103,10 @@ clean: ## Clean up Terraform cache and lock files
 show-outputs: ## Show outputs for the specified environment
 	@echo "Showing outputs for $(ENV)/$(REGION)..."
 	@cd $(TG_PATH) && $(TG_CMD) output
+
+consul-status: ## Check Consul multi-cloud deployment status
+	@echo "Checking Consul status for $(ENV)/$(REGION)..."
+	@./scripts/consul-status.sh $(ENV) $(REGION)
 
 create-workspace: ## Create a new environment workspace
 	@echo "Creating workspace structure for $(ENV)/$(REGION)..."
