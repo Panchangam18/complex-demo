@@ -65,6 +65,19 @@ apply: ## Apply Terraform changes for the specified environment
 	@echo "🚀 Next Steps:"
 	@echo "- Check Consul status: make consul-status ENV=$(ENV) REGION=$(REGION)"
 	@echo "- View all outputs: make show-outputs ENV=$(ENV) REGION=$(REGION)"
+	@echo "- Deploy applications: make deploy-full-stack ENV=$(ENV) REGION=$(REGION)"
+
+deploy-full-stack: ## Deploy infrastructure + applications + images (full stack)
+	@echo "🚀 Starting full stack deployment for $(ENV)/$(REGION)..."
+	@cd .. && ./scripts/deploy-full-stack.sh -e $(ENV) -r $(REGION) -p $(AWS_PROFILE)
+
+deploy-apps-only: ## Deploy only applications (skip infrastructure)
+	@echo "🐳 Deploying applications only for $(ENV)/$(REGION)..."
+	@cd .. && ./scripts/deploy-full-stack.sh -e $(ENV) -r $(REGION) -p $(AWS_PROFILE) --skip-terraform
+
+deploy-infra-only: ## Deploy only infrastructure (skip applications)
+	@echo "🏗️  Deploying infrastructure only for $(ENV)/$(REGION)..."
+	@cd .. && ./scripts/deploy-full-stack.sh -e $(ENV) -r $(REGION) -p $(AWS_PROFILE) --skip-images --skip-k8s-update
 
 cleanup: ## Clean up cloud resources that might block Terraform destroy
 	@echo "Running pre-destroy cleanup for $(ENV)/$(REGION)..."
