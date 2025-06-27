@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: 013364997013.dkr.ecr.us-east-2.amazonaws.com/dev-frontend:latest
+        image: forgea37.jfrog.io/complex-demo-docker-local/dev-frontend:latest
         ports:
         - containerPort: 80
         env:

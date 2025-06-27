@@ -19,16 +19,16 @@ spec:
     spec:
       containers:
       - name: backend
-        image: 013364997013.dkr.ecr.us-east-2.amazonaws.com/dev-backend:latest
+        image: forgea37.jfrog.io/complex-demo-docker-local/dev-backend:latest
         ports:
-        - containerPort: 3000
+        - containerPort: 3001
         env:
         - name: NODE_ENV
           value: "development"
         - name: DATABASE_URL
           value: "postgresql://postgres:password@dev-postgres-us-east-2.ctqem8yca5a3.us-east-2.rds.amazonaws.com:5432/dev_db"
         - name: PORT
-          value: "3000"
+          value: "3001"
         resources:
           requests:
             memory: "256Mi"
@@ -38,14 +38,14 @@ spec:
             cpu: "500m"
         livenessProbe:
           httpGet:
-            path: /health
-            port: 3000
+            path: /status
+            port: 3001
           initialDelaySeconds: 30
           periodSeconds: 10
         readinessProbe:
           httpGet:
-            path: /ready
-            port: 3000
+            path: /status
+            port: 3001
           initialDelaySeconds: 5
           periodSeconds: 5
 ---
@@ -60,7 +60,7 @@ spec:
   type: ClusterIP
   ports:
   - port: 80
-    targetPort: 3000
+    targetPort: 3001
     protocol: TCP
   selector:
     app: backend
