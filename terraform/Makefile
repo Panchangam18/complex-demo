@@ -265,3 +265,35 @@ quick-deploy: ## Quick app-only deployment (build → push → deploy)
 	@make build-push
 	@make deploy-apps
 	@make status
+
+fix-loadbalancers: ## Fix load balancer connectivity issues
+	@echo "🔧 Fixing Load Balancer Connectivity Issues"
+	@echo "==========================================="
+	@echo "📝 Detected issue: Load balancers cannot reach worker nodes"
+	@echo "🛠️  Applying fix..."
+	@echo ""
+	@echo "Step 1: Delete and recreate all LoadBalancer services to reset them"
+	@kubectl patch svc argocd-server -n argocd -p '{"spec":{"type":"NodePort"}}' 2>/dev/null || echo "ArgoCD already NodePort"
+	@kubectl patch svc prometheus-prometheus -n observability -p '{"spec":{"type":"NodePort"}}' 2>/dev/null || echo "Prometheus already NodePort"
+	@kubectl patch svc prometheus-stack-grafana -n observability -p '{"spec":{"type":"NodePort"}}' 2>/dev/null || echo "Grafana already NodePort"
+	@kubectl patch svc frontend-service -n frontend-dev -p '{"spec":{"type":"NodePort"}}' 2>/dev/null || echo "Frontend already NodePort"
+	@kubectl patch svc backend-service -n backend-dev -p '{"spec":{"type":"NodePort"}}' 2>/dev/null || echo "Backend already NodePort"
+	@echo "⏳ Waiting 10 seconds for old load balancers to terminate..."
+	@sleep 10
+	@echo ""
+	@echo "Step 2: Recreate as LoadBalancer services"
+	@kubectl patch svc argocd-server -n argocd -p '{"spec":{"type":"LoadBalancer"}}' 2>/dev/null || echo "ArgoCD LoadBalancer update failed"
+	@kubectl patch svc prometheus-prometheus -n observability -p '{"spec":{"type":"LoadBalancer"}}' 2>/dev/null || echo "Prometheus LoadBalancer update failed"
+	@kubectl patch svc prometheus-stack-grafana -n observability -p '{"spec":{"type":"LoadBalancer"}}' 2>/dev/null || echo "Grafana LoadBalancer update failed"
+	@kubectl patch svc frontend-service -n frontend-dev -p '{"spec":{"type":"LoadBalancer"}}' 2>/dev/null || echo "Frontend LoadBalancer update failed"
+	@kubectl patch svc backend-service -n backend-dev -p '{"spec":{"type":"LoadBalancer"}}' 2>/dev/null || echo "Backend LoadBalancer update failed"
+	@echo ""
+	@echo "⏳ Waiting 60 seconds for new load balancers to provision..."
+	@sleep 60
+	@echo ""
+	@echo "🧪 Testing connectivity..."
+	@make test-apps
+	@echo ""
+	@echo "✅ Load balancer fix completed!"
+	@echo "📝 If issues persist, the problem may be with AWS security groups."
+	@echo "💡 Try accessing via NodePort: kubectl get svc -A | grep NodePort"

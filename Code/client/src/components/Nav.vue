@@ -11,7 +11,7 @@
                 class="ml-2"
                 to="/main"
                 style="color:white"
-                >Very complex demo by Forge
+                >Very complex demo made to test Forge (and cause the death of von)
             </router-link>
         </b-navbar-brand>
 
