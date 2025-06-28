@@ -52,7 +52,9 @@ apply: ## Complete pipeline: Build → Push → Deploy infrastructure & applicat
 	@echo "======================================================================"
 	@echo "Phase 1: Building and pushing application images to JFrog Artifactory"
 	@echo "======================================================================"
-	@cd .. && ./scripts/build-and-push.sh
+	@NEW_TAG=$$(date +%Y%m%d-%H%M%S); \
+	cd .. && IMAGE_TAG=$$NEW_TAG ./scripts/build-and-push.sh; \
+	echo "Built images with tag: $$NEW_TAG"
 	@echo ""
 	@echo "======================================================================"
 	@echo "Phase 2: Applying Terraform infrastructure changes"
@@ -62,10 +64,10 @@ apply: ## Complete pipeline: Build → Push → Deploy infrastructure & applicat
 	@echo "======================================================================"
 	@echo "Phase 3: Deploying applications to Kubernetes"
 	@echo "======================================================================"
-	@echo "Restarting deployments to pick up new images..."
-	@kubectl rollout restart deployment/frontend -n frontend-dev 2>/dev/null || echo "Frontend deployment not found (will be created)"
-	@kubectl rollout restart deployment/backend -n backend-dev 2>/dev/null || echo "Backend deployment not found (will be created)"
-	@echo "Waiting for deployments to complete..."
+	@echo "Forcing fresh deployment with new images..."
+	@kubectl delete pod -l app=frontend -n frontend-dev 2>/dev/null || echo "No frontend pods to delete"
+	@kubectl delete pod -l app=backend -n backend-dev 2>/dev/null || echo "No backend pods to delete"
+	@echo "Waiting for new pods to start..."
 	@kubectl rollout status deployment/frontend -n frontend-dev --timeout=300s 2>/dev/null || echo "Frontend deployment status check skipped"
 	@kubectl rollout status deployment/backend -n backend-dev --timeout=300s 2>/dev/null || echo "Backend deployment status check skipped"
 	@echo ""
@@ -182,14 +184,14 @@ import: ## Import an existing resource into the state (usage: make import ADDRES
 
 build-push: ## Build and push application images to JFrog Artifactory
 	@echo "🐳 Building and pushing application images..."
-	@cd .. && ./scripts/build-and-push.sh
+	@cd .. && IMAGE_TAG=$$(date +%Y%m%d-%H%M%S) ./scripts/build-and-push.sh
 
 deploy-apps: ## Deploy applications to Kubernetes (restart deployments)
 	@echo "🚀 Deploying applications to Kubernetes..."
-	@echo "Restarting deployments to pick up latest images..."
-	@kubectl rollout restart deployment/frontend -n frontend-dev
-	@kubectl rollout restart deployment/backend -n backend-dev
-	@echo "Waiting for deployments to complete..."
+	@echo "Forcing fresh deployment with latest images..."
+	@kubectl delete pod -l app=frontend -n frontend-dev
+	@kubectl delete pod -l app=backend -n backend-dev
+	@echo "Waiting for new pods to start..."
 	@kubectl rollout status deployment/frontend -n frontend-dev --timeout=300s
 	@kubectl rollout status deployment/backend -n backend-dev --timeout=300s
 	@echo "✅ Application deployment complete!"

@@ -58,7 +58,7 @@ echo -e "${GREEN}✅ Successfully logged into JFrog Artifactory${NC}"
 # Build Frontend
 echo -e "\n${YELLOW}🏗️  Building Frontend (Vue.js)...${NC}"
 cd Code/client
-docker build --platform linux/amd64 -t "${FRONTEND_IMAGE_URL}" .
+docker build --platform linux/amd64 --no-cache -t "${FRONTEND_IMAGE_URL}" .
 if [ $? -ne 0 ]; then
     echo -e "${RED}❌ Frontend build failed${NC}"
     exit 1
@@ -77,7 +77,7 @@ echo -e "${GREEN}✅ Frontend pushed successfully: ${FRONTEND_IMAGE_URL}${NC}"
 # Build Backend
 echo -e "\n${YELLOW}🏗️  Building Backend (Node.js)...${NC}"
 cd ../server
-docker build --platform linux/amd64 -t "${BACKEND_IMAGE_URL}" .
+docker build --platform linux/amd64 --no-cache -t "${BACKEND_IMAGE_URL}" .
 if [ $? -ne 0 ]; then
     echo -e "${RED}❌ Backend build failed${NC}"
     exit 1
