@@ -324,11 +324,12 @@ workflows:
             branches:
               ignore: 
                 - /skip-.*/ 
-      - terraform-validate:
-          filters:
-            branches:
-              ignore: 
-                - /skip-.*/
+      # Temporarily comment out terraform until AWS OIDC is set up
+      # - terraform-validate:
+      #     filters:
+      #       branches:
+      #         ignore: 
+      #           - /skip-.*/
       
       # Application builds (run in parallel after security checks)
       - build-frontend:
@@ -338,15 +339,15 @@ workflows:
           requires:
             - security-scan
       
-      # Infrastructure planning
-      - terraform-plan:
-          requires:
-            - terraform-validate
-          filters:
-            branches:
-              only: 
-                - main
-                - develop
+      # Infrastructure planning - COMMENTED OUT FOR NOW
+      # - terraform-plan:
+      #     requires:
+      #       - terraform-validate
+      #     filters:
+      #       branches:
+      #         only: 
+      #           - main
+      #           - develop
       
       # Build and push images (after app builds complete)
       - build-and-push-images:
@@ -355,33 +356,33 @@ workflows:
             - build-backend
           context:
             - jfrog-context
-            - prometheus-context
+            # - prometheus-context  # Add later
       
-      # Infrastructure deployment (manual approval for prod)
-      - hold-for-approval:
-          type: approval
-          requires:
-            - terraform-plan
-          filters:
-            branches:
-              only: main
+      # Infrastructure deployment - COMMENTED OUT FOR NOW
+      # - hold-for-approval:
+      #     type: approval
+      #     requires:
+      #       - terraform-plan
+      #     filters:
+      #       branches:
+      #         only: main
       
-      - terraform-apply:
-          requires:
-            - hold-for-approval
-          context:
-            - aws-context
-            - gcp-context
-          filters:
-            branches:
-              only: main
+      # - terraform-apply:
+      #     requires:
+      #       - hold-for-approval
+      #     context:
+      #       - aws-context
+      #       - gcp-context
+      #     filters:
+      #       branches:
+      #         only: main
       
-      # GitOps manifest update
+      # GitOps manifest update - SIMPLIFIED FOR NOW
       - update-gitops-manifests:
           requires:
             - build-and-push-images
-          context:
-            - github-context
+          # context:
+          #   - github-context  # Add later
           filters:
             branches:
               only: main
@@ -396,4 +397,4 @@ workflows:
               only: main
     jobs:
       - security-scan
-      - terraform-validate 
+      # - terraform-validate  # Add back later 
