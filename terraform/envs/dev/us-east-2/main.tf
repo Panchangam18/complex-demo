@@ -174,7 +174,7 @@ module "aws_rds" {
   
   # Database configuration
   engine         = "postgres"
-  engine_version = "15.7"
+  engine_version = "15.12"
   database_name  = "${replace(local.environment, "-", "_")}_db"
   
   # Instance configuration
@@ -498,6 +498,60 @@ output "ecr_repository_urls" {
   value       = module.aws_ecr.repository_urls
 }
 
+# Nexus Repository Manager on EKS
+module "nexus_eks" {
+  source = "../../../modules/k8s/nexus"
+  
+  environment     = local.environment
+  ingress_host    = "nexus-${local.environment}.${var.aws_region}.eks.local"
+  storage_size    = "200Gi"
+  
+  # Use LoadBalancer for external access like ArgoCD
+  service_type    = "LoadBalancer"
+  ingress_enabled = false
+  
+  # Resource allocation for development (reduced for t3.medium constraints)
+  cpu_request    = "500m"
+  memory_request = "1Gi"
+  cpu_limit      = "1"
+  memory_limit   = "2Gi"
+  
+  providers = {
+    kubernetes = kubernetes.eks
+    helm       = helm.eks
+  }
+  
+  depends_on = [
+    module.aws_eks
+  ]
+}
+
+# Outputs for Nexus Repository Manager
+output "nexus_url" {
+  description = "URL to access Nexus Repository Manager"
+  value       = module.nexus_eks.nexus_url
+}
+
+output "nexus_namespace" {
+  description = "Kubernetes namespace for Nexus"
+  value       = module.nexus_eks.nexus_namespace
+}
+
+output "nexus_admin_password_command" {
+  description = "Command to retrieve Nexus admin password"
+  value       = module.nexus_eks.nexus_admin_password_command
+}
+
+output "nexus_npm_registry_url" {
+  description = "NPM registry URL for Nexus"
+  value       = module.nexus_eks.npm_registry_url
+}
+
+output "nexus_docker_registry_url" {
+  description = "Docker registry URL for Nexus"
+  value       = module.nexus_eks.docker_registry_url
+}
+
 # Outputs for AWS RDS
 output "rds_instance_endpoint" {
   description = "The connection endpoint for the RDS instance"
@@ -671,29 +725,35 @@ output "consul_summary" {
   }
 }
 
-# Outputs for ArgoCD and Observability
-output "argocd_url" {
-  description = "ArgoCD server public URL"
-  value       = module.argocd.argocd_url
-}
+# Outputs for ArgoCD and Observability (TODO: Deploy ArgoCD module)
+# output "argocd_url" {
+#   description = "ArgoCD server public URL"
+#   value       = module.argocd.argocd_url
+# }
 
-output "argocd_admin_password" {
-  description = "ArgoCD admin password"
-  value       = module.argocd.argocd_admin_password
-  sensitive   = true
-}
+# output "argocd_admin_password" {
+#   description = "ArgoCD admin password"
+#   value       = module.argocd.argocd_admin_password
+#   sensitive   = true
+# }
 
-output "grafana_url" {
-  description = "Grafana public URL"
-  value       = module.argocd.grafana_url
-}
+# output "grafana_url" {
+#   description = "Grafana public URL"
+#   value       = module.argocd.grafana_url
+# }
 
-output "prometheus_url" {
-  description = "Prometheus public URL"
-  value       = module.argocd.prometheus_url
-}
+# output "prometheus_url" {
+#   description = "Prometheus public URL"
+#   value       = module.argocd.prometheus_url
+# }
 
 output "observability_summary" {
-  description = "Complete observability stack information"
-  value       = module.argocd.observability_summary
+  description = "Summary of observability stack deployment"
+  value = {
+    message = "Observability stack ready for deployment"
+    # TODO: Add actual URLs when observability components are deployed
+    # argocd_url    = module.argocd.url
+    # grafana_url   = module.grafana.url
+    # prometheus_url = module.prometheus.url
+  }
 }

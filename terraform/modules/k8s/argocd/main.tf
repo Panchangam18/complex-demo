@@ -101,7 +101,7 @@ data "external" "argocd_info" {
     # Get ArgoCD URL
     ARGOCD_URL=""
     for i in {1..30}; do
-      ARGOCD_URL=$(kubectl get svc argocd-server -n argocd -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+      ARGOCD_URL=$(kubectl get svc argocd-server -n default -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
       if [ ! -z "$ARGOCD_URL" ]; then
         break
       fi
@@ -109,7 +109,7 @@ data "external" "argocd_info" {
     done
     
     # Get ArgoCD admin password
-    ARGOCD_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" 2>/dev/null | base64 -d)
+    ARGOCD_PASSWORD=$(kubectl -n default get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" 2>/dev/null | base64 -d)
     
     # Get Grafana URL
     GRAFANA_URL=""

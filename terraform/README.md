@@ -85,6 +85,18 @@ Per the multicloud strategy:
   - Secondary IP ranges for GKE pods and services
   - VPC Flow Logs enabled by default
 
+- **gke**: Creates GKE cluster with autopilot mode
+  - Workload Identity enabled
+  - Network policies and dataplane v2
+  - Vertical and horizontal pod autoscaling
+
+### Kubernetes Modules
+- **nexus**: Deploys Nexus Repository Manager
+  - NPM, Docker, and PyPI repository management
+  - Persistent storage with encryption
+  - LoadBalancer service configuration
+  - Prometheus monitoring integration
+
 ### Azure Modules
 - **vnet**: Creates Hub VNet following Hub-Spoke pattern
   - Public, private, and internal subnets

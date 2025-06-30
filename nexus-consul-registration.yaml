@@ -1,0 +1,81 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nexus-consul-registration
+  namespace: nexus-dev
+  labels:
+    app: nexus-consul
+data:
+  nexus-service.json: |
+    {
+      "service": {
+        "name": "nexus-repository",
+        "tags": [
+          "artifact-management",
+          "proxy-cache",
+          "npm-proxy",
+          "pypi-proxy", 
+          "maven-proxy",
+          "docker-proxy"
+        ],
+        "port": 8081,
+        "address": "nexus-repo-nexus3.nexus-dev.svc.cluster.local",
+        "meta": {
+          "version": "3.81.1",
+          "environment": "dev",
+          "cloud": "aws",
+          "region": "us-east-2",
+          "cluster": "eks-dev"
+        },
+        "checks": [
+          {
+            "name": "Nexus HTTP Health Check",
+            "http": "http://nexus-repo-nexus3.nexus-dev.svc.cluster.local:8081/service/rest/v1/status",
+            "interval": "30s",
+            "timeout": "10s"
+          }
+        ]
+      }
+    }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nexus-consul-register
+  namespace: nexus-dev
+spec:
+  template:
+    spec:
+      containers:
+      - name: consul-register
+        image: hashicorp/consul:1.15.3
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "🔗 Registering Nexus with Consul Service Discovery"
+          
+          # Wait for Consul to be available
+          until nc -z consul-server.consul.svc.cluster.local 8500; do
+            echo "Waiting for Consul..."
+            sleep 5
+          done
+          
+          # Register the service
+          consul services register \
+            -http-addr=http://consul-server.consul.svc.cluster.local:8500 \
+            /etc/consul.d/nexus-service.json
+          
+          echo "✅ Nexus registered with Consul"
+          
+          # Verify registration
+          consul catalog services -http-addr=http://consul-server.consul.svc.cluster.local:8500
+        volumeMounts:
+        - name: consul-config
+          mountPath: /etc/consul.d
+      volumes:
+      - name: consul-config
+        configMap:
+          name: nexus-consul-registration
+      restartPolicy: OnFailure
+  backoffLimit: 3

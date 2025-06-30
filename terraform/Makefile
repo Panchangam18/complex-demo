@@ -297,3 +297,25 @@ fix-loadbalancers: ## Fix load balancer connectivity issues
 	@echo "✅ Load balancer fix completed!"
 	@echo "📝 If issues persist, the problem may be with AWS security groups."
 	@echo "💡 Try accessing via NodePort: kubectl get svc -A | grep NodePort"
+
+configure-nexus: ## Configure Nexus repositories after deployment
+	@echo "📦 Configuring Nexus Repository Manager"
+	@echo "======================================"
+	@cd .. && ./scripts/configure-nexus.sh
+	@echo ""
+	@echo "✅ Nexus configuration complete!"
+	@echo "📝 Repository URLs available in Terraform outputs:"
+	@echo "   make show-outputs | grep nexus"
+
+nexus-status: ## Check Nexus deployment status
+	@echo "📊 Nexus Repository Manager Status"
+	@echo "=================================="
+	@echo ""
+	@echo "🚀 Pod Status:"
+	@kubectl get pods -n nexus-$(ENV) -l app=nexus 2>/dev/null || echo "Nexus not deployed yet"
+	@echo ""
+	@echo "🔗 Service Status:"
+	@kubectl get svc -n nexus-$(ENV) 2>/dev/null || echo "Nexus services not found"
+	@echo ""
+	@echo "📋 Repository Information:"
+	@cd $(TG_PATH) && $(TG_CMD) output nexus_url 2>/dev/null || echo "Nexus outputs not available"
