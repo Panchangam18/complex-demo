@@ -34,7 +34,7 @@ resource "kubernetes_storage_class" "nexus" {
 
 # Deploy Nexus using Helm
 resource "helm_release" "nexus" {
-  name       = "nexus-repo"
+  name       = "nexus-terraform"
   repository = "https://stevehipwell.github.io/helm-charts/"
   chart      = "nexus3"
   version    = var.nexus_chart_version

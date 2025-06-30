@@ -498,7 +498,7 @@ output "ecr_repository_urls" {
   value       = module.aws_ecr.repository_urls
 }
 
-# Nexus Repository Manager on EKS
+# Nexus Repository Manager (Secure binary and dependency caching)
 module "nexus_eks" {
   source = "../../../modules/k8s/nexus"
   
@@ -506,11 +506,11 @@ module "nexus_eks" {
   ingress_host    = "nexus-${local.environment}.${var.aws_region}.eks.local"
   storage_size    = "200Gi"
   
-  # Use LoadBalancer for external access like ArgoCD
+  # Use LoadBalancer for external access like before
   service_type    = "LoadBalancer"
   ingress_enabled = false
   
-  # Resource allocation for development (reduced for t3.medium constraints)
+  # Resource allocation for development (same as before)
   cpu_request    = "500m"
   memory_request = "1Gi"
   cpu_limit      = "1"
@@ -523,6 +523,29 @@ module "nexus_eks" {
   
   depends_on = [
     module.aws_eks
+  ]
+}
+
+# Jenkins CI/CD Server (Simple EC2 deployment like original)
+module "jenkins" {
+  source = "../../../modules/jenkins"
+  
+  environment        = local.environment
+  aws_region        = var.aws_region
+  vpc_id            = module.aws_vpc.vpc_id
+  public_subnet_ids = module.aws_vpc.public_subnet_ids
+  
+  # Instance configuration
+  instance_type = "t3.medium"  # Adequate for Jenkins with Docker
+  volume_size   = 50           # More storage for builds and artifacts
+  
+  # Security configuration - allow access from anywhere for now
+  allowed_cidr_blocks = ["0.0.0.0/0"]
+  
+  common_tags = local.tags
+  
+  depends_on = [
+    module.aws_vpc
   ]
 }
 
@@ -550,6 +573,32 @@ output "nexus_npm_registry_url" {
 output "nexus_docker_registry_url" {
   description = "Docker registry URL for Nexus"
   value       = module.nexus_eks.docker_registry_url
+}
+
+# Outputs for Jenkins CI/CD Server
+output "jenkins_url" {
+  description = "URL to access Jenkins web interface"
+  value       = module.jenkins.jenkins_url
+}
+
+output "jenkins_admin_username" {
+  description = "Jenkins admin username"
+  value       = module.jenkins.jenkins_admin_username
+}
+
+output "jenkins_admin_password_secret_arn" {
+  description = "ARN of the AWS Secrets Manager secret containing Jenkins admin password"
+  value       = module.jenkins.jenkins_admin_password_secret_arn
+}
+
+output "jenkins_public_ip" {
+  description = "Public IP address of Jenkins server"
+  value       = module.jenkins.jenkins_public_ip
+}
+
+output "ssh_command" {
+  description = "SSH command to connect to Jenkins server"
+  value       = module.jenkins.ssh_command
 }
 
 # Outputs for AWS RDS
