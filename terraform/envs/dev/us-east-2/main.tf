@@ -549,6 +549,48 @@ module "jenkins" {
   ]
 }
 
+# Puppet Enterprise Configuration Management Server
+module "puppet_enterprise" {
+  source = "../../../modules/puppet-enterprise"
+  
+  environment         = local.environment
+  aws_region         = var.aws_region
+  vpc_id             = module.aws_vpc.vpc_id
+  vpc_cidr           = var.vpc_cidr
+  public_subnet_ids  = module.aws_vpc.public_subnet_ids
+  
+  # Instance configuration for PE (requires significant resources)
+  instance_type      = "t3.2xlarge"  # PE requires 8GB+ RAM
+  data_volume_size   = 100           # Persistent storage for PE data
+  
+  # SSH key generation (auto-generated and stored in Secrets Manager)
+  generate_ssh_key   = true
+  
+  # Security configuration
+  allowed_cidr_blocks = [
+    var.vpc_cidr,           # AWS VPC
+    var.gcp_vpc_cidr,       # GCP VPC 
+    "10.0.0.0/8",          # Internal networks
+    "0.0.0.0/0"            # PE Console web access
+  ]
+  
+  # Puppet Enterprise configuration
+  pe_version         = "latest"
+  pe_download_url    = "https://pm.puppet.com/cgi-bin/download.cgi?dist=el&rel=7&arch=x86_64&ver=latest"
+  
+  # Integration with Consul service discovery
+  consul_server_ips  = module.consul_primary.server_private_ips
+  consul_datacenter  = module.consul_primary.datacenter_name
+  
+  # DNS configuration (optional)
+  create_dns_record  = false
+  
+  depends_on = [
+    module.aws_vpc,
+    module.consul_primary
+  ]
+}
+
 # Outputs for Nexus Repository Manager
 output "nexus_url" {
   description = "URL to access Nexus Repository Manager"
@@ -599,6 +641,47 @@ output "jenkins_public_ip" {
 output "ssh_command" {
   description = "SSH command to connect to Jenkins server"
   value       = module.jenkins.ssh_command
+}
+
+# Outputs for Puppet Enterprise Configuration Management
+output "puppet_enterprise_url" {
+  description = "URL to access Puppet Enterprise Console"
+  value       = module.puppet_enterprise.puppet_enterprise_url
+}
+
+output "puppet_server_url" {
+  description = "URL to access Puppet Server"
+  value       = module.puppet_enterprise.puppet_server_url
+}
+
+output "puppetdb_url" {
+  description = "URL to access PuppetDB"
+  value       = module.puppet_enterprise.puppetdb_url
+}
+
+output "puppet_enterprise_public_ip" {
+  description = "Public IP address of Puppet Enterprise server"
+  value       = module.puppet_enterprise.puppet_enterprise_public_ip
+}
+
+output "puppet_enterprise_admin_username" {
+  description = "Puppet Enterprise Console admin username"
+  value       = module.puppet_enterprise.puppet_enterprise_admin_username
+}
+
+output "puppet_enterprise_admin_password_secret_arn" {
+  description = "ARN of the AWS Secrets Manager secret containing PE admin password"
+  value       = module.puppet_enterprise.puppet_enterprise_admin_password_secret_arn
+}
+
+output "puppet_enterprise_ssh_command" {
+  description = "SSH command to connect to Puppet Enterprise server"
+  value       = module.puppet_enterprise.puppet_enterprise_ssh_command
+}
+
+output "puppet_enterprise_summary" {
+  description = "Summary of Puppet Enterprise deployment"
+  value       = module.puppet_enterprise.puppet_enterprise_summary
 }
 
 # Outputs for AWS RDS
