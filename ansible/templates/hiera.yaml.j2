@@ -1,0 +1,44 @@
+---
+version: 5
+
+defaults:
+  datadir: data
+  data_hash: yaml_data
+
+hierarchy:
+  # Node-specific data (highest priority)
+  - name: "Node-specific data"
+    path: "nodes/%{::trusted.certname}.yaml"
+  
+  # Role-specific data
+  - name: "Role data"
+    paths:
+      - "roles/%{::role}.yaml"
+      - "roles/%{facts.service_type}.yaml"
+  
+  # Environment-specific data
+  - name: "Environment data"
+    path: "environments/%{::environment}.yaml"
+  
+  # Cloud provider specific data
+  - name: "Cloud provider data"
+    paths:
+      - "clouds/%{facts.cloud_provider}.yaml"
+      - "clouds/%{facts.ec2_metadata.placement.region}.yaml"
+  
+  # Datacenter/region specific data
+  - name: "Datacenter data"
+    paths:
+      - "datacenters/%{facts.consul_datacenter}.yaml"
+      - "regions/%{facts.ec2_metadata.placement.availability_zone}.yaml"
+  
+  # Operating system specific data
+  - name: "OS data"
+    paths:
+      - "os/%{facts.os.family}/%{facts.os.release.major}.yaml"
+      - "os/%{facts.os.family}.yaml"
+      - "os/RedHat.yaml"
+  
+  # Common data (lowest priority)
+  - name: "Common data"
+    path: "common.yaml" 

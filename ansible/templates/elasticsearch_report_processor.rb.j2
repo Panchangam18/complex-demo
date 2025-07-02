@@ -1,0 +1,198 @@
+require 'puppet'
+require 'elasticsearch'
+require 'json'
+require 'time'
+
+# Puppet Elasticsearch Report Processor
+# Sends Puppet run reports to Elasticsearch for compliance and drift monitoring
+Puppet::Reports.register_report(:elasticsearch) do
+  desc "Send Puppet run reports to Elasticsearch for compliance tracking"
+  
+  # Elasticsearch configuration
+  ES_URL = "{{ elasticsearch_url }}"
+  ES_API_KEY = "{{ elasticsearch_api_key }}"
+  ES_INDEX = "puppet-reports"
+  ENVIRONMENT = "{{ environment }}"
+  
+  def process
+    begin
+      # Initialize Elasticsearch client
+      client = Elasticsearch::Client.new(
+        url: ES_URL,
+        transport_options: {
+          headers: {
+            'Authorization' => "ApiKey #{ES_API_KEY}",
+            'Content-Type' => 'application/json'
+          }
+        },
+        log: false
+      )
+      
+      # Build report document
+      report_doc = build_report_document
+      
+      # Index document in Elasticsearch
+      response = client.index(
+        index: "#{ES_INDEX}-#{Time.now.strftime('%Y.%m.%d')}",
+        body: report_doc
+      )
+      
+      Puppet.info("Puppet report sent to Elasticsearch: #{response['_id']}")
+      
+    rescue => e
+      Puppet.err("Failed to send report to Elasticsearch: #{e.message}")
+      Puppet.debug(e.backtrace.join("\n"))
+    end
+  end
+  
+  private
+  
+  def build_report_document
+    {
+      '@timestamp' => Time.parse(self.time.to_s).iso8601,
+      'environment' => ENVIRONMENT,
+      'puppet_version' => self.puppet_version,
+      'configuration_version' => self.configuration_version,
+      'transaction_uuid' => self.transaction_uuid,
+      'code_id' => self.code_id,
+      'job_id' => self.job_id,
+      'catalog_uuid' => self.catalog_uuid,
+      'server_used' => self.server_used,
+      'host' => self.host,
+      'status' => self.status,
+      'noop' => self.noop,
+      'noop_pending' => self.noop_pending,
+      'corrective_change' => self.corrective_change,
+      'cached_catalog_status' => self.cached_catalog_status,
+      'start_time' => Time.parse(self.time.to_s).iso8601,
+      'end_time' => Time.parse((self.time + (self.metrics['time']['total'] || 0)).to_s).iso8601,
+      'runtime_seconds' => self.metrics['time']['total'] || 0,
+      'metrics' => process_metrics,
+      'logs' => process_logs,
+      'resource_statuses' => process_resource_statuses,
+      'summary' => {
+        'total_resources' => self.resource_statuses.length,
+        'changed_resources' => self.resource_statuses.select { |_, rs| rs.changed }.length,
+        'failed_resources' => self.resource_statuses.select { |_, rs| rs.failed }.length,
+        'skipped_resources' => self.resource_statuses.select { |_, rs| rs.skipped }.length,
+        'out_of_sync_resources' => self.resource_statuses.select { |_, rs| rs.out_of_sync }.length,
+        'corrective_changes' => self.resource_statuses.select { |_, rs| rs.corrective_change }.length
+      },
+      'compliance_status' => determine_compliance_status,
+      'drift_detected' => detect_drift,
+      'security_relevant' => detect_security_changes,
+      'cloud_provider' => detect_cloud_provider,
+      'tags' => [
+        "puppet",
+        "configuration-management", 
+        "compliance",
+        ENVIRONMENT,
+        self.status
+      ]
+    }
+  end
+  
+  def process_metrics
+    metrics_hash = {}
+    self.metrics.each do |category, metric|
+      metrics_hash[category] = {}
+      if metric.respond_to?(:values)
+        metric.values.each do |name, value|
+          metrics_hash[category][name] = value
+        end
+      end
+    end
+    metrics_hash
+  end
+  
+  def process_logs
+    self.logs.map do |log|
+      {
+        'level' => log.level.to_s,
+        'message' => log.message,
+        'source' => log.source,
+        'time' => Time.parse(log.time.to_s).iso8601,
+        'tags' => log.tags
+      }
+    end
+  end
+  
+  def process_resource_statuses
+    resource_changes = []
+    self.resource_statuses.each do |resource_name, status|
+      resource_doc = {
+        'resource' => resource_name,
+        'resource_type' => status.resource_type,
+        'title' => status.title,
+        'skipped' => status.skipped,
+        'failed' => status.failed,
+        'changed' => status.changed,
+        'out_of_sync' => status.out_of_sync,
+        'corrective_change' => status.corrective_change,
+        'containment_path' => status.containment_path,
+        'evaluation_time' => status.evaluation_time,
+        'tags' => status.tags
+      }
+      
+      # Add change information if resource changed
+      if status.changed && status.events
+        resource_doc['changes'] = status.events.map do |event|
+          {
+            'audited' => event.audited,
+            'property' => event.property,
+            'previous_value' => event.previous_value,
+            'desired_value' => event.desired_value,
+            'message' => event.message,
+            'status' => event.status,
+            'time' => Time.parse(event.time.to_s).iso8601
+          }
+        end
+      end
+      
+      resource_changes << resource_doc
+    end
+    resource_changes
+  end
+  
+  def determine_compliance_status
+    case self.status
+    when 'changed'
+      'drift_corrected'
+    when 'unchanged'
+      'compliant'
+    when 'failed'
+      'non_compliant'
+    else
+      'unknown'
+    end
+  end
+  
+  def detect_drift
+    self.resource_statuses.any? { |_, rs| rs.out_of_sync || rs.corrective_change }
+  end
+  
+  def detect_security_changes
+    security_resources = %w[
+      user group file mount service exec cron 
+      firewall iptables selinux package ssh_authorized_key
+    ]
+    
+    self.resource_statuses.any? do |resource_name, status|
+      security_resources.any? { |type| resource_name.start_with?(type) } && 
+      (status.changed || status.failed)
+    end
+  end
+  
+  def detect_cloud_provider
+    case self.host
+    when /aws|ec2|amazon/i
+      'aws'
+    when /gcp|google|gce/i
+      'gcp'
+    when /azure|microsoft/i
+      'azure'
+    else
+      'unknown'
+    end
+  end
+end 

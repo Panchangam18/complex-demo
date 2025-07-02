@@ -1,0 +1,43 @@
+[main]
+certname = {{ inventory_hostname }}.{{ ansible_domain | default('local') }}
+server = {{ puppet_server | regex_replace('^https?://([^:/]+).*', '\\1') }}
+environment = {{ hostvars[inventory_hostname]['puppet_environment'] | default('production') }}
+runinterval = 1800
+splay = true
+splaylimit = 300
+
+# SSL and security settings
+ssl_client_ca_auth = true
+ssl_client_verify_header = HTTP_X_CLIENT_VERIFY
+ssl_client_cert_header = HTTP_X_CLIENT_CERT
+
+# Logging
+log_level = info
+logdest = /var/log/puppetlabs/puppet/puppet.log
+
+# Reports
+report = true
+reports = store,http
+
+# Pluginsync
+pluginsync = true
+
+# Facts
+stringify_facts = false
+
+[agent]
+# Run as daemon
+daemon = true
+
+# Report submission
+report_server = {{ puppet_server | regex_replace('^https?://([^:/]+).*', '\\1') }}
+
+# CA settings
+ca_server = {{ puppet_server | regex_replace('^https?://([^:/]+).*', '\\1') }}
+
+# Node classification
+node_terminus = exec
+external_nodes = /opt/puppetlabs/bin/puppet-node-classifier
+
+[user]
+# Settings for puppet apply when run by non-root user 

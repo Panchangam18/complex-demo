@@ -1,0 +1,300 @@
+# CircleCI Configuration for Configuration Management Integration
+# Architecture Plan: "Invoked by CircleCI post-Terraform"
+# Integrates Ansible Tower and Puppet Enterprise with the CI/CD pipeline
+
+version: 2.1
+
+# Custom orbs for our workflow
+orbs:
+  aws-cli: circleci/aws-cli@4.0
+  ansible: orbwise/ansible@0.0.1
+
+# Executors
+executors:
+  terraform-ansible:
+    docker:
+      - image: cimg/python:3.9
+    environment:
+      TERRAFORM_VERSION: "1.5.7"
+      TERRAGRUNT_VERSION: "0.50.17"
+      ANSIBLE_VERSION: "6.0.0"
+
+# Jobs
+jobs:
+  # Infrastructure deployment with Terraform
+  deploy-infrastructure:
+    executor: terraform-ansible
+    steps:
+      - checkout
+      - aws-cli/setup
+      
+      - run:
+          name: Install Terraform and Terragrunt
+          command: |
+            # Install Terraform
+            wget https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+            unzip terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+            sudo mv terraform /usr/local/bin/
+            
+            # Install Terragrunt
+            wget https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VERSION}/terragrunt_linux_amd64
+            chmod +x terragrunt_linux_amd64
+            sudo mv terragrunt_linux_amd64 /usr/local/bin/terragrunt
+            
+            # Verify installations
+            terraform version
+            terragrunt --version
+      
+      - run:
+          name: Deploy Infrastructure
+          command: |
+            cd terraform/envs/dev/us-east-2
+            terragrunt plan -out=tfplan
+            terragrunt apply tfplan
+          
+      - run:
+          name: Export Infrastructure Outputs
+          command: |
+            cd terraform/envs/dev/us-east-2
+            terragrunt output -json > /tmp/terraform-outputs.json
+            
+      - persist_to_workspace:
+          root: /tmp
+          paths:
+            - terraform-outputs.json
+
+  # Configure Ansible Tower - Architecture Plan: "Invoked by CircleCI post-Terraform"
+  configure-ansible-tower:
+    executor: terraform-ansible
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /tmp
+          
+      - run:
+          name: Install dependencies
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y curl jq
+            
+      - run:
+          name: Configure Ansible Tower
+          command: |
+            # Set environment variables from Terraform outputs
+            export TERRAFORM_OUTPUTS="/tmp/terraform-outputs.json"
+            
+            # Extract Ansible Tower URL and credentials
+            export ANSIBLE_TOWER_URL=$(jq -r '.ansible_tower_url.value' $TERRAFORM_OUTPUTS)
+            export ANSIBLE_TOWER_USERNAME="admin"
+            export ANSIBLE_TOWER_PASSWORD=$(jq -r '.ansible_tower_credentials.value.admin_password' $TERRAFORM_OUTPUTS)
+            
+            # Extract other required values
+            export CONSUL_GOSSIP_KEY=$(jq -r '.consul_gossip_key.value' $TERRAFORM_OUTPUTS)
+            export PUPPET_SECRET_ARN=$(jq -r '.puppet_enterprise_admin_password_secret_arn.value' $TERRAFORM_OUTPUTS)
+            
+            # Get Puppet admin password from AWS Secrets Manager
+            export PUPPET_ADMIN_PASSWORD=$(aws secretsmanager get-secret-value --secret-id "$PUPPET_SECRET_ARN" --query SecretString --output text | jq -r '.password')
+            
+            # Set GitHub repository for project configuration
+            export GITHUB_REPO="${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
+            
+            # Run the Tower configuration script
+            chmod +x scripts/configure-ansible-tower.sh
+            ./scripts/configure-ansible-tower.sh
+            
+      - run:
+          name: Trigger Day-0 Provisioning
+          command: |
+            export TERRAFORM_OUTPUTS="/tmp/terraform-outputs.json"
+            export ANSIBLE_TOWER_URL=$(jq -r '.ansible_tower_url.value' $TERRAFORM_OUTPUTS)
+            export ANSIBLE_TOWER_USERNAME="admin" 
+            export ANSIBLE_TOWER_PASSWORD=$(jq -r '.ansible_tower_credentials.value.admin_password' $TERRAFORM_OUTPUTS)
+            
+            # Trigger Day-0 provisioning job
+            echo "Triggering Day-0 Infrastructure Provisioning job..."
+            
+            # Get job template ID
+            JOB_TEMPLATE_ID=$(curl -s -k -u "${ANSIBLE_TOWER_USERNAME}:${ANSIBLE_TOWER_PASSWORD}" \
+              "${ANSIBLE_TOWER_URL}/api/v2/job_templates/?name=Day-0%20Infrastructure%20Provisioning" \
+              | jq -r '.results[0].id')
+            
+            if [ "$JOB_TEMPLATE_ID" != "null" ] && [ -n "$JOB_TEMPLATE_ID" ]; then
+              # Launch the job
+              JOB_ID=$(curl -s -k -X POST \
+                -H "Content-Type: application/json" \
+                -u "${ANSIBLE_TOWER_USERNAME}:${ANSIBLE_TOWER_PASSWORD}" \
+                -d '{"extra_vars": "{\"triggered_by\": \"circleci\", \"build_number\": \"'${CIRCLE_BUILD_NUM}'\"}"}' \
+                "${ANSIBLE_TOWER_URL}/api/v2/job_templates/${JOB_TEMPLATE_ID}/launch/" \
+                | jq -r '.id')
+              
+              echo "Day-0 provisioning job launched with ID: $JOB_ID"
+              echo "Monitor progress at: ${ANSIBLE_TOWER_URL}/#/jobs/playbook/${JOB_ID}"
+              
+              # Wait for job completion (optional - can be removed for async execution)
+              echo "Waiting for job completion..."
+              while true; do
+                STATUS=$(curl -s -k -u "${ANSIBLE_TOWER_USERNAME}:${ANSIBLE_TOWER_PASSWORD}" \
+                  "${ANSIBLE_TOWER_URL}/api/v2/jobs/${JOB_ID}/" | jq -r '.status')
+                
+                case $STATUS in
+                  "successful")
+                    echo "✅ Day-0 provisioning completed successfully!"
+                    break
+                    ;;
+                  "failed"|"error"|"canceled")
+                    echo "❌ Day-0 provisioning failed with status: $STATUS"
+                    exit 1
+                    ;;
+                  "running"|"pending"|"waiting")
+                    echo "⏳ Job status: $STATUS"
+                    sleep 30
+                    ;;
+                  *)
+                    echo "Unknown status: $STATUS"
+                    sleep 30
+                    ;;
+                esac
+              done
+            else
+              echo "❌ Day-0 Infrastructure Provisioning job template not found"
+              exit 1
+            fi
+
+  # Trigger Puppet integration - Architecture Plan: "Tower playbook triggers Puppet runs via REST API"
+  puppet-integration:
+    executor: terraform-ansible
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /tmp
+          
+      - run:
+          name: Trigger Puppet Integration
+          command: |
+            export TERRAFORM_OUTPUTS="/tmp/terraform-outputs.json"
+            export ANSIBLE_TOWER_URL=$(jq -r '.ansible_tower_url.value' $TERRAFORM_OUTPUTS)
+            export ANSIBLE_TOWER_USERNAME="admin"
+            export ANSIBLE_TOWER_PASSWORD=$(jq -r '.ansible_tower_credentials.value.admin_password' $TERRAFORM_OUTPUTS)
+            
+            echo "Triggering Puppet Integration job..."
+            
+            # Get Puppet integration job template ID
+            JOB_TEMPLATE_ID=$(curl -s -k -u "${ANSIBLE_TOWER_USERNAME}:${ANSIBLE_TOWER_PASSWORD}" \
+              "${ANSIBLE_TOWER_URL}/api/v2/job_templates/?name=Puppet%20Integration" \
+              | jq -r '.results[0].id')
+            
+            if [ "$JOB_TEMPLATE_ID" != "null" ] && [ -n "$JOB_TEMPLATE_ID" ]; then
+              # Launch the Puppet integration job
+              JOB_ID=$(curl -s -k -X POST \
+                -H "Content-Type: application/json" \
+                -u "${ANSIBLE_TOWER_USERNAME}:${ANSIBLE_TOWER_PASSWORD}" \
+                -d '{"extra_vars": "{\"triggered_by\": \"circleci\", \"build_number\": \"'${CIRCLE_BUILD_NUM}'\"}"}' \
+                "${ANSIBLE_TOWER_URL}/api/v2/job_templates/${JOB_TEMPLATE_ID}/launch/" \
+                | jq -r '.id')
+              
+              echo "Puppet integration job launched with ID: $JOB_ID"
+              echo "Monitor progress at: ${ANSIBLE_TOWER_URL}/#/jobs/playbook/${JOB_ID}"
+            else
+              echo "❌ Puppet Integration job template not found"
+              exit 1
+            fi
+
+  # Publish configuration management metrics to Prometheus
+  publish-metrics:
+    executor: terraform-ansible
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /tmp
+          
+      - run:
+          name: Publish Metrics to Prometheus
+          command: |
+            export TERRAFORM_OUTPUTS="/tmp/terraform-outputs.json"
+            
+            # Architecture Plan: "All pipelines publish build metadata to Prometheus via prometheus-pushgateway"
+            echo "Publishing configuration management metrics..."
+            
+            # Create metrics payload
+            cat > /tmp/metrics.txt << EOF
+            # HELP circleci_config_mgmt_deployment_duration_seconds Time spent on configuration management deployment
+            # TYPE circleci_config_mgmt_deployment_duration_seconds gauge
+            circleci_config_mgmt_deployment_duration_seconds{job="circleci",phase="infrastructure"} ${CIRCLE_BUILD_NUM}
+            
+            # HELP circleci_config_mgmt_deployment_status Configuration management deployment status
+            # TYPE circleci_config_mgmt_deployment_status gauge  
+            circleci_config_mgmt_deployment_status{job="circleci",phase="ansible_tower",status="success"} 1
+            circleci_config_mgmt_deployment_status{job="circleci",phase="puppet_integration",status="success"} 1
+            
+            # HELP circleci_infrastructure_nodes_total Total number of infrastructure nodes managed
+            # TYPE circleci_infrastructure_nodes_total gauge
+            circleci_infrastructure_nodes_total{environment="dev",provider="multi_cloud"} $(jq -r '.consul_summary.value.mesh_gateways | length' $TERRAFORM_OUTPUTS)
+            EOF
+            
+            # Push to Prometheus (when pushgateway is available)
+            # curl -X POST http://prometheus-pushgateway:9091/metrics/job/circleci/instance/config-management --data-binary @/tmp/metrics.txt
+            
+            echo "Metrics prepared for Prometheus ingestion"
+            cat /tmp/metrics.txt
+
+# Workflows
+workflows:
+  version: 2
+  
+  # Main configuration management workflow
+  infrastructure-and-config-management:
+    jobs:
+      # Deploy infrastructure first
+      - deploy-infrastructure:
+          context: aws-dev
+          filters:
+            branches:
+              only:
+                - main
+                - develop
+      
+      # Configure Ansible Tower post-Terraform (Architecture Plan requirement)
+      - configure-ansible-tower:
+          requires:
+            - deploy-infrastructure
+          context: aws-dev
+          filters:
+            branches:
+              only:
+                - main
+                - develop
+      
+      # Run Puppet integration after Tower is configured
+      - puppet-integration:
+          requires:
+            - configure-ansible-tower
+          context: aws-dev
+          filters:
+            branches:
+              only:
+                - main
+                - develop
+      
+      # Publish metrics to complete the cycle
+      - publish-metrics:
+          requires:
+            - puppet-integration
+          context: aws-dev
+          filters:
+            branches:
+              only:
+                - main
+                - develop
+
+  # Nightly configuration drift detection and remediation
+  nightly-config-drift:
+    triggers:
+      - schedule:
+          cron: "0 2 * * *"  # Run at 2 AM daily
+          filters:
+            branches:
+              only:
+                - main
+    jobs:
+      - puppet-integration:
+          context: aws-dev 

@@ -1,0 +1,204 @@
+---
+# New Relic namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: newrelic
+  labels:
+    name: newrelic
+  annotations:
+    consul.hashicorp.com/connect-inject: "false"
+---
+# New Relic License Key Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: newrelic-license-key
+  namespace: newrelic
+type: Opaque
+stringData:
+  license: "57a444d0f1282704eb650ec9561005bfFFFFNRAL"
+---
+# ServiceAccount for New Relic Infrastructure
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: newrelic-infrastructure
+  namespace: newrelic
+---
+# ClusterRole for New Relic Infrastructure
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: newrelic-infrastructure
+rules:
+- apiGroups: [""]
+  resources:
+    - "nodes"
+    - "nodes/metrics"
+    - "nodes/stats"
+    - "pods"
+    - "services"
+    - "endpoints"
+    - "namespaces"
+    - "events"
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources:
+    - "deployments"
+    - "replicasets"
+    - "daemonsets"
+    - "statefulsets"
+  verbs: ["get", "list", "watch"]
+- nonResourceURLs: ["/metrics"]
+  verbs: ["get"]
+---
+# ClusterRoleBinding for New Relic Infrastructure
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: newrelic-infrastructure
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: newrelic-infrastructure
+subjects:
+- kind: ServiceAccount
+  name: newrelic-infrastructure
+  namespace: newrelic
+---
+# Lightweight New Relic Infrastructure - Single Pod per Node
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: newrelic-infrastructure
+  namespace: newrelic
+  labels:
+    app: newrelic-infrastructure
+spec:
+  selector:
+    matchLabels:
+      app: newrelic-infrastructure
+  template:
+    metadata:
+      labels:
+        app: newrelic-infrastructure
+      annotations:
+        consul.hashicorp.com/connect-inject: "false"
+    spec:
+      serviceAccountName: newrelic-infrastructure
+      hostNetwork: true
+      hostPID: true
+      containers:
+      - name: newrelic-infrastructure
+        image: newrelic/infrastructure-k8s:latest
+        securityContext:
+          privileged: true
+        env:
+        - name: NRIA_LICENSE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: newrelic-license-key
+              key: license
+        - name: NRIA_VERBOSE
+          value: "0"  # Reduced verbosity
+        - name: CLUSTER_NAME
+          value: "dev-eks-us-east-2"
+        - name: NRK8S_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: NRIA_CUSTOM_ATTRIBUTES
+          value: "{'clusterName':'dev-eks-us-east-2','environment':'dev','cloud':'aws','region':'us-east-2'}"
+        volumeMounts:
+        - name: host-proc
+          mountPath: /host/proc
+          readOnly: true
+        - name: host-sys
+          mountPath: /host/sys
+          readOnly: true
+        resources:
+          requests:
+            memory: "64Mi"    # Reduced from 150Mi
+            cpu: "50m"        # Reduced from 100m
+          limits:
+            memory: "128Mi"   # Reduced from 300Mi
+            cpu: "150m"       # Reduced from 300m
+      volumes:
+      - name: host-proc
+        hostPath:
+          path: /proc
+      - name: host-sys
+        hostPath:
+          path: /sys
+      tolerations:
+      - operator: "Exists"
+        effect: "NoSchedule"
+      - operator: "Exists"
+        effect: "NoExecute"
+---
+# Lightweight Kubernetes Events Monitor (replaces kube-state-metrics)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: newrelic-k8s-events
+  namespace: newrelic
+  labels:
+    app: newrelic-k8s-events
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: newrelic-k8s-events
+  template:
+    metadata:
+      labels:
+        app: newrelic-k8s-events
+      annotations:
+        consul.hashicorp.com/connect-inject: "false"
+    spec:
+      serviceAccountName: newrelic-infrastructure
+      containers:
+      - name: k8s-events
+        image: newrelic/nri-kube-events:2.10.3
+        env:
+        - name: NRI_LICENSE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: newrelic-license-key
+              key: license
+        - name: NRI_CLUSTER_NAME
+          value: "dev-eks-us-east-2"
+        - name: NRI_CONFIG_PATH
+          value: "/etc/nri-kube-events/config.yaml"
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/nri-kube-events
+        resources:
+          requests:
+            memory: "32Mi"    # Reduced from 128Mi
+            cpu: "25m"        # Reduced from 100m
+          limits:
+            memory: "64Mi"    # Reduced from 256Mi
+            cpu: "50m"        # Reduced from 200m
+      volumes:
+      - name: config-volume
+        configMap:
+          name: nri-kube-events-config
+---
+# Configuration for New Relic Kubernetes Events
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nri-kube-events-config
+  namespace: newrelic
+data:
+  config.yaml: |
+    interval: 15s
+    clusterName: "dev-eks-us-east-2"
+    agentEndpoint: http://localhost:8001/v1/data
+    sinks:
+      - name: newRelicInfra
+        config:
+          agentEndpoint: http://localhost:8001/v1/data 

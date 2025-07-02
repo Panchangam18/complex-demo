@@ -1,0 +1,68 @@
+{
+  "datacenter": "{{ consul_datacenter }}",
+  "data_dir": "/opt/consul",
+  "log_level": "INFO",
+  "node_name": "{{ inventory_hostname }}",
+  "bind_addr": "{{ ansible_default_ipv4.address }}",
+  "client_addr": "127.0.0.1",
+  "server": {{ 'true' if hostvars[inventory_hostname]['consul_role'] == 'server' else 'false' }},
+{% if hostvars[inventory_hostname]['consul_role'] == 'server' %}
+  "bootstrap_expect": {{ groups['consul_servers'] | length }},
+  "ui_config": {
+    "enabled": true
+  },
+{% endif %}
+{% if groups['consul_servers'] is defined and groups['consul_servers'] | length > 0 %}
+  "retry_join": [
+{% for host in groups['consul_servers'] %}
+{% if hostvars[host]['ansible_host'] is defined %}
+    "{{ hostvars[host]['ansible_host'] }}"{{ ',' if not loop.last else '' }}
+{% endif %}
+{% endfor %}
+  ],
+{% endif %}
+  "encrypt": "{{ consul_gossip_key | default('') }}",
+  "ca_file": "/etc/consul.d/consul-agent-ca.pem",
+  "cert_file": "/etc/consul.d/consul-cert.pem",
+  "key_file": "/etc/consul.d/consul-key.pem",
+  "verify_incoming": false,
+  "verify_outgoing": true,
+  "verify_server_hostname": true,
+  "ports": {
+    "grpc": 8502
+  },
+  "connect": {
+    "enabled": true
+  },
+  "telemetry": {
+    "prometheus_retention_time": "30s",
+    "disable_hostname": true
+  },
+  "acl": {
+    "enabled": false,
+    "default_policy": "allow"
+  },
+{% if hostvars[inventory_hostname]['consul_service_name'] is defined %}
+  "services": [
+    {
+      "name": "{{ hostvars[inventory_hostname]['consul_service_name'] }}",
+      "port": {{ hostvars[inventory_hostname]['consul_service_port'] | default(80) }},
+      "tags": [
+        "{{ hostvars[inventory_hostname]['service_type'] | default('service') }}",
+        "{{ environment }}",
+        "{{ hostvars[inventory_hostname]['cloud_provider'] }}"
+      ],
+      "check": {
+        "http": "http://{{ ansible_default_ipv4.address }}:{{ hostvars[inventory_hostname]['consul_service_port'] | default(80) }}/health",
+        "interval": "30s",
+        "timeout": "10s"
+      }
+    }
+  ],
+{% endif %}
+  "leave_on_terminate": true,
+  "rejoin_after_leave": true,
+  "enable_syslog": true,
+  "log_rotate_duration": "24h",
+  "log_rotate_max_files": 5
+} 

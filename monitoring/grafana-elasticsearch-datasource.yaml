@@ -1,0 +1,124 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-elasticsearch-datasource
+  namespace: observability
+  labels:
+    grafana_datasource: "1"
+data:
+  elasticsearch-datasource.yaml: |
+    apiVersion: 1
+    
+    deleteDatasources:
+      - name: Elasticsearch-Logs
+        orgId: 1
+    
+    datasources:
+      - name: Elasticsearch-Logs
+        orgId: 1
+        type: elasticsearch
+        access: proxy
+        url: https://798a3a233ea341aaad5b6c044a95fb25.us-central1.gcp.cloud.es.io:443
+        isDefault: false
+        database: "kubernetes-logs-*"
+        basicAuth: false
+        basicAuthUser: ""
+        basicAuthPassword: ""
+        withCredentials: false
+        jsonData:
+          interval: Daily
+          timeField: "@timestamp"
+          esVersion: "8.0.0"
+          maxConcurrentShardRequests: 5
+          logMessageField: "log"
+          logLevelField: "level"
+          includeFrozen: false
+          xpack: true
+        secureJsonData:
+          basicAuthPassword: "NUFZeHlwY0JBTWFEMkZxbV86M0g6QnZHN3hPYWZJRlZLcG92UnVzbmVEQQ=="
+        editable: true
+        
+      - name: Elasticsearch-Security
+        orgId: 1  
+        type: elasticsearch
+        access: proxy
+        url: https://798a3a233ea341aaad5b6c044a95fb25.us-central1.gcp.cloud.es.io:443
+        isDefault: false
+        database: "security-*"
+        basicAuth: false
+        basicAuthUser: ""
+        basicAuthPassword: ""
+        withCredentials: false
+        jsonData:
+          interval: Daily
+          timeField: "@timestamp"
+          esVersion: "8.0.0"
+          maxConcurrentShardRequests: 5
+          logMessageField: "message"
+          logLevelField: "severity"
+          includeFrozen: false
+          xpack: true
+        secureJsonData:
+          basicAuthPassword: "NUFZeHlwY0JBTWFEMkZxbV86M0g6QnZHN3hPYWZJRlZLcG92UnVzbmVEQQ=="
+        editable: true
+
+      - name: Elasticsearch-SystemD
+        orgId: 1
+        type: elasticsearch
+        access: proxy
+        url: https://798a3a233ea341aaad5b6c044a95fb25.us-central1.gcp.cloud.es.io:443
+        isDefault: false
+        database: "systemd-logs-*"
+        basicAuth: false
+        basicAuthUser: ""
+        basicAuthPassword: ""
+        withCredentials: false
+        jsonData:
+          interval: Daily
+          timeField: "@timestamp"
+          esVersion: "8.0.0"
+          maxConcurrentShardRequests: 5
+          logMessageField: "MESSAGE"
+          logLevelField: "PRIORITY"
+          includeFrozen: false
+          xpack: true
+        secureJsonData:
+          basicAuthPassword: "NUFZeHlwY0JBTWFEMkZxbV86M0g6QnZHN3hPYWZJRlZLcG92UnVzbmVEQQ=="
+        editable: true
+
+      - name: Elasticsearch-Application
+        orgId: 1
+        type: elasticsearch
+        access: proxy
+        url: https://798a3a233ea341aaad5b6c044a95fb25.us-central1.gcp.cloud.es.io:443
+        isDefault: false
+        database: "application-logs-*"
+        basicAuth: false
+        basicAuthUser: ""
+        basicAuthPassword: ""
+        withCredentials: false
+        jsonData:
+          interval: Daily
+          timeField: "@timestamp"
+          esVersion: "8.0.0"
+          maxConcurrentShardRequests: 5
+          logMessageField: "log"
+          logLevelField: "level"
+          includeFrozen: false
+          xpack: true
+        secureJsonData:
+          basicAuthPassword: "NUFZeHlwY0JBTWFEMkZxbV86M0g6QnZHN3hPYWZJRlZLcG92UnVzbmVEQQ=="
+        editable: true
+---
+# Secret for Elasticsearch credentials in Grafana
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-elasticsearch-secret
+  namespace: observability
+type: Opaque
+stringData:
+  elasticsearch-url: "https://798a3a233ea341aaad5b6c044a95fb25.us-central1.gcp.cloud.es.io:443"
+  elasticsearch-api-key: "NUFZeHlwY0JBTWFEMkZxbV86M0g6QnZHN3hPYWZJRlZLcG92UnVzbmVEQQ=="
+  elasticsearch-username: "elastic" 

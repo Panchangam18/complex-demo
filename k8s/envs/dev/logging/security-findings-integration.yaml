@@ -1,0 +1,314 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: security-findings-config
+  namespace: logging
+  labels:
+    app: security-findings
+data:
+  fluent-bit-security.conf: |
+    [SERVICE]
+        Flush         30
+        Log_Level     info
+        Daemon        off
+        Parsers_File  security-parsers.conf
+        HTTP_Server   On
+        HTTP_Listen   0.0.0.0
+        HTTP_Port     2021
+
+    # AWS GuardDuty Findings via CloudWatch Logs
+    [INPUT]
+        Name              cloudwatch_logs
+        Tag               aws.guardduty
+        region            us-east-2
+        log_group_name    /aws/guardduty/findings
+        log_stream_prefix guardduty-
+        auto_create_group On
+
+    # AWS Security Hub Findings via CloudWatch Logs  
+    [INPUT]
+        Name              cloudwatch_logs
+        Tag               aws.securityhub
+        region            us-east-2
+        log_group_name    /aws/securityhub/findings
+        log_stream_prefix securityhub-
+        auto_create_group On
+
+    # GCP Security Command Center via Pub/Sub (requires additional setup)
+    [INPUT]
+        Name              forward
+        Tag               gcp.scc
+        Listen            0.0.0.0
+        Port              24224
+        Buffer_Max_Size   1MB
+
+    # Azure Security Center via Event Hub (requires additional setup)
+    [INPUT]
+        Name              forward
+        Tag               azure.defender
+        Listen            0.0.0.0
+        Port              24225
+        Buffer_Max_Size   1MB
+
+    # Kubernetes Security Events (RBAC, PSP violations, etc.)
+    [INPUT]
+        Name              kubernetes_events
+        Tag               k8s.security
+        Kube_URL          https://kubernetes.default.svc:443
+        Kube_CA_File      /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        Kube_Token_File   /var/run/secrets/kubernetes.io/serviceaccount/token
+        Interval_Sec      60
+        DB                /var/log/flb_k8s_events.db
+
+    # Parse AWS findings
+    [FILTER]
+        Name           parser
+        Match          aws.*
+        Key_Name       message
+        Parser         aws_security_json
+        Reserve_Data   On
+
+    # Parse GCP findings
+    [FILTER]
+        Name           parser
+        Match          gcp.*
+        Key_Name       message
+        Parser         gcp_security_json
+        Reserve_Data   On
+
+    # Parse Azure findings
+    [FILTER]
+        Name           parser
+        Match          azure.*
+        Key_Name       message
+        Parser         azure_security_json
+        Reserve_Data   On
+
+    # Enrich all security findings with metadata
+    [FILTER]
+        Name           modify
+        Match          aws.*
+        Add            finding_source aws
+        Add            cloud_provider aws
+        Add            severity_level ${severity}
+        Add            environment dev
+        Add            detection_time ${time}
+
+    [FILTER]
+        Name           modify
+        Match          gcp.*
+        Add            finding_source gcp
+        Add            cloud_provider gcp
+        Add            severity_level ${severity}
+        Add            environment dev
+        Add            detection_time ${time}
+
+    [FILTER]
+        Name           modify
+        Match          azure.*
+        Add            finding_source azure
+        Add            cloud_provider azure
+        Add            severity_level ${severity}
+        Add            environment dev
+        Add            detection_time ${time}
+
+    [FILTER]
+        Name           modify
+        Match          k8s.*
+        Add            finding_source kubernetes
+        Add            cloud_provider kubernetes
+        Add            severity_level ${type}
+        Add            environment dev
+        Add            detection_time ${firstTimestamp}
+
+    # Security findings output to Elasticsearch SIEM index
+    [OUTPUT]
+        Name            es
+        Match           aws.*
+        Host            798a3a233ea341aaad5b6c044a95fb25.us-central1.gcp.cloud.es.io
+        Port            443
+        TLS             On
+        TLS.Verify      On
+        HTTP_User       elastic
+        HTTP_Passwd     ${ELASTICSEARCH_PASSWORD}
+        Index           security-findings
+        Type            _doc
+        Logstash_Format On
+        Logstash_Prefix security-findings
+        Logstash_DateFormat %Y.%m.%d
+        Include_Tag_Key On
+        Tag_Key         source_tag
+        Time_Key        detection_time
+        Generate_ID     On
+        Retry_Limit     3
+
+    [OUTPUT]
+        Name            es
+        Match           gcp.*
+        Host            798a3a233ea341aaad5b6c044a95fb25.us-central1.gcp.cloud.es.io
+        Port            443
+        TLS             On
+        TLS.Verify      On
+        HTTP_User       elastic
+        HTTP_Passwd     ${ELASTICSEARCH_PASSWORD}
+        Index           security-findings
+        Type            _doc
+        Logstash_Format On
+        Logstash_Prefix security-findings
+        Logstash_DateFormat %Y.%m.%d
+        Include_Tag_Key On
+        Tag_Key         source_tag
+        Time_Key        detection_time
+        Generate_ID     On
+        Retry_Limit     3
+
+    [OUTPUT]
+        Name            es
+        Match           azure.*
+        Host            798a3a233ea341aaad5b6c044a95fb25.us-central1.gcp.cloud.es.io
+        Port            443
+        TLS             On
+        TLS.Verify      On
+        HTTP_User       elastic
+        HTTP_Passwd     ${ELASTICSEARCH_PASSWORD}
+        Index           security-findings
+        Type            _doc
+        Logstash_Format On
+        Logstash_Prefix security-findings
+        Logstash_DateFormat %Y.%m.%d
+        Include_Tag_Key On
+        Tag_Key         source_tag
+        Time_Key        detection_time
+        Generate_ID     On
+        Retry_Limit     3
+
+    [OUTPUT]
+        Name            es
+        Match           k8s.*
+        Host            798a3a233ea341aaad5b6c044a95fb25.us-central1.gcp.cloud.es.io
+        Port            443
+        TLS             On
+        TLS.Verify      On
+        HTTP_User       elastic
+        HTTP_Passwd     ${ELASTICSEARCH_PASSWORD}
+        Index           security-findings
+        Type            _doc
+        Logstash_Format On
+        Logstash_Prefix security-findings
+        Logstash_DateFormat %Y.%m.%d
+        Include_Tag_Key On
+        Tag_Key         source_tag
+        Time_Key        detection_time
+        Generate_ID     On
+        Retry_Limit     3
+
+  security-parsers.conf: |
+    [PARSER]
+        Name        aws_security_json
+        Format      json
+        Time_Key    updatedAt
+        Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+        Time_Keep   On
+
+    [PARSER]
+        Name        gcp_security_json
+        Format      json
+        Time_Key    createTime
+        Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+        Time_Keep   On
+
+    [PARSER]
+        Name        azure_security_json
+        Format      json
+        Time_Key    TimeGenerated
+        Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+        Time_Keep   On
+
+    [PARSER]
+        Name        k8s_events_json
+        Format      json
+        Time_Key    firstTimestamp
+        Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+        Time_Keep   On
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: security-findings-collector
+  namespace: logging
+  labels:
+    app: security-findings-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: security-findings-collector
+  template:
+    metadata:
+      labels:
+        app: security-findings-collector
+      annotations:
+        consul.hashicorp.com/connect-inject: "false"
+    spec:
+      serviceAccountName: fluent-bit
+      containers:
+      - name: security-findings
+        image: fluent/fluent-bit:3.0.7
+        ports:
+        - containerPort: 2021
+          name: http-metrics
+        - containerPort: 24224
+          name: gcp-forward
+        - containerPort: 24225
+          name: azure-forward
+        env:
+        - name: FLUENT_CONF
+          value: /fluent-bit/etc/fluent-bit-security.conf
+        - name: ELASTICSEARCH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: elasticsearch-credentials
+              key: elasticsearch-api-key
+        - name: AWS_REGION
+          value: "us-east-2"
+        resources:
+          limits:
+            memory: 256Mi
+            cpu: 200m
+          requests:
+            memory: 128Mi
+            cpu: 100m
+        volumeMounts:
+        - name: config
+          mountPath: /fluent-bit/etc
+        - name: security-db
+          mountPath: /var/log/
+      volumes:
+      - name: config
+        configMap:
+          name: security-findings-config
+      - name: security-db
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: security-findings-collector
+  namespace: logging
+  labels:
+    app: security-findings-collector
+spec:
+  type: ClusterIP
+  ports:
+  - name: http-metrics
+    port: 2021
+    targetPort: 2021
+  - name: gcp-forward
+    port: 24224
+    targetPort: 24224
+  - name: azure-forward  
+    port: 24225
+    targetPort: 24225
+  selector:
+    app: security-findings-collector 

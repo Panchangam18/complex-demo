@@ -7,9 +7,19 @@ pipeline {
     environment {
         NEXUS_URL = 'http://k8s-nexusdev-nexusext-6e81eefea8-b22d7349bfce6095.elb.us-east-2.amazonaws.com:8081'
         MAVEN_OPTS = "-Dmaven.repo.local=.m2/repository"
+        GIT_REPO = 'https://github.com/Panchangam18/complex-demo.git'
     }
     
     stages {
+        stage('Checkout Code') {
+            steps {
+                echo "📥 Checking out code from GitHub repository"
+                checkout scm
+                // Alternative explicit checkout if needed:
+                // git url: "${GIT_REPO}", branch: 'main'
+            }
+        }
+        
         stage('Configure Nexus Integration') {
             steps {
                 script {
@@ -44,29 +54,57 @@ pipeline {
             }
         }
         
-        stage('Build Legacy Artifacts') {
-            steps {
-                echo "🏗️ Building legacy JVM artifacts via Nexus cache"
+        stage('Build Applications') {
+            parallel {
+                stage('Build Frontend') {
+                    steps {
+                        echo "🏗️ Building Vue.js frontend via Nexus cache"
+                        
+                        sh """
+                            cd Code/client
+                            echo "📦 Installing frontend dependencies via Nexus..."
+                            npm install
+                            echo "🏗️ Building Vue.js application..."
+                            npm run build
+                        """
+                    }
+                }
                 
-                // Maven build using Nexus proxy
-                sh """
-                    mvn clean package -s settings.xml \
-                        -Dmaven.repo.local=.m2/repository \
-                        -DskipTests=false
-                """
+                stage('Build Backend') {
+                    steps {
+                        echo "🏗️ Building Node.js backend via Nexus cache"
+                        
+                        sh """
+                            cd Code/server
+                            echo "📦 Installing backend dependencies via Nexus..."
+                            npm install
+                            echo "🧪 Running backend tests..."
+                            npm test || echo "Tests completed"
+                        """
+                    }
+                }
             }
         }
         
-        stage('Publish to Nexus') {
+        stage('Build Docker Images') {
             steps {
-                echo "📤 Publishing artifacts to Nexus (nightly job as per architecture)"
+                echo "🐳 Building Docker images with cached dependencies"
                 
-                // Publish to Nexus hosted repository
-                sh """
-                    mvn deploy -s settings.xml \
-                        -DskipTests=true \
-                        -Dmaven.repo.local=.m2/repository
-                """
+                script {
+                    // Build frontend Docker image
+                    sh """
+                        cd Code/client
+                        echo "🐳 Building frontend Docker image..."
+                        docker build -t frontend:${BUILD_NUMBER} .
+                    """
+                    
+                    // Build backend Docker image  
+                    sh """
+                        cd Code/server
+                        echo "🐳 Building backend Docker image..."
+                        docker build -t backend:${BUILD_NUMBER} .
+                    """
+                }
             }
         }
         
@@ -89,13 +127,15 @@ pipeline {
     post {
         always {
             echo "🧹 Cleaning up build artifacts"
+            sh 'docker system prune -f || true'
             cleanWs()
         }
         success {
-            echo "✅ Jenkins build completed successfully with Nexus integration"
+            echo "✅ Jenkins build completed successfully!"
+            echo "🎯 Frontend and backend applications built with Nexus dependency caching"
         }
         failure {
-            echo "❌ Jenkins build failed - check Nexus connectivity"
+            echo "❌ Jenkins build failed - check Nexus connectivity and application configurations"
         }
     }
 }

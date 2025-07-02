@@ -1,0 +1,169 @@
+---
+# Puppet Enterprise - Elasticsearch Integration Playbook
+# Architecture Plan: "Puppet reports export to Elasticsearch"
+
+- name: Configure Puppet Enterprise to send reports to Elasticsearch
+  hosts: puppet_servers
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    elasticsearch_url: "https://798a3a233ea341aaad5b6c044a95fb25.us-central1.gcp.cloud.es.io:443"
+    elasticsearch_api_key: "NUFZeHlwY0JBTWFEMkZxbV86M0g6QnZHN3hPYWZJRlZLcG92UnVzbmVEQQ=="
+    puppet_config_dir: "/etc/puppetlabs/puppet"
+    puppet_reports_dir: "/opt/puppetlabs/server/data/puppetserver/reports"
+    environment: "{{ hostvars[inventory_hostname]['environment'] | default('dev') }}"
+    
+  tasks:
+    # Install Elasticsearch report processor gem
+    - name: Install elasticsearch ruby gem for Puppet reports
+      shell: |
+        /opt/puppetlabs/bin/puppetserver gem install elasticsearch
+        /opt/puppetlabs/bin/puppet gem install elasticsearch
+      register: gem_install_result
+      failed_when: gem_install_result.rc != 0
+      
+    # Create Elasticsearch report processor
+    - name: Create Elasticsearch report processor script
+      template:
+        src: elasticsearch_report_processor.rb.j2
+        dest: /opt/puppetlabs/puppet/lib/ruby/vendor_ruby/puppet/reports/elasticsearch.rb
+        owner: pe-puppet
+        group: pe-puppet
+        mode: '0644'
+      notify: restart puppetserver
+      
+    # Configure Puppet to use Elasticsearch reports
+    - name: Configure puppet.conf for Elasticsearch reporting
+      ini_file:
+        path: "{{ puppet_config_dir }}/puppet.conf"
+        section: master
+        option: reports
+        value: "store,elasticsearch"
+        backup: yes
+      notify: restart puppetserver
+      
+    # Create Elasticsearch configuration file
+    - name: Create Elasticsearch configuration for Puppet
+      template:
+        src: elasticsearch.yaml.j2
+        dest: "{{ puppet_config_dir }}/elasticsearch.yaml"
+        owner: pe-puppet
+        group: pe-puppet
+        mode: '0640'
+      notify: restart puppetserver
+      
+    # Create logstash configuration for Puppet reports
+    - name: Create Fluent Bit configuration for Puppet reports
+      template:
+        src: puppet-reports-fluent-bit.conf.j2
+        dest: /etc/fluent-bit/puppet-reports.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart fluent-bit
+      
+    # Install and configure Fluent Bit for Puppet reports
+    - name: Install Fluent Bit for log forwarding
+      yum:
+        name: fluent-bit
+        state: present
+      when: ansible_os_family == "RedHat"
+      
+    - name: Configure Fluent Bit service
+      template:
+        src: fluent-bit-puppet.service.j2
+        dest: /etc/systemd/system/fluent-bit-puppet.service
+        owner: root
+        group: root
+        mode: '0644'
+      notify:
+        - reload systemd
+        - restart fluent-bit-puppet
+        
+    # Create Puppet report webhook
+    - name: Create webhook script for real-time reporting
+      template:
+        src: puppet-elasticsearch-webhook.rb.j2
+        dest: /opt/puppetlabs/puppet/bin/puppet-elasticsearch-webhook
+        owner: pe-puppet
+        group: pe-puppet
+        mode: '0755'
+        
+    # Configure webhook in puppet.conf
+    - name: Configure webhook reporting
+      ini_file:
+        path: "{{ puppet_config_dir }}/puppet.conf"
+        section: master
+        option: report_handlers
+        value: "elasticsearch,webhook"
+        backup: yes
+      notify: restart puppetserver
+      
+    # Set up log rotation for Puppet reports
+    - name: Configure log rotation for Puppet reports
+      template:
+        src: puppet-reports.logrotate.j2
+        dest: /etc/logrotate.d/puppet-reports
+        owner: root
+        group: root
+        mode: '0644'
+
+  handlers:
+    - name: reload systemd
+      systemd:
+        daemon_reload: yes
+        
+    - name: restart puppetserver
+      systemd:
+        name: puppetserver
+        state: restarted
+        
+    - name: restart fluent-bit
+      systemd:
+        name: fluent-bit
+        state: restarted
+        enabled: yes
+        
+    - name: restart fluent-bit-puppet
+      systemd:
+        name: fluent-bit-puppet
+        state: restarted
+        enabled: yes
+
+# Configure Puppet agents to include more detailed reporting
+- name: Configure Puppet agents for enhanced reporting
+  hosts: day0_provisioning:!puppet_servers
+  become: yes
+  vars:
+    puppet_config_dir: "/etc/puppetlabs/puppet"
+    
+  tasks:
+    - name: Configure Puppet agent for detailed reporting
+      ini_file:
+        path: "{{ puppet_config_dir }}/puppet.conf"
+        section: agent
+        option: "{{ item.option }}"
+        value: "{{ item.value }}"
+        backup: yes
+      loop:
+        - { option: "report", value: "true" }
+        - { option: "pluginsync", value: "true" }
+        - { option: "show_diff", value: "true" }
+        - { option: "summarize", value: "true" }
+      notify: restart puppet
+      
+    - name: Enable detailed transaction reporting
+      ini_file:
+        path: "{{ puppet_config_dir }}/puppet.conf"
+        section: agent
+        option: graph
+        value: "true"
+        backup: yes
+      notify: restart puppet
+
+  handlers:
+    - name: restart puppet
+      systemd:
+        name: puppet
+        state: restarted 

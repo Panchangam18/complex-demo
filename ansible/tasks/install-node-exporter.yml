@@ -1,0 +1,62 @@
+---
+# Node Exporter Installation Task
+# Installs and configures Node Exporter for Prometheus monitoring
+
+- name: Create node_exporter user
+  user:
+    name: node_exporter
+    system: yes
+    shell: /bin/false
+    home: /var/lib/node_exporter
+    create_home: yes
+
+- name: Create node_exporter directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: node_exporter
+    group: node_exporter
+    mode: '0755'
+  loop:
+    - /var/lib/node_exporter
+    - /etc/node_exporter
+
+- name: Download and install Node Exporter
+  unarchive:
+    src: "https://github.com/prometheus/node_exporter/releases/download/v1.6.1/node_exporter-1.6.1.linux-amd64.tar.gz"
+    dest: /tmp
+    remote_src: yes
+    creates: /tmp/node_exporter-1.6.1.linux-amd64
+
+- name: Copy Node Exporter binary
+  copy:
+    src: /tmp/node_exporter-1.6.1.linux-amd64/node_exporter
+    dest: /usr/local/bin/node_exporter
+    remote_src: yes
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Create Node Exporter systemd service
+  template:
+    src: node-exporter.service.j2
+    dest: /etc/systemd/system/node_exporter.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - reload systemd
+    - restart node_exporter
+
+- name: Configure firewall for Node Exporter
+  firewalld:
+    port: "9100/tcp"
+    permanent: yes
+    state: enabled
+    immediate: yes
+
+- name: Start and enable Node Exporter
+  systemd:
+    name: node_exporter
+    state: started
+    enabled: yes 

@@ -1,0 +1,247 @@
+---
+# Day-0 Provisioning Playbook
+# Architecture Plan: "Day-0/1 provisioning of OS, middleware, and Consul agents. Invoked by CircleCI post-Terraform."
+
+- name: Day-0 Infrastructure Provisioning
+  hosts: day0_provisioning:!kubernetes_clusters
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    consul_version: "1.16.1"
+    consul_datacenter: "{{ hostvars[inventory_hostname]['consul_datacenter'] | default('aws-dev-us-east-2') }}"
+    puppet_server: "{{ hostvars[inventory_hostname]['puppet_server'] | default('') }}"
+    environment: "{{ hostvars[inventory_hostname]['environment'] | default('dev') }}"
+    
+  pre_tasks:
+    - name: Display provisioning information
+      debug:
+        msg: |
+          Starting Day-0 provisioning for {{ inventory_hostname }}
+          Cloud Provider: {{ hostvars[inventory_hostname]['cloud_provider'] }}
+          Environment: {{ environment }}
+          Consul Datacenter: {{ consul_datacenter }}
+          Puppet Server: {{ puppet_server }}
+    
+    - name: Wait for system to be ready
+      wait_for_connection:
+        timeout: 300
+        
+    - name: Gather system facts
+      setup:
+
+  tasks:
+    # OS Hardening and Base Configuration
+    - name: Update system packages
+      yum:
+        name: '*'
+        state: latest
+        update_cache: yes
+      when: ansible_os_family == "RedHat"
+      
+    - name: Install essential packages
+      yum:
+        name:
+          - curl
+          - wget
+          - unzip
+          - git
+          - vim
+          - htop
+          - nc
+          - jq
+          - firewalld
+          - chrony
+          - rsyslog
+          - logrotate
+        state: present
+      when: ansible_os_family == "RedHat"
+    
+    - name: Start and enable essential services
+      systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      loop:
+        - firewalld
+        - chronyd
+        - rsyslog
+    
+    - name: Configure firewall for basic services
+      firewalld:
+        service: "{{ item }}"
+        permanent: yes
+        state: enabled
+        immediate: yes
+      loop:
+        - ssh
+        - http
+        - https
+      
+    # Consul Agent Installation (Architecture Plan requirement)
+    - name: Create consul user
+      user:
+        name: consul
+        system: yes
+        shell: /bin/false
+        home: /etc/consul.d
+        create_home: no
+        
+    - name: Create consul directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: consul
+        group: consul
+        mode: '0755'
+      loop:
+        - /opt/consul
+        - /etc/consul.d
+        - /var/log/consul
+        
+    - name: Download and install Consul
+      unarchive:
+        src: "https://releases.hashicorp.com/consul/{{ consul_version }}/consul_{{ consul_version }}_linux_amd64.zip"
+        dest: /usr/local/bin
+        remote_src: yes
+        owner: root
+        group: root
+        mode: '0755'
+        creates: /usr/local/bin/consul
+    
+    - name: Configure Consul agent
+      template:
+        src: consul.json.j2
+        dest: /etc/consul.d/consul.json
+        owner: consul
+        group: consul
+        mode: '0640'
+      notify: restart consul
+      
+    - name: Create Consul systemd service
+      template:
+        src: consul.service.j2
+        dest: /etc/systemd/system/consul.service
+        owner: root
+        group: root
+        mode: '0644'
+      notify:
+        - reload systemd
+        - restart consul
+    
+    - name: Configure Consul firewall rules
+      firewalld:
+        port: "{{ item }}"
+        permanent: yes
+        state: enabled
+        immediate: yes
+      loop:
+        - "8300/tcp"  # Server RPC
+        - "8301/tcp"  # Serf LAN
+        - "8301/udp"  # Serf LAN
+        - "8302/tcp"  # Serf WAN
+        - "8302/udp"  # Serf WAN
+        - "8500/tcp"  # HTTP API
+        - "8600/tcp"  # DNS
+        - "8600/udp"  # DNS
+      when: hostvars[inventory_hostname]['install_consul_agent']
+    
+    # Puppet Agent Installation (Architecture Plan requirement)
+    - name: Install Puppet repository
+      yum:
+        name: "https://yum.puppet.com/puppet7-release-el-{{ ansible_distribution_major_version }}.noarch.rpm"
+        state: present
+        disable_gpg_check: yes
+      when: hostvars[inventory_hostname]['configure_puppet_agent'] and puppet_server != ""
+      
+    - name: Install Puppet agent
+      yum:
+        name: puppet-agent
+        state: present
+      when: hostvars[inventory_hostname]['configure_puppet_agent'] and puppet_server != ""
+      
+    - name: Configure Puppet agent
+      template:
+        src: puppet.conf.j2
+        dest: /etc/puppetlabs/puppet/puppet.conf
+        owner: root
+        group: root
+        mode: '0644'
+      when: hostvars[inventory_hostname]['configure_puppet_agent'] and puppet_server != ""
+      notify: restart puppet
+    
+    - name: Start and enable Puppet agent
+      systemd:
+        name: puppet
+        state: started
+        enabled: yes
+      when: hostvars[inventory_hostname]['configure_puppet_agent'] and puppet_server != ""
+    
+    # Monitoring Agent Installation
+    - name: Install Node Exporter for Prometheus monitoring
+      include_tasks: tasks/install-node-exporter.yml
+      when: hostvars[inventory_hostname]['enable_monitoring']
+    
+    # Service Registration in Consul
+    - name: Register service in Consul
+      template:
+        src: service-registration.json.j2
+        dest: "/etc/consul.d/{{ hostvars[inventory_hostname]['service_type'] | default('node') }}.json"
+        owner: consul
+        group: consul
+        mode: '0640'
+      when: hostvars[inventory_hostname]['consul_service_name'] is defined
+      notify: restart consul
+
+  handlers:
+    - name: reload systemd
+      systemd:
+        daemon_reload: yes
+        
+    - name: restart consul
+      systemd:
+        name: consul
+        state: restarted
+        enabled: yes
+        
+    - name: restart puppet
+      systemd:
+        name: puppet
+        state: restarted
+        enabled: yes
+
+# Post-provisioning tasks - Write Hiera data for Puppet
+- name: Generate Hiera classification for Puppet
+  hosts: localhost
+  gather_facts: no
+  vars:
+    hiera_data_dir: "/tmp/hiera-classifications"
+    puppet_server_ip: "{{ hostvars[groups['puppet_servers'][0]]['ansible_host'] if groups['puppet_servers'] is defined and groups['puppet_servers'] | length > 0 else '' }}"
+    
+  tasks:
+    - name: Create local hiera data directory
+      file:
+        path: "{{ hiera_data_dir }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      run_once: true
+    
+    - name: Generate node classification YAML for each host
+      template:
+        src: node-classification.yaml.j2
+        dest: "{{ hiera_data_dir }}/{{ item }}.yaml"
+        mode: '0644'
+      loop: "{{ groups['day0_provisioning'] | default([]) | difference(groups['kubernetes_clusters'] | default([])) }}"
+      delegate_to: localhost
+      run_once: true
+      
+    - name: Display hiera data location
+      debug:
+        msg: |
+          Hiera classification files generated in: {{ hiera_data_dir }}
+          These files should be uploaded to the Puppet Enterprise server
+          and placed in the appropriate Hiera data directory.
+          
+          Next step: Run the puppet-integration playbook to upload the classifications.
+      run_once: true 

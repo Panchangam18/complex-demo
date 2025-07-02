@@ -6,7 +6,7 @@ global:
   gossipEncryption:
     secretName: consul-gossip-encryption-key
     secretKey: key
-  
+
   # Federation configuration for WAN joining
   federation:
     enabled: ${wan_federation_secret != ""}
@@ -109,7 +109,7 @@ prometheus:
 
 # Cleanup tests
 tests:
-  enabled: false
+  enabled: false 
 
 # Minimal DNS configuration
 dns:

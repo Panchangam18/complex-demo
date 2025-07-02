@@ -1,0 +1,33 @@
+[Unit]
+Description=Node Exporter
+Documentation=https://prometheus.io/docs/guides/node-exporter/
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=node_exporter
+Group=node_exporter
+ExecStart=/usr/local/bin/node_exporter \
+    --web.listen-address=0.0.0.0:9100 \
+    --path.procfs=/proc \
+    --path.sysfs=/sys \
+    --collector.filesystem.mount-points-exclude="^/(sys|proc|dev|host|etc|rootfs/var/lib/docker/containers|rootfs/var/lib/docker/overlay2|rootfs/run/docker/netns|rootfs/var/lib/docker/aufs)($$|/)" \
+    --collector.systemd \
+    --collector.processes \
+    --web.max-requests=40 \
+    --log.level=info
+
+SyslogIdentifier=node_exporter
+Restart=always
+RestartSec=5
+
+# Security settings
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/proc,/sys
+
+[Install]
+WantedBy=multi-user.target 
