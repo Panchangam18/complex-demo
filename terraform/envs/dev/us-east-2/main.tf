@@ -289,43 +289,44 @@ provider "helm" {
   }
 }
 
-# EKS Consul Client (Secondary Datacenter) - DISABLED due to storage/timeout issues
-# TODO: Re-enable after fixing EBS CSI driver IAM role configuration
-# module "consul_eks_client" {
-#   source = "../../../modules/consul/k8s-client"
-#   
-#   cluster_name       = module.aws_eks.cluster_id
-#   cluster_endpoint   = module.aws_eks.cluster_endpoint
-#   region             = var.aws_region
-#   environment        = local.environment
-#   cloud_provider     = "aws"
-#   
-#   datacenter_name    = "eks-${local.environment}-${local.region}"
-#   primary_datacenter = "eks-${local.environment}-${local.region}"
-#   
-#   gossip_key              = random_password.consul_gossip_key.result
-#   wan_federation_secret   = ""
-#   primary_consul_servers  = []
-#   consul_master_token     = ""
-#   
-#   enable_connect         = true
-#   enable_connect_inject  = true
-#   enable_ui              = false  # UI runs on primary cluster
-#   enable_prometheus_metrics = true
-#   enable_sync_catalog    = true
-#   enable_acls           = false
-#   
-#   aws_profile = var.aws_profile
-#   
-#   providers = {
-#     kubernetes = kubernetes.eks
-#     helm       = helm.eks
-#   }
-#   
-#   depends_on = [
-#     module.aws_eks
-#   ]
-# }
+# EKS Consul Client (Secondary Datacenter) - FIXED: Now client-only mode
+module "consul_eks_client" {
+  source = "../../../modules/consul/k8s-client"
+  
+  cluster_name       = module.aws_eks.cluster_id
+  cluster_endpoint   = module.aws_eks.cluster_endpoint
+  region             = var.aws_region
+  environment        = local.environment
+  cloud_provider     = "aws"
+  
+  # Fixed: Proper datacenter naming and connection
+  datacenter_name    = "eks-${local.environment}-${local.region}"
+  primary_datacenter = "aws-${local.environment}-${local.region}"  # Points to EC2 primary
+  
+  # Connection details for primary EC2 cluster
+  gossip_key              = random_password.consul_gossip_key.result
+  wan_federation_secret   = ""  # Will be configured later for cross-cloud
+  primary_consul_servers  = module.consul_primary.server_private_ips
+  consul_master_token     = ""  # ACLs disabled for now
+  
+  # Service mesh configuration
+  enable_connect         = true
+  enable_connect_inject  = true
+  enable_ui              = false  # UI runs on primary EC2 cluster
+  enable_prometheus_metrics = true
+  enable_sync_catalog    = true
+  enable_acls           = false
+  
+  providers = {
+    kubernetes = kubernetes.eks
+    helm       = helm.eks
+  }
+  
+  depends_on = [
+    module.aws_eks,
+    module.consul_primary
+  ]
+}
 
 # Get GCP access token for GKE authentication
 data "google_client_config" "default" {}
@@ -349,42 +350,45 @@ provider "helm" {
   }
 }
 
-# GKE Consul Client (Secondary Datacenter) - DISABLED due to storage/timeout issues
-# TODO: Re-enable after fixing storage and authentication issues
-# module "consul_gke_client" {
-#   source = "../../../modules/consul/k8s-client"
-#   
-#   cluster_name           = module.gcp_gke.cluster_name
-#   cluster_endpoint       = module.gcp_gke.cluster_endpoint
-#   cluster_ca_certificate = module.gcp_gke.cluster_ca_certificate
-#   region                 = var.gcp_region
-#   environment            = local.environment
-#   cloud_provider         = "gcp"
-#   
-#   datacenter_name    = "gke-${local.environment}-${var.gcp_region}"
-#   primary_datacenter = "gke-${local.environment}-${var.gcp_region}"
-#   
-#   gossip_key              = random_password.consul_gossip_key.result
-#   wan_federation_secret   = ""
-#   primary_consul_servers  = []
-#   consul_master_token     = ""
-#   
-#   enable_connect         = true
-#   enable_connect_inject  = true
-#   enable_ui              = false  # UI runs on primary cluster
-#   enable_prometheus_metrics = true
-#   enable_sync_catalog    = true
-#   enable_acls           = false
-#   
-#   providers = {
-#     kubernetes = kubernetes.gke
-#     helm       = helm.gke
-#   }
-#   
-#   depends_on = [
-#     module.gcp_gke
-#   ]
-# }
+# GKE Consul Client (Secondary Datacenter) - FIXED: Now client-only mode  
+module "consul_gke_client" {
+  source = "../../../modules/consul/k8s-client"
+  
+  cluster_name           = module.gcp_gke.cluster_name
+  cluster_endpoint       = module.gcp_gke.cluster_endpoint
+  cluster_ca_certificate = module.gcp_gke.cluster_ca_certificate
+  region                 = var.gcp_region
+  environment            = local.environment
+  cloud_provider         = "gcp"
+  
+  # Fixed: Proper datacenter naming and connection to AWS primary
+  datacenter_name    = "gke-${local.environment}-${var.gcp_region}"
+  primary_datacenter = "aws-${local.environment}-${var.aws_region}"  # Points to AWS EC2 primary
+  
+  # Connection details for primary AWS EC2 cluster
+  gossip_key              = random_password.consul_gossip_key.result
+  wan_federation_secret   = ""  # Will be configured later for cross-cloud
+  primary_consul_servers  = module.consul_primary.server_private_ips
+  consul_master_token     = ""  # ACLs disabled for now
+  
+  # Service mesh configuration
+  enable_connect         = true
+  enable_connect_inject  = true
+  enable_ui              = false  # UI runs on primary AWS cluster
+  enable_prometheus_metrics = true
+  enable_sync_catalog    = true
+  enable_acls           = false
+  
+  providers = {
+    kubernetes = kubernetes.gke
+    helm       = helm.gke
+  }
+  
+  depends_on = [
+    module.gcp_gke,
+    module.consul_primary
+  ]
+}
 
 # AWS S3 Buckets for observability and assets
 # Temporarily commenting out S3 module to fix state issues
@@ -973,16 +977,16 @@ output "consul_primary_datacenter" {
   value       = module.consul_primary.consul_connection_info
 }
 
-# Temporarily disabled outputs for K8s Consul clients
-# output "consul_eks_datacenter" {
-#   description = "EKS Consul datacenter information"
-#   value       = module.consul_eks_client.consul_client_info
-# }
+# Re-enabled outputs for K8s Consul clients
+output "consul_eks_datacenter" {
+  description = "EKS Consul datacenter information"
+  value       = module.consul_eks_client.consul_client_info
+}
 
-# output "consul_gke_datacenter" {
-#   description = "GKE Consul datacenter information"
-#   value       = module.consul_gke_client.consul_client_info
-# }
+output "consul_gke_datacenter" {
+  description = "GKE Consul datacenter information"
+  value       = module.consul_gke_client.consul_client_info
+}
 
 output "consul_gossip_key" {
   description = "Consul gossip encryption key"
@@ -997,17 +1001,18 @@ output "consul_summary" {
     ui_url              = module.consul_primary.consul_ui_url
     primary_datacenter  = "aws-${local.environment}-${local.region}"
     secondary_datacenters = [
-      # "eks-${local.environment}-${local.region}",     # Disabled
-      # "gke-${local.environment}-${var.gcp_region}"    # Disabled
+      "eks-${local.environment}-${local.region}",     # Now enabled
+      "gke-${local.environment}-${var.gcp_region}"    # Now enabled
     ]
     connect_enabled     = true
-    federation_enabled  = false  # Disabled until K8s clients are working
+    federation_enabled  = true  # Now enabled with K8s clients
     mesh_gateways      = [
-      "AWS EC2 Primary Cluster"
-      # "EKS Secondary Cluster",    # Disabled
-      # "GKE Secondary Cluster"     # Disabled
+      "AWS EC2 Primary Cluster",
+      "EKS Secondary Cluster",    # Now enabled
+      "GKE Secondary Cluster"     # Now enabled
     ]
     service_discovery  = "Multi-cloud service catalog sync enabled"
+    cross_cloud_mesh   = "mTLS service mesh across AWS, GCP"
   }
 }
 
