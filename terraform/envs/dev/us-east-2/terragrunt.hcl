@@ -22,8 +22,7 @@ inputs = {
   gcp_region     = "us-east1"
   gcp_vpc_cidr   = "10.16.0.0/16"  # GCP Dev VPC
   
-  # Azure configuration
-  azure_subscription_id = "487cf884-e778-4c36-92ce-f419b2c18c59"  # TODO: Replace with actual subscription
+  # Azure configuration (uses authenticated subscription from 'az login')
   azure_location       = "eastus"
   azure_vnet_cidr      = "10.32.0.0/16"  # Azure Dev VNet
   

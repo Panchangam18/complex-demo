@@ -428,21 +428,83 @@ provider "helm" {
 #   tags = local.tags
 # }
 
-# Azure VNet Module - Commented out until Azure CLI authentication is configured
-# module "azure_vnet" {
-#   source = "../../../modules/azure/vnet"
-#   
-#   vnet_cidr                   = var.azure_vnet_cidr
-#   environment                 = local.environment
-#   azure_location              = var.azure_location
-#   azure_subscription_id       = var.azure_subscription_id
-#   availability_zones_enabled  = true
-#   enable_nat_gateway          = true
-#   enable_gateway_subnet       = true
-#   enable_network_watcher      = true
-#   enable_flow_logs            = false  # Requires Log Analytics workspace
-#   common_tags                 = local.tags
-# }
+# Azure VNet Module
+module "azure_vnet" {
+  source = "../../../modules/azure/vnet"
+  
+  vnet_cidr                   = var.azure_vnet_cidr
+  environment                 = local.environment
+  azure_location              = var.azure_location
+  availability_zones_enabled  = true
+  enable_nat_gateway          = true
+  enable_gateway_subnet       = true
+  enable_network_watcher      = true
+  enable_flow_logs            = false  # Requires Log Analytics workspace
+  common_tags                 = local.tags
+}
+
+# Azure AKS Cluster
+module "azure_aks" {
+  source = "../../../modules/azure/aks"
+  
+  # Basic configuration
+  environment      = local.environment
+  azure_location   = var.azure_location
+  cluster_name     = "dev-aks-eastus"
+  
+  # Networking - use existing Azure VNet
+  vnet_id            = module.azure_vnet.vnet_id
+  private_subnet_id  = module.azure_vnet.private_subnet_id
+  
+  # Node configuration for development
+  system_node_count  = 2
+  system_vm_size     = "Standard_D2s_v3"
+  system_min_nodes   = 1
+  system_max_nodes   = 3
+  
+  # Workload nodes for Azure Ansible Tower
+  enable_workload_nodepool = true
+  workload_node_count     = 2
+  workload_vm_size        = "Standard_D4s_v3"
+  workload_min_nodes      = 1
+  workload_max_nodes      = 5
+  
+  # Features
+  enable_monitoring = true
+  enable_acr       = true
+  create_public_lb = false  # Use internal load balancer
+  
+  common_tags = local.tags
+  
+  depends_on = [
+    module.azure_vnet
+  ]
+}
+
+# Azure Ansible Controller Module
+module "azure_ansible_controller" {
+  source = "../../../modules/azure/ansible-controller"
+
+  resource_group_name     = "dev-ansible-controller-rg"
+  location                = var.azure_location
+  cluster_name            = "dev-ansible-controller"
+  subnet_id               = module.azure_vnet.private_subnet_id
+  controller_count        = 1
+  vm_size                 = "Standard_D2s_v3"
+  database_vm_size        = "Standard_D2s_v3"
+  admin_username          = "azureuser"
+  ssh_public_key          = file("~/.ssh/azure_ansible_controller.pub")
+  enable_direct_public_ip = true
+  
+  tags = merge(local.tags, {
+    Component = "ansible-controller"
+    Purpose   = "automation-platform"
+  })
+
+  depends_on = [
+    module.azure_vnet
+  ]
+}
 
 # Outputs for AWS VPC
 output "aws_vpc_id" {
@@ -590,6 +652,8 @@ module "puppet_enterprise" {
     module.consul_primary
   ]
 }
+
+
 
 # Outputs for Nexus Repository Manager
 output "nexus_url" {
@@ -782,31 +846,121 @@ output "gke_get_credentials_command" {
   value       = module.gcp_gke.get_credentials_command
 }
 
-# Outputs for Azure - Commented out until Azure module is enabled
-# output "azure_vnet_id" {
-#   description = "Azure VNet ID"
-#   value       = module.azure_vnet.vnet_id
-# }
+# Outputs for Azure VNet
+output "azure_vnet_id" {
+  description = "Azure VNet ID"
+  value       = module.azure_vnet.vnet_id
+}
 
-# output "azure_vnet_name" {
-#   description = "Azure VNet name"
-#   value       = module.azure_vnet.vnet_name
-# }
+output "azure_vnet_name" {
+  description = "Azure VNet name"
+  value       = module.azure_vnet.vnet_name
+}
 
-# output "azure_public_subnet_id" {
-#   description = "Azure public subnet ID"
-#   value       = module.azure_vnet.public_subnet_id
-# }
+output "azure_public_subnet_id" {
+  description = "Azure public subnet ID"
+  value       = module.azure_vnet.public_subnet_id
+}
 
-# output "azure_private_subnet_id" {
-#   description = "Azure private subnet ID"
-#   value       = module.azure_vnet.private_subnet_id
-# }
+output "azure_private_subnet_id" {
+  description = "Azure private subnet ID"
+  value       = module.azure_vnet.private_subnet_id
+}
 
-# output "azure_internal_subnet_id" {
-#   description = "Azure internal subnet ID"
-#   value       = module.azure_vnet.internal_subnet_id
-# }
+output "azure_internal_subnet_id" {
+  description = "Azure internal subnet ID"
+  value       = module.azure_vnet.internal_subnet_id
+}
+
+# Outputs for Azure AKS
+output "aks_cluster_name" {
+  description = "AKS cluster name"
+  value       = module.azure_aks.cluster_name
+}
+
+output "aks_cluster_endpoint" {
+  description = "Endpoint for AKS control plane"
+  value       = module.azure_aks.cluster_endpoint
+  sensitive   = true
+}
+
+output "aks_cluster_ca_certificate" {
+  description = "Cluster CA certificate"
+  value       = module.azure_aks.cluster_ca_certificate
+  sensitive   = true
+}
+
+output "aks_resource_group" {
+  description = "AKS resource group name"
+  value       = module.azure_aks.resource_group_name
+}
+
+output "aks_kubectl_command" {
+  description = "Command to configure kubectl for AKS cluster"
+  value       = module.azure_aks.kubectl_config_command
+}
+
+output "aks_acr_login_server" {
+  description = "Azure Container Registry login server"
+  value       = module.azure_aks.acr_login_server
+}
+
+# Outputs for Azure Ansible Controller
+output "ansible_tower_public_ip" {
+  description = "Public IP address for Ansible Tower load balancer"
+  value       = module.azure_ansible_controller.public_ip_address
+}
+
+output "ansible_tower_direct_public_ips" {
+  description = "Direct public IP addresses for Ansible Tower VMs"
+  value       = module.azure_ansible_controller.controller_direct_public_ips
+}
+
+output "ansible_tower_url" {
+  description = "URL to access Ansible Tower web interface via load balancer"
+  value       = module.azure_ansible_controller.ansible_tower_url
+}
+
+output "ansible_tower_direct_urls" {
+  description = "Direct HTTPS URLs to access Ansible Tower VMs"
+  value       = module.azure_ansible_controller.ansible_tower_direct_urls
+}
+
+output "ansible_tower_credentials" {
+  description = "Ansible Tower login credentials"
+  value       = module.azure_ansible_controller.ansible_tower_credentials
+  sensitive   = true
+}
+
+output "ansible_tower_resource_group" {
+  description = "Resource group for Ansible Tower"
+  value       = module.azure_ansible_controller.resource_group_name
+}
+
+output "ansible_tower_vm_names" {
+  description = "Names of Ansible Tower VMs"  
+  value       = module.azure_ansible_controller.controller_vm_names
+}
+
+output "ansible_tower_database_vm" {
+  description = "Name of Ansible Tower database VM"
+  value       = module.azure_ansible_controller.database_vm_name
+}
+
+output "ansible_tower_ssh_commands" {
+  description = "SSH commands to connect to Ansible Tower VMs"
+  value       = module.azure_ansible_controller.ssh_connection_commands
+}
+
+output "ansible_tower_status_commands" {
+  description = "Commands to check Ansible Tower installation status"
+  value       = module.azure_ansible_controller.status_check_commands
+}
+
+output "ansible_tower_next_steps" {
+  description = "Next steps for Ansible Tower access"
+  value       = module.azure_ansible_controller.next_steps
+}
 
 # Outputs for Consul
 output "consul_ui_url" {

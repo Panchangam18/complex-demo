@@ -30,10 +30,7 @@ variable "gcp_vpc_cidr" {
   type        = string
 }
 
-variable "azure_subscription_id" {
-  description = "Azure subscription ID"
-  type        = string
-}
+
 
 variable "azure_location" {
   description = "Azure location"

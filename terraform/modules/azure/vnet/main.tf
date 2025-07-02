@@ -233,6 +233,49 @@ resource "azurerm_network_security_rule" "allow_load_balancer" {
   network_security_group_name = azurerm_network_security_group.public.name
 }
 
+# Internet access rules for private subnet (for Ansible Tower external access)
+resource "azurerm_network_security_rule" "allow_internet_http_private" {
+  name                        = "Allow-Internet-HTTP"
+  priority                    = 1001
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = "80"
+  source_address_prefix       = "Internet"
+  destination_address_prefix  = "*"
+  resource_group_name         = azurerm_resource_group.network.name
+  network_security_group_name = azurerm_network_security_group.private.name
+}
+
+resource "azurerm_network_security_rule" "allow_internet_https_private" {
+  name                        = "Allow-Internet-HTTPS"
+  priority                    = 1002
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = "443"
+  source_address_prefix       = "Internet"
+  destination_address_prefix  = "*"
+  resource_group_name         = azurerm_resource_group.network.name
+  network_security_group_name = azurerm_network_security_group.private.name
+}
+
+resource "azurerm_network_security_rule" "allow_internet_ssh_private" {
+  name                        = "Allow-Internet-SSH"
+  priority                    = 1003
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = "22"
+  source_address_prefix       = "Internet"
+  destination_address_prefix  = "*"
+  resource_group_name         = azurerm_resource_group.network.name
+  network_security_group_name = azurerm_network_security_group.private.name
+}
+
 # NAT Gateway for outbound connectivity
 resource "azurerm_public_ip" "nat" {
   count = var.enable_nat_gateway ? 1 : 0
@@ -242,7 +285,7 @@ resource "azurerm_public_ip" "nat" {
   resource_group_name = azurerm_resource_group.network.name
   allocation_method   = "Static"
   sku                 = "Standard"
-  zones               = var.availability_zones_enabled ? ["1", "2", "3"] : []
+  zones               = var.availability_zones_enabled ? ["1"] : []
   
   tags = merge(
     var.common_tags,
@@ -261,7 +304,7 @@ resource "azurerm_nat_gateway" "nat" {
   resource_group_name     = azurerm_resource_group.network.name
   sku_name                = "Standard"
   idle_timeout_in_minutes = 10
-  zones                   = var.availability_zones_enabled ? ["1", "2", "3"] : []
+  zones                   = var.availability_zones_enabled ? ["1"] : []
   
   tags = merge(
     var.common_tags,

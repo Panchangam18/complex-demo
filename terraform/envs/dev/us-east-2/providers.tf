@@ -31,10 +31,10 @@ terraform {
       source  = "hashicorp/external"
       version = "~> 2.0"
     }
-    # azurerm = {
-    #   source  = "hashicorp/azurerm"
-    #   version = "~> 3.0"
-    # }
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~> 3.0"
+    }
   }
 }
 
@@ -54,9 +54,9 @@ provider "google" {
   region  = var.gcp_region
 }
 
-# Azure Provider Configuration - Commented out until Azure CLI authentication is configured
-# provider "azurerm" {
-#   features {}
-#   
-#   subscription_id = var.azure_subscription_id
-# }
+# Azure Provider Configuration
+provider "azurerm" {
+  features {}
+
+  # Uses currently authenticated subscription from 'az login'
+}

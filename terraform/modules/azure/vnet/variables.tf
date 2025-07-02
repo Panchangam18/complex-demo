@@ -23,10 +23,7 @@ variable "azure_location" {
   type        = string
 }
 
-variable "azure_subscription_id" {
-  description = "Azure subscription ID"
-  type        = string
-}
+
 
 variable "availability_zones_enabled" {
   description = "Whether to use availability zones (not all regions support this)"
