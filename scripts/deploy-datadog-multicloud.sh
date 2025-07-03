@@ -13,10 +13,32 @@ BLUE='\033[0;34m'
 PURPLE='\033[0;35m'
 NC='\033[0m' # No Color
 
+# Load environment variables from .env file
+if [ -f ".env" ]; then
+    echo "Loading environment variables from .env"
+    set -a  # automatically export all variables
+    source .env
+    set +a  # stop automatically exporting
+elif [ -f "../.env" ]; then
+    echo "Loading environment variables from ../.env"
+    set -a
+    source ../.env
+    set +a
+else
+    echo -e "${RED}❌ No .env file found. Please create it with DATADOG_API_KEY and DATADOG_APP_KEY${NC}"
+    exit 1
+fi
+
+# Validate required environment variables
+if [ -z "${DATADOG_API_KEY:-}" ] || [ -z "${DATADOG_APP_KEY:-}" ]; then
+    echo -e "${RED}❌ Missing required environment variables${NC}"
+    echo -e "${YELLOW}Required variables: DATADOG_API_KEY, DATADOG_APP_KEY${NC}"
+    echo -e "${YELLOW}Please add them to your .env file${NC}"
+    exit 1
+fi
+
 # Configuration
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DATADOG_API_KEY="af3cb41c927647ee8b56794caf9fdb4d"
-DATADOG_APP_KEY="a046dd9ca1becba27a2ec4d3b357fad53655b813"
 
 # Available clusters
 CLUSTERS=(
@@ -215,7 +237,7 @@ create_grafana_integration() {
     echo -e "${YELLOW}📊 Creating Grafana-Datadog integration...${NC}"
     
     # Create Grafana datasource for Datadog (if using Grafana)
-    cat > "${PROJECT_ROOT}/monitoring/grafana-datadog-datasource.yaml" << 'EOF'
+    cat > "${PROJECT_ROOT}/monitoring/grafana-datadog-datasource.yaml" << EOF
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -238,7 +260,7 @@ data:
         basicAuth: false
         jsonData:
           httpMethod: POST
-          customQueryParameters: 'api_key=af3cb41c927647ee8b56794caf9fdb4d&application_key=a046dd9ca1becba27a2ec4d3b357fad53655b813'
+          customQueryParameters: 'api_key=${DATADOG_API_KEY}&application_key=${DATADOG_APP_KEY}'
         editable: true
 EOF
     
@@ -253,8 +275,8 @@ display_access_information() {
     echo -e "${NC}"
     
     echo -e "${BLUE}📊 Datadog Configuration:${NC}"
-    echo "   API Key: af3cb41c927647ee8b56794caf9fdb4d"
-    echo "   App Key: a046dd9ca1becba27a2ec4d3b357fad53655b813"
+    echo "   API Key: ${DATADOG_API_KEY}"
+    echo "   App Key: ${DATADOG_APP_KEY}"
     echo "   Dashboard: https://app.datadoghq.com/"
     
     echo ""

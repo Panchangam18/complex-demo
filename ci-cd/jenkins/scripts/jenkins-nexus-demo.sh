@@ -1,139 +1,64 @@
 #!/bin/bash
 
-# Jenkins-Nexus Integration Demo
-# Shows practical usage of the integrated system
+# Jenkins-Nexus Integration Demo Script
+set -e
 
 # Colors for output
+RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m'
+NC='\033[0m' # No Color
 
-NEXUS_URL="http://k8s-nexusdev-nexuster-3c4349a0ff-2a35bf4d26813bc4.elb.us-east-2.amazonaws.com:8081"
+# Load environment variables from .env file
+if [ -f "../.env" ]; then
+    echo "Loading environment variables from ci-cd/.env"
+    set -a  # automatically export all variables
+    source "../.env"
+    set +a  # stop automatically exporting
+elif [ -f "../../.env" ]; then
+    echo "Loading environment variables from project .env"
+    set -a
+    source "../../.env"
+    set +a
+else
+    echo -e "${RED}❌ No .env file found. Please run scripts/extract-credentials-to-env.sh first${NC}"
+    exit 1
+fi
 
-echo -e "${BLUE}🎯 Jenkins-Nexus Integration Demo${NC}"
+# Validate required environment variables
+if [ -z "$NEXUS_URL" ] || [ -z "$NEXUS_ADMIN_PASSWORD" ] || [ -z "$JENKINS_URL" ] || [ -z "$JENKINS_SECRET_ARN" ]; then
+    echo -e "${RED}❌ Missing required environment variables${NC}"
+    echo -e "${YELLOW}Required variables: NEXUS_URL, NEXUS_ADMIN_PASSWORD, JENKINS_URL, JENKINS_SECRET_ARN${NC}"
+    echo -e "${YELLOW}Please run: scripts/extract-credentials-to-env.sh${NC}"
+    exit 1
+fi
+
+echo -e "${BLUE}🚀 Jenkins-Nexus Integration Demo${NC}"
 echo -e "${BLUE}=================================${NC}"
+echo -e "Jenkins URL: ${JENKINS_URL}"
+echo -e "Nexus URL: ${NEXUS_URL}"
+echo -e "Environment: ${ENVIRONMENT:-dev}"
+echo -e "Region: ${AWS_REGION:-us-east-2}"
 
-echo -e "\n${YELLOW}1. 📦 Testing NPM Registry Cache${NC}"
-mkdir -p demo-project && cd demo-project
-
-# Configure npm to use Nexus
-npm config set registry "${NEXUS_URL}/repository/npm-public/"
-echo -e "${GREEN}✅ NPM registry configured: $(npm config get registry)${NC}"
-
-# Create a simple package.json
-cat > package.json << EOF
-{
-  "name": "nexus-demo",
-  "version": "1.0.0",
-  "dependencies": {
-    "lodash": "^4.17.21"
-  }
-}
-EOF
-
-echo -e "\n${YELLOW}📥 Installing lodash via Nexus cache...${NC}"
-if npm install --quiet; then
-    echo -e "${GREEN}✅ Dependencies installed successfully via Nexus!${NC}"
-    echo -e "${GREEN}   Nexus is now caching lodash for future builds${NC}"
+# Test Nexus connectivity
+echo -e "\n${YELLOW}🔧 Testing Nexus connectivity...${NC}"
+if curl -s -u "admin:${NEXUS_ADMIN_PASSWORD}" \
+     "${NEXUS_URL}/service/rest/v1/status" > /dev/null; then
+    echo -e "${GREEN}✅ Nexus is accessible${NC}"
 else
-    echo -e "${YELLOW}⚠️  NPM install had issues (common on first run)${NC}"
+    echo -e "${RED}❌ Cannot connect to Nexus${NC}"
+    exit 1
 fi
 
-echo -e "\n${YELLOW}2. ☕ Testing Maven Repository Cache${NC}"
-
-# Create a simple Maven project
-mkdir -p maven-test/src/main/java/com/example
-cd maven-test
-
-cat > pom.xml << 'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
-         http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
-    <groupId>com.example</groupId>
-    <artifactId>nexus-maven-demo</artifactId>
-    <version>1.0-SNAPSHOT</version>
-    <properties>
-        <maven.compiler.source>11</maven.compiler.source>
-        <maven.compiler.target>11</maven.compiler.target>
-    </properties>
-    <dependencies>
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-lang3</artifactId>
-            <version>3.12.0</version>
-        </dependency>
-    </dependencies>
-</project>
-EOF
-
-cat > src/main/java/com/example/App.java << 'EOF'
-package com.example;
-import org.apache.commons.lang3.StringUtils;
-
-public class App {
-    public static void main(String[] args) {
-        System.out.println("Jenkins-Nexus Integration Demo!");
-        System.out.println("Using commons-lang3: " + StringUtils.capitalize("nexus integration works"));
-    }
-}
-EOF
-
-# Create Maven settings.xml for Nexus
-cat > settings.xml << EOF
-<settings>
-    <mirrors>
-        <mirror>
-            <id>nexus-maven-proxy</id>
-            <mirrorOf>*</mirrorOf>
-            <url>${NEXUS_URL}/repository/maven-public/</url>
-        </mirror>
-    </mirrors>
-</settings>
-EOF
-
-echo -e "\n${YELLOW}🔨 Compiling Java project via Nexus cache...${NC}"
-if mvn clean compile -s settings.xml -q; then
-    echo -e "${GREEN}✅ Maven build successful via Nexus!${NC}"
-    echo -e "${GREEN}   Dependencies cached: commons-lang3 and transitive deps${NC}"
+# Test Jenkins connectivity  
+echo -e "\n${YELLOW}🔧 Testing Jenkins connectivity...${NC}"
+if curl -s -f "${JENKINS_URL}/login" > /dev/null; then
+    echo -e "${GREEN}✅ Jenkins is accessible${NC}"
 else
-    echo -e "${YELLOW}⚠️  Maven build had issues (dependencies may be downloading)${NC}"
+    echo -e "${RED}❌ Cannot connect to Jenkins${NC}"
+    exit 1
 fi
 
-cd ../..
-
-echo -e "\n${YELLOW}3. 🐍 Testing Python Package Index${NC}"
-
-# Test Python package installation
-pip config --global set global.index-url "${NEXUS_URL}/repository/pypi-public/simple/"
-pip config --global set global.trusted-host "$(echo $NEXUS_URL | cut -d'/' -f3 | cut -d':' -f1)"
-
-echo -e "${GREEN}✅ Python pip configured to use Nexus PyPI proxy${NC}"
-echo -e "${GREEN}   Index URL: ${NEXUS_URL}/repository/pypi-public/simple/${NC}"
-
-echo -e "\n${YELLOW}4. 📊 Checking Repository Usage${NC}"
-
-echo -e "\n${BLUE}📦 Repository Statistics:${NC}"
-curl -s -u admin:f815aa69-3a65-43d2-8590-906d6079fd85 \
-     "${NEXUS_URL}/service/rest/v1/repositories" | \
-     jq -r '.[] | "  • \(.name) (\(.format)) - \(.type)"' | head -10
-
-echo -e "\n${BLUE}🎯 Integration Summary:${NC}"
-echo -e "${GREEN}✅ NPM Registry: ${NEXUS_URL}/repository/npm-public/${NC}"
-echo -e "${GREEN}✅ Maven Repository: ${NEXUS_URL}/repository/maven-public/${NC}"
-echo -e "${GREEN}✅ PyPI Index: ${NEXUS_URL}/repository/pypi-public/simple/${NC}"
-echo -e "${GREEN}✅ Jenkins Job: http://3.149.193.86:8080/job/nexus-integration-test/${NC}"
-
-echo -e "\n${YELLOW}🔧 Usage Commands:${NC}"
-echo -e "  NPM:    npm config set registry ${NEXUS_URL}/repository/npm-public/"
-echo -e "  Maven:  mvn clean install -s settings.xml"
-echo -e "  Python: pip install --index-url ${NEXUS_URL}/repository/pypi-public/simple/ <package>"
-
-echo -e "\n${BLUE}🎊 Jenkins-Nexus integration is working perfectly!${NC}"
-echo -e "${BLUE}   Your legacy builds now have enterprise-grade dependency caching!${NC}"
-
-# Cleanup
-cd .. && rm -rf demo-project 
+echo -e "\n${GREEN}🎉 Jenkins-Nexus integration demo completed successfully!${NC}"
+echo -e "${YELLOW}💡 Use jenkins-nexus-integration-complete.sh for full setup${NC}" 

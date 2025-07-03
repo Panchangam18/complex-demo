@@ -28,9 +28,10 @@ Successfully deployed Datadog across your comprehensive multi-cloud DevOps infra
 ## 🔧 Deployed Components
 
 ### 1. Datadog Credentials & Secrets
-- **API Key**: `af3cb41c927647ee8b56794caf9fdb4d`
-- **App Key**: `a046dd9ca1becba27a2ec4d3b357fad53655b813`
+- **API Key**: Loaded from `DATADOG_API_KEY` environment variable
+- **App Key**: Loaded from `DATADOG_APP_KEY` environment variable
 - **Namespace**: `datadog` (all clusters)
+- **Source**: Environment variables from `.env` file
 - **RBAC**: Full cluster permissions for comprehensive monitoring
 
 ### 2. Cluster-Specific Deployments

@@ -322,6 +322,26 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Add this function after the existing functions and before the main deployment logic
+
+extract_and_save_credentials() {
+    echo -e "${BLUE}🔐 Extracting deployment credentials...${NC}"
+    
+    # Run the credential extraction script
+    if [ -f "scripts/extract-credentials-to-env.sh" ]; then
+        chmod +x scripts/extract-credentials-to-env.sh
+        ENVIRONMENT=$ENVIRONMENT REGION=$REGION ./scripts/extract-credentials-to-env.sh
+        
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}✅ Credentials extracted and saved to .env${NC}"
+        else
+            echo -e "${YELLOW}⚠️  Credential extraction failed, but deployment continues${NC}"
+        fi
+    else
+        echo -e "${YELLOW}⚠️  Credential extraction script not found${NC}"
+    fi
+}
+
 # Main execution
 main() {
     validate_prerequisites
@@ -330,6 +350,7 @@ main() {
     update_kubernetes_deployments
     setup_image_pull_secrets
     commit_and_push_changes
+    extract_and_save_credentials
     print_summary
 }
 

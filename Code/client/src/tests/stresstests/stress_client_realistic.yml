@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT-0
 
 config:
-  target: "http://alb-a37-demo-cli-474961134.us-east-1.elb.amazonaws.com"
+  target: "http://a7087db35b0844d4daba6b05659ae068-1292505215.us-east-2.elb.amazonaws.com"
   phases:
     # Business hours simulation
     - duration: 300  # 5 minutes

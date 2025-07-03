@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT-0
 
 config:
-  target: "http://alb-a37-demo-ser-1441792879.us-east-1.elb.amazonaws.com" # Updated with actual server ALB URL
+  target: "http://a03f4775e52c5480fa43732871a67ad6-4a107a0edb764125.elb.us-east-2.amazonaws.com" # Updated with actual server ALB URL
   phases:
     - duration: 100
       arrivalRate: 20

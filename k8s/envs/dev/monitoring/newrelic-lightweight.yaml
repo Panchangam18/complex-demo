@@ -17,7 +17,7 @@ metadata:
   namespace: newrelic
 type: Opaque
 stringData:
-  license: "57a444d0f1282704eb650ec9561005bfFFFFNRAL"
+  license: "${NEWRELIC_LICENSE_KEY}"
 ---
 # ServiceAccount for New Relic Infrastructure
 apiVersion: v1

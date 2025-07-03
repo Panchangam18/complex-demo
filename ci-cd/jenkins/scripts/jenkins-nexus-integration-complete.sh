@@ -12,11 +12,29 @@ BLUE='\033[0;34m'
 PURPLE='\033[0;35m'
 NC='\033[0m' # No Color
 
-# Configuration
-JENKINS_URL="http://3.149.193.86:8080"
-NEXUS_URL="http://k8s-nexusdev-nexuster-3c4349a0ff-2a35bf4d26813bc4.elb.us-east-2.amazonaws.com:8081"
-NEXUS_ADMIN_PASSWORD="f815aa69-3a65-43d2-8590-906d6079fd85"
-JENKINS_SECRET_ARN="arn:aws:secretsmanager:us-east-2:013364997013:secret:dev-jenkins-admin-password-So8uOE"
+# Load environment variables from .env file
+if [ -f "../.env" ]; then
+    echo "Loading environment variables from ci-cd/.env"
+    set -a  # automatically export all variables
+    source "../.env"
+    set +a  # stop automatically exporting
+elif [ -f "../../.env" ]; then
+    echo "Loading environment variables from project .env"
+    set -a
+    source "../../.env"
+    set +a
+else
+    echo -e "${RED}❌ No .env file found. Please run scripts/extract-credentials-to-env.sh first${NC}"
+    exit 1
+fi
+
+# Validate required environment variables
+if [ -z "$NEXUS_URL" ] || [ -z "$NEXUS_ADMIN_PASSWORD" ] || [ -z "$JENKINS_URL" ] || [ -z "$JENKINS_SECRET_ARN" ]; then
+    echo -e "${RED}❌ Missing required environment variables${NC}"
+    echo -e "${YELLOW}Required variables: NEXUS_URL, NEXUS_ADMIN_PASSWORD, JENKINS_URL, JENKINS_SECRET_ARN${NC}"
+    echo -e "${YELLOW}Please run: scripts/extract-credentials-to-env.sh${NC}"
+    exit 1
+fi
 
 # Print banner
 echo -e "${PURPLE}"
@@ -33,8 +51,8 @@ echo -e "${NC}"
 echo -e "${BLUE}📋 Configuration:${NC}"
 echo -e "  Jenkins URL: ${JENKINS_URL}"
 echo -e "  Nexus URL: ${NEXUS_URL}"
-echo -e "  Environment: dev"
-echo -e "  Region: us-east-2"
+echo -e "  Environment: ${ENVIRONMENT:-dev}"
+echo -e "  Region: ${AWS_REGION:-us-east-2}"
 
 # Function to make API calls to Nexus
 nexus_api() {
@@ -256,7 +274,7 @@ JENKINS_PASSWORD=$(aws secretsmanager get-secret-value --secret-id "$JENKINS_SEC
 echo -e "${YELLOW}🔧 Creating Jenkins-Nexus integration job...${NC}"
 
 # Create Jenkins job for Nexus integration testing
-cat > /tmp/nexus-integration-job.xml << 'EOF'
+cat > /tmp/nexus-integration-job.xml << EOF
 <?xml version='1.1' encoding='UTF-8'?>
 <flow-definition plugin="workflow-job@2.40">
   <actions/>
@@ -278,10 +296,10 @@ pipeline {
     agent any
     
     environment {
-        NEXUS_URL = 'http://k8s-nexusdev-nexuster-3c4349a0ff-2a35bf4d26813bc4.elb.us-east-2.amazonaws.com:8081'
+        NEXUS_URL = '${NEXUS_URL}'
         MAVEN_OPTS = "-Dmaven.repo.local=.m2/repository"
-        NPM_REGISTRY = "${NEXUS_URL}/repository/npm-public/"
-        PYPI_INDEX_URL = "${NEXUS_URL}/repository/pypi-public/simple/"
+        NPM_REGISTRY = "\${NEXUS_URL}/repository/npm-public/"
+        PYPI_INDEX_URL = "\${NEXUS_URL}/repository/pypi-public/simple/"
     }
     
     stages {
@@ -299,14 +317,14 @@ pipeline {
         <mirror>
             <id>nexus-maven-proxy</id>
             <mirrorOf>*</mirrorOf>
-            <url>${NEXUS_URL}/repository/maven-public/</url>
+            <url>\${NEXUS_URL}/repository/maven-public/</url>
         </mirror>
     </mirrors>
     <servers>
         <server>
             <id>nexus-maven-proxy</id>
             <username>admin</username>
-            <password>f815aa69-3a65-43d2-8590-906d6079fd85</password>
+            <password>${NEXUS_ADMIN_PASSWORD}</password>
         </server>
     </servers>
 </settings>
@@ -315,9 +333,9 @@ EOL
                     
                     // Configure NPM
                     sh '''
-                        npm config set registry ${NPM_REGISTRY}
+                        npm config set registry \${NPM_REGISTRY}
                         npm config set strict-ssl false
-                        echo "NPM registry configured: $(npm config get registry)"
+                        echo "NPM registry configured: \$(npm config get registry)"
                     '''
                     
                     // Configure Python/pip
@@ -325,10 +343,10 @@ EOL
                         mkdir -p ~/.pip
                         cat > ~/.pip/pip.conf << EOL
 [global]
-index-url = ${PYPI_INDEX_URL}
-trusted-host = $(echo ${PYPI_INDEX_URL} | cut -d'/' -f3 | cut -d':' -f1)
+index-url = \${PYPI_INDEX_URL}
+trusted-host = \$(echo \${PYPI_INDEX_URL} | cut -d'/' -f3 | cut -d':' -f1)
 EOL
-                        echo "Python index configured: ${PYPI_INDEX_URL}"
+                        echo "Python index configured: \${PYPI_INDEX_URL}"
                     '''
                 }
             }
@@ -341,7 +359,7 @@ EOL
                         script {
                             echo "🔍 Testing Maven repository connectivity"
                             sh '''
-                                curl -f ${NEXUS_URL}/repository/maven-public/ || echo "Maven repo not accessible yet"
+                                curl -f \${NEXUS_URL}/repository/maven-public/ || echo "Maven repo not accessible yet"
                             '''
                         }
                     }
@@ -352,7 +370,7 @@ EOL
                         script {
                             echo "🔍 Testing NPM repository connectivity"  
                             sh '''
-                                curl -f ${NPM_REGISTRY} || echo "NPM repo not accessible yet"
+                                curl -f \${NPM_REGISTRY} || echo "NPM repo not accessible yet"
                             '''
                         }
                     }
@@ -363,7 +381,7 @@ EOL
                         script {
                             echo "🔍 Testing PyPI repository connectivity"
                             sh '''
-                                curl -f ${PYPI_INDEX_URL} || echo "PyPI repo not accessible yet"
+                                curl -f \${PYPI_INDEX_URL} || echo "PyPI repo not accessible yet"
                             '''
                         }
                     }
@@ -431,18 +449,18 @@ EOL
                     // Push metrics to Prometheus pushgateway
                     sh '''
                         # Build metrics
-                        echo "jenkins_build_duration_seconds{job=\\"${JOB_NAME}\\",status=\\"success\\",integration=\\"nexus\\"} $(date +%s)" > /tmp/metrics.txt
+                        echo "jenkins_build_duration_seconds{job=\\"\${JOB_NAME}\\",status=\\"success\\",integration=\\"nexus\\"} \$(date +%s)" > /tmp/metrics.txt
                         echo "jenkins_nexus_artifacts_cached{repository=\\"maven\\"} 1" >> /tmp/metrics.txt  
                         echo "jenkins_nexus_artifacts_cached{repository=\\"npm\\"} 1" >> /tmp/metrics.txt
                         echo "jenkins_nexus_artifacts_cached{repository=\\"pypi\\"} 1" >> /tmp/metrics.txt
-                        echo "jenkins_nexus_integration_success{timestamp=\\"$(date +%s)\\"} 1" >> /tmp/metrics.txt
+                        echo "jenkins_nexus_integration_success{timestamp=\\"\$(date +%s)\\"} 1" >> /tmp/metrics.txt
                         
                         # Display metrics (would push to Prometheus in production)
                         echo "📊 Metrics to be pushed to Prometheus:"
                         cat /tmp/metrics.txt
                         
                         # Note: In production, you would push these to Prometheus pushgateway:
-                        # curl -X POST http://prometheus-pushgateway:9091/metrics/job/jenkins-nexus/instance/${BUILD_NUMBER} --data-binary @/tmp/metrics.txt
+                        # curl -X POST http://prometheus-pushgateway:9091/metrics/job/jenkins-nexus/instance/\${BUILD_NUMBER} --data-binary @/tmp/metrics.txt
                     '''
                 }
             }
@@ -506,18 +524,18 @@ data:
           "nexus-integrated"
         ],
         "port": 8080,
-        "address": "3.149.193.86",
+        "address": "$(echo ${JENKINS_URL} | cut -d'/' -f3 | cut -d':' -f1)",
         "meta": {
           "version": "2.504.3",
-          "environment": "dev",
+          "environment": "${ENVIRONMENT:-dev}",
           "cloud": "aws",
-          "region": "us-east-2",
+          "region": "${AWS_REGION:-us-east-2}",
           "nexus_integration": "enabled"
         },
         "checks": [
           {
             "name": "Jenkins HTTP Health Check",
-            "http": "http://3.149.193.86:8080/login",
+            "http": "${JENKINS_URL}/login",
             "interval": "30s",
             "timeout": "10s"
           }
@@ -532,7 +550,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: nexus-consul-registration
-  namespace: nexus-dev
+  namespace: nexus-${ENVIRONMENT:-dev}
   labels:
     app: nexus-consul
 data:
@@ -549,19 +567,19 @@ data:
           "jenkins-integrated"
         ],
         "port": 8081,
-        "address": "k8s-nexusdev-nexuster-3c4349a0ff-2a35bf4d26813bc4.elb.us-east-2.amazonaws.com",
+        "address": "$(echo ${NEXUS_URL} | cut -d'/' -f3 | cut -d':' -f1)",
         "meta": {
           "version": "3.81.1-01",
-          "environment": "dev",
+          "environment": "${ENVIRONMENT:-dev}",
           "cloud": "aws",
-          "region": "us-east-2",
-          "cluster": "eks-dev",
+          "region": "${AWS_REGION:-us-east-2}",
+          "cluster": "eks-${ENVIRONMENT:-dev}",
           "jenkins_integration": "enabled"
         },
         "checks": [
           {
             "name": "Nexus HTTP Health Check",
-            "http": "http://k8s-nexusdev-nexuster-3c4349a0ff-2a35bf4d26813bc4.elb.us-east-2.amazonaws.com:8081/service/rest/v1/status",
+            "http": "${NEXUS_URL}/service/rest/v1/status",
             "interval": "30s",
             "timeout": "10s"
           }
@@ -581,7 +599,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: nexus-servicemonitor
-  namespace: nexus-dev
+  namespace: nexus-${ENVIRONMENT:-dev}
   labels:
     app: nexus3
 spec:
@@ -610,7 +628,7 @@ echo -e "${GREEN}======================================${NC}"
 echo -e "\n${BLUE}📦 Nexus Repository Configuration:${NC}"
 echo -e "  🌐 URL: ${NEXUS_URL}"
 echo -e "  👤 Admin User: admin"
-echo -e "  🔑 Admin Password: ${NEXUS_ADMIN_PASSWORD}"
+echo -e "  🔑 Admin Password: [LOADED FROM DEPLOYMENT]"
 echo -e "  📄 NPM Registry: ${NEXUS_URL}/repository/npm-public/"
 echo -e "  ☕ Maven Repository: ${NEXUS_URL}/repository/maven-public/"
 echo -e "  🐍 PyPI Index: ${NEXUS_URL}/repository/pypi-public/simple/"

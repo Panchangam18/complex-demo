@@ -1,0 +1,126 @@
+# Artillery Load Test Configuration Template
+# =========================================
+# This template shows how to use environment variables for dynamic configuration
+# Copy this file and customize for your specific testing needs
+
+config:
+  # Use environment variable for target URL (will be updated by update-load-test-urls.sh)
+  target: "{{ $BACKEND_URL || 'http://localhost:3001' }}"
+  
+  # Environment-specific phases
+  phases:
+    # Warm-up phase
+    - duration: 30
+      arrivalRate: "{{ $WARMUP_RATE || 5 }}"
+      name: "Warm-up"
+    
+    # Ramp-up phase  
+    - duration: "{{ $RAMPUP_DURATION || 60 }}"
+      arrivalRate: "{{ $RAMPUP_START_RATE || 10 }}"
+      rampTo: "{{ $RAMPUP_END_RATE || 50 }}"
+      name: "Ramp-up"
+    
+    # Sustained load phase
+    - duration: "{{ $SUSTAINED_DURATION || 120 }}"
+      arrivalRate: "{{ $SUSTAINED_RATE || 50 }}"
+      name: "Sustained load"
+    
+    # Spike test phase
+    - duration: "{{ $SPIKE_DURATION || 30 }}"
+      arrivalRate: "{{ $SPIKE_RATE || 100 }}"
+      name: "Spike test"
+    
+    # Cool-down phase
+    - duration: "{{ $COOLDOWN_DURATION || 60 }}"
+      arrivalRate: "{{ $COOLDOWN_START_RATE || 50 }}"
+      rampTo: "{{ $COOLDOWN_END_RATE || 5 }}"
+      name: "Cool-down"
+  
+  # HTTP configuration
+  http:
+    timeout: "{{ $HTTP_TIMEOUT || 10 }}"
+    pool: "{{ $CONNECTION_POOL || 100 }}"
+  
+  # Environment-specific variables
+  environments:
+    dev:
+      target: "{{ $DEV_BACKEND_URL }}"
+      phases:
+        - duration: 60
+          arrivalRate: 10
+        - duration: 120 
+          arrivalRate: 20
+    
+    staging:
+      target: "{{ $STAGING_BACKEND_URL }}"
+      phases:
+        - duration: 120
+          arrivalRate: 25
+        - duration: 180
+          arrivalRate: 50
+    
+    prod:
+      target: "{{ $PROD_BACKEND_URL }}"
+      phases:
+        - duration: 300
+          arrivalRate: 50
+        - duration: 600
+          arrivalRate: 100
+
+# Test scenarios
+scenarios:
+  - name: "API Load Test"
+    weight: 80
+    flow:
+      - loop:
+          - get:
+              url: "/api/getAllProducts"
+              headers:
+                User-Agent: "Artillery Load Test"
+              capture:
+                - json: "$"
+                  as: "products"
+              expect:
+                - statusCode: 200
+                - hasProperty: "length"
+        count: "{{ $API_LOOP_COUNT || 15 }}"
+  
+  - name: "Health Check"
+    weight: 20
+    flow:
+      - loop:
+          - get:
+              url: "/status"
+              headers:
+                User-Agent: "Artillery Health Check"
+              expect:
+                - statusCode: 200
+        count: "{{ $HEALTH_LOOP_COUNT || 5 }}"
+
+# Custom metrics and reporting
+plugins:
+  # Prometheus metrics (if available)
+  prometheus:
+    enabled: "{{ $PROMETHEUS_ENABLED || false }}"
+    endpoint: "{{ $PROMETHEUS_PUSHGATEWAY_URL }}"
+    
+  # CloudWatch metrics (if available)  
+  cloudwatch:
+    enabled: "{{ $CLOUDWATCH_ENABLED || false }}"
+    region: "{{ $AWS_REGION || 'us-east-2' }}"
+
+# Example usage:
+# 
+# 1. Set environment variables:
+#    export BACKEND_URL="http://your-backend-lb-url"
+#    export SUSTAINED_RATE=25
+#    export SPIKE_RATE=75
+#
+# 2. Run the test:
+#    artillery run stress_server_template.yml
+#
+# 3. Or run with inline variables:
+#    artillery run --environment staging stress_server_template.yml
+#
+# 4. Or use the automated script:
+#    ./scripts/update-load-test-urls.sh && artillery run stress_server_intensive.yml 

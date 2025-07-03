@@ -13,8 +13,8 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-ELASTICSEARCH_URL="https://798a3a233ea341aaad5b6c044a95fb25.us-central1.gcp.cloud.es.io:443"
-ELASTICSEARCH_API_KEY="NUFZeHlwY0JBTWFEMkZxbV86M0g6QnZHN3hPYWZJRlZLcG92UnVzbmVEQQ=="
+ELASTICSEARCH_URL="${ELASTICSEARCH_URL:-}"
+ELASTICSEARCH_API_KEY="${ELASTICSEARCH_API_KEY:-}"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # Deployment functions
@@ -31,10 +31,27 @@ print_banner() {
     echo "   • Application performance logs"
     echo "   • Infrastructure system logs"
     echo ""
+    echo -e "${YELLOW}📝 Required environment variables:${NC}"
+    echo "   • ELASTICSEARCH_URL"
+    echo "   • ELASTICSEARCH_API_KEY"
+    echo ""
 }
 
 check_prerequisites() {
     echo -e "${YELLOW}🔍 Checking prerequisites...${NC}"
+    
+    # Check environment variables
+    if [[ -z "$ELASTICSEARCH_URL" ]]; then
+        echo -e "${RED}❌ ELASTICSEARCH_URL environment variable is not set.${NC}"
+        echo -e "${YELLOW}   Please set it with: export ELASTICSEARCH_URL='https://your-cluster-url:443'${NC}"
+        exit 1
+    fi
+    
+    if [[ -z "$ELASTICSEARCH_API_KEY" ]]; then
+        echo -e "${RED}❌ ELASTICSEARCH_API_KEY environment variable is not set.${NC}"
+        echo -e "${YELLOW}   Please set it with: export ELASTICSEARCH_API_KEY='your-api-key'${NC}"
+        exit 1
+    fi
     
     # Check kubectl
     if ! command -v kubectl &> /dev/null; then
@@ -209,6 +226,10 @@ display_access_information() {
     
     echo ""
     echo -e "${BLUE}🔧 Useful Commands:${NC}"
+    echo "   # Set environment variables for future runs:"
+    echo "   export ELASTICSEARCH_URL='${ELASTICSEARCH_URL}'"
+    echo "   export ELASTICSEARCH_API_KEY='${ELASTICSEARCH_API_KEY}'"
+    echo ""
     echo "   # Check Fluent Bit status:"
     echo "   kubectl get pods -n logging -l app=fluent-bit"
     echo ""
@@ -216,12 +237,12 @@ display_access_information() {
     echo "   kubectl logs -n logging -l app=fluent-bit -f"
     echo ""
     echo "   # Test Elasticsearch connectivity:"
-    echo "   curl -X GET \"${ELASTICSEARCH_URL}/_cluster/health\" \\"
-    echo "        -H \"Authorization: ApiKey ${ELASTICSEARCH_API_KEY}\""
+    echo "   curl -X GET \"\${ELASTICSEARCH_URL}/_cluster/health\" \\"
+    echo "        -H \"Authorization: ApiKey \${ELASTICSEARCH_API_KEY}\""
     echo ""
     echo "   # Check indices:"
-    echo "   curl -X GET \"${ELASTICSEARCH_URL}/_cat/indices?v\" \\"
-    echo "        -H \"Authorization: ApiKey ${ELASTICSEARCH_API_KEY}\""
+    echo "   curl -X GET \"\${ELASTICSEARCH_URL}/_cat/indices?v\" \\"
+    echo "        -H \"Authorization: ApiKey \${ELASTICSEARCH_API_KEY}\""
 }
 
 cleanup_on_error() {

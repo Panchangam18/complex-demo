@@ -665,6 +665,11 @@ output "nexus_url" {
   value       = module.nexus_eks.nexus_url
 }
 
+output "nexus_external_url_command" {
+  description = "Command to get the external Nexus URL"
+  value       = module.nexus_eks.nexus_external_url_command
+}
+
 output "nexus_namespace" {
   description = "Kubernetes namespace for Nexus"
   value       = module.nexus_eks.nexus_namespace
