@@ -21,8 +21,9 @@ terraform {
   }
 }
 
-# Generate random suffix for globally unique names
+# Generate random suffix for globally unique names (only if not provided)
 resource "random_string" "suffix" {
+  count   = var.bucket_suffix == "" ? 1 : 0
   length  = 6
   lower   = true
   numeric = true
@@ -34,12 +35,15 @@ locals {
   project_name = "complex-demo"
   environment  = "shared"
   
+  # Use provided suffix or generated random suffix
+  bucket_suffix = var.bucket_suffix != "" ? var.bucket_suffix : random_string.suffix[0].result
+  
   # AWS resources
-  aws_bucket_name = "${local.project_name}-tfstate-${random_string.suffix.result}"
+  aws_bucket_name = "${local.project_name}-tfstate-${local.bucket_suffix}"
   aws_table_name  = "${local.project_name}-tfstate-locks"
   
   # GCP resources
-  gcp_bucket_name = "${local.project_name}-tfstate-${random_string.suffix.result}"
+  gcp_bucket_name = "${local.project_name}-tfstate-${local.bucket_suffix}"
   
   common_tags = {
     Project     = local.project_name

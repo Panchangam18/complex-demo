@@ -9,7 +9,8 @@ locals {
   environment = local.path_parts[1]
   region      = local.path_parts[2]
   
-  # Backend bucket name - created by bootstrap
+  # Backend bucket name - get from bootstrap outputs with:
+  # cd terraform/bootstrap && terraform output -raw aws_s3_bucket_name
   backend_bucket = "complex-demo-tfstate-hp9dga"
   backend_region = "us-east-1"
   backend_dynamodb_table = "complex-demo-tfstate-locks"
