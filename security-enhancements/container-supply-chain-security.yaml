@@ -1,0 +1,400 @@
+# Comprehensive Container & Supply Chain Security Configuration
+#
+# This configuration file establishes a multi-layered security posture for Kubernetes
+# environments, focusing on the container lifecycle and software supply chain.
+# It includes resources for:
+#   1. Runtime Threat Detection (Falco)
+#   2. Policy Enforcement & Image Verification (Kyverno)
+#   3. Continuous Vulnerability Scanning (Trivy)
+#   4. A blueprint for a Secure CI/CD Pipeline (Tekton)
+#
+# This configuration is designed to be compatible with the existing multi-cloud
+# platform and can be deployed using standard Kubernetes tooling (kubectl, Helm, etc.).
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: security-supply-chain
+  labels:
+    pod-security.kubernetes.io/enforce: privileged # Required for Falco
+
+---
+# RBAC for Security Tools
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: falco-sa
+  namespace: security-supply-chain
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: falco-cluster-role
+rules:
+  - apiGroups: [""]
+    resources:
+      - "nodes"
+      - "namespaces"
+      - "pods"
+      - "events"
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources:
+      - "daemonsets"
+      - "deployments"
+      - "replicasets"
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: falco-cluster-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: falco-cluster-role
+subjects:
+  - kind: ServiceAccount
+    name: falco-sa
+    namespace: security-supply-chain
+
+---
+# Section 1: Container Runtime Security with Falco
+#
+# Deploys Falco as a DaemonSet to monitor kernel syscalls on every node,
+# detecting anomalous behavior in real-time based on a defined set of rules.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: falco-rules
+  namespace: security-supply-chain
+data:
+  falco_rules.local.yaml: |
+    # Custom rules to detect potential supply chain attacks
+    - rule: Unexpected Outbound Connection from Build Tools
+      desc: Detects unexpected outbound network connections from common CI/CD or build tool containers.
+      condition: >
+        (container.image contains 'jenkins' or
+         container.image contains 'tekton' or
+         container.image contains 'kaniko' or
+         container.image contains 'buildah')
+        and evt.type = connect and evt.dir = >
+        and fd.typechar = '4'
+        and not (
+          fd.sip.name in (known_dns_servers) or
+          fd.sip.name in (known_registries) or
+          fd.sip.name in (known_artifact_repos)
+        )
+      output: "Unexpected network connection from build container (user=%user.name command=%proc.cmdline connection=%fd.name container_id=%container.id image=%container.image.repository)"
+      priority: WARNING
+      tags: [network, supply_chain]
+
+    - rule: Write below sensitive directory
+      desc: >
+        an attempt to write to a sensitive directory
+        (e.g. /etc, /bin, /sbin, /usr/bin, /usr/sbin)
+      condition: >
+        (open_write) and
+        (fd.directory in (/etc, /bin, /sbin, /usr/bin, /usr/sbin)) and
+        (not proc.name in (known_package_managers)) and
+        (not container_entrypoint)
+      output: >
+        Sensitive file opened for writing by non-package manager
+        (user=%user.name command=%proc.cmdline file=%fd.name
+        container_id=%container.id image=%container.image.repository)
+      priority: ERROR
+      tags: [filesystem, mitre_persistence]
+
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: falco
+  namespace: security-supply-chain
+  labels:
+    app: falco
+spec:
+  selector:
+    matchLabels:
+      app: falco
+  template:
+    metadata:
+      labels:
+        app: falco
+    spec:
+      serviceAccountName: falco-sa
+      tolerations:
+        - effect: NoSchedule
+          operator: Exists
+      containers:
+        - name: falco
+          image: falcosecurity/falco:latest
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+            - name: host-root
+              mountPath: /host
+              readOnly: true
+            - name: falco-rules
+              mountPath: /etc/falco/falco_rules.local.yaml
+              subPath: falco_rules.local.yaml
+      volumes:
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock
+        - name: host-root
+          hostPath:
+            path: /
+        - name: falco-rules
+          configMap:
+            name: falco-rules
+
+---
+# Section 2: Policy Enforcement with Kyverno
+#
+# Deploys Kyverno ClusterPolicies to enforce security best practices across the
+# cluster at admission time. This includes image signature verification,
+# blocking vulnerable images, and ensuring use of trusted base images.
+#
+# NOTE: This assumes Kyverno is already installed in the cluster.
+# If not, install it first:
+# kubectl create -f https://github.com/kyverno/kyverno/releases/download/v1.11.1/install.yaml
+
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-image-signatures
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: check-image-signature
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+            namespaces:
+              - "production-*"
+              - "staging"
+      verifyImages:
+      - imageReferences:
+        - "ghcr.io/my-org/*"
+        - "docker.io/my-org/*"
+        attestors:
+        - count: 1
+          entries:
+          - keys:
+              # This key should be stored securely, e.g., in Vault or KMS,
+              # and retrieved by Kyverno. This is a public key for verification.
+              publicKey: |
+                -----BEGIN PUBLIC KEY-----
+                MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...
+                -----END PUBLIC KEY-----
+        # Add attestations checks for SBOM, SLSA provenance, etc.
+        attestations:
+        - type: "https://spdx.dev/Document"
+          attestors:
+          - count: 1
+            entries:
+            - keys:
+                publicKey: |
+                  -----BEGIN PUBLIC KEY-----
+                  MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...
+                  -----END PUBLIC KEY-----
+
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: block-vulnerable-images
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: check-image-vulnerabilities
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+      # This policy assumes a CI/CD process scans images with Trivy and
+      # adds annotations to the Pod/Deployment metadata.
+      validate:
+        message: "Image contains critical or high vulnerabilities."
+        pattern:
+          spec:
+            containers:
+            - name: "?*"
+              image: "?*"
+        deny:
+          conditions:
+            any:
+            - key: "{{request.object.metadata.annotations.\"vulnerability-scan.company.com/status\"}}"
+              operator: NotEquals
+              value: "clean"
+            - key: "{{request.object.metadata.annotations.\"vulnerability-scan.company.com/critical-count\"}}"
+              operator: NotEquals
+              value: "0"
+            - key: "{{request.object.metadata.annotations.\"vulnerability-scan.company.com/high-count\"}}"
+              operator: NotEquals
+              value: "0"
+
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: enforce-trusted-base-images
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: require-approved-base-images
+      match:
+        any:
+        - resources:
+            kinds:
+              - Pod
+      validate:
+        message: "Image must use an approved base image (distroless, ubi-minimal)."
+        pattern:
+          spec:
+            containers:
+              - image: "gcr.io/distroless/*"
+              - image: "registry.access.redhat.com/ubi8/ubi-minimal:*"
+
+---
+# Section 3: Continuous Vulnerability Scanning with Trivy
+#
+# Deploys a CronJob that periodically scans all running container images
+# in the cluster with Trivy and reports the findings.
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: trivy-cluster-scan
+  namespace: security-supply-chain
+spec:
+  schedule: "0 2 * * *" # Run daily at 2 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: falco-sa # Re-using for simplicity
+          containers:
+            - name: trivy-scanner
+              image: aquasec/trivy:latest
+              args:
+                - "kubernetes"
+                - "--report"
+                - "summary"
+                - "cluster"
+                - "--exit-code"
+                - "0" # Don't fail the job, just report
+                - "--format"
+                - "json"
+                # In a real setup, output would be sent to a webhook, S3, or Elasticsearch
+                # e.g., --output /dev/stdout | curl -X POST -d @- https://my-security-dashboard.com/api/trivy
+          restartPolicy: OnFailure
+
+---
+# Section 4: Secure CI/CD Pipeline Blueprint (Tekton)
+#
+# This Tekton Pipeline defines a secure software delivery lifecycle.
+# It serves as a reference implementation for your CI/CD system.
+#
+# NOTE: This requires Tekton Pipelines to be installed in the cluster.
+
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: secure-supply-chain-pipeline
+spec:
+  description: |
+    A pipeline that builds, tests, scans, and securely deploys a containerized application.
+  params:
+    - name: repo-url
+      type: string
+    - name: image-reference
+      type: string
+  workspaces:
+    - name: shared-data
+  tasks:
+    - name: static-analysis
+      taskRef:
+        name: semgrep-scan
+      params:
+        - name: repo-url
+          value: $(params.repo-url)
+      workspaces:
+        - name: source
+          workspace: shared-data
+
+    - name: dependency-scan
+      runAfter: [static-analysis]
+      taskRef:
+        name: trivy-filesystem-scan
+      params:
+        - name: path
+          value: .
+      workspaces:
+        - name: source
+          workspace: shared-data
+
+    - name: build-and-push
+      runAfter: [dependency-scan]
+      taskRef:
+        name: kaniko-build
+      params:
+        - name: IMAGE
+          value: $(params.image-reference)
+      workspaces:
+        - name: source
+          workspace: shared-data
+
+    - name: image-scan
+      runAfter: [build-and-push]
+      taskRef:
+        name: trivy-image-scan
+      params:
+        - name: image
+          value: $(params.image-reference)
+
+    - name: generate-sbom
+      runAfter: [image-scan]
+      taskRef:
+        name: syft-sbom-generate
+      params:
+        - name: image
+          value: $(params.image-reference)
+      workspaces:
+        - name: source
+          workspace: shared-data
+
+    - name: sign-image
+      runAfter: [generate-sbom]
+      taskRef:
+        name: cosign-sign
+      params:
+        - name: image
+          value: $(params.image-reference)
+        - name: private-key-secret
+          value: "cosign-private-key" # Kubernetes secret holding the cosign private key
+
+    - name: deploy-to-staging
+      runAfter: [sign-image]
+      taskRef:
+        name: kubernetes-deploy
+      params:
+        - name: image
+          value: $(params.image-reference)
+        - name: manifest-path
+          value: "k8s/deployment.yaml"
+        - name: namespace
+          value: "staging"

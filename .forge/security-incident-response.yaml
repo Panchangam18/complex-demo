@@ -1,0 +1,864 @@
+goal: "Respond to security incidents with immediate containment, investigation, and remediation"
+generate_pr: true
+
+triggers:
+  - display_name: "Security Alert Trigger"
+    description: "Triggered by SIEM alerts, GuardDuty findings, or manual security incident reports"
+    provider: "splunk"
+    config:
+      alert_threshold: "high"
+      categories: ["malware", "intrusion", "data-breach", "insider-threat"]
+    labels:
+      priority: "critical"
+      team: "security-ops"
+      compliance: "required"
+
+steps:
+  - name: "Incident Triage and Classification"
+    type: "action"
+    description: "Initial triage and classification of the security incident"
+    config:
+      command: |
+        #!/bin/bash
+        set -euo pipefail
+        
+        echo "=== SECURITY INCIDENT TRIAGE ==="
+        
+        # Get incident details
+        INCIDENT_ID=${INCIDENT_ID:-"SEC-$(date +%Y%m%d%H%M%S)"}
+        ALERT_SOURCE=${ALERT_SOURCE:-"manual"}
+        INCIDENT_TYPE=${INCIDENT_TYPE:-"unknown"}
+        SEVERITY=${SEVERITY:-"medium"}
+        
+        echo "Security Incident ID: $INCIDENT_ID"
+        echo "Alert Source: $ALERT_SOURCE"
+        echo "Incident Type: $INCIDENT_TYPE"
+        echo "Severity: $SEVERITY"
+        
+        # Create security war room
+        curl -X POST "$SLACK_WEBHOOK_URL" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "channel": "#security-incidents",
+            "text": "🚨 SECURITY INCIDENT DETECTED",
+            "attachments": [{
+              "color": "danger",
+              "title": "Security Incident '"$INCIDENT_ID"'",
+              "fields": [
+                {"title": "Source", "value": "'"$ALERT_SOURCE"'", "short": true},
+                {"title": "Type", "value": "'"$INCIDENT_TYPE"'", "short": true},
+                {"title": "Severity", "value": "'"$SEVERITY"'", "short": true},
+                {"title": "Status", "value": "INVESTIGATING", "short": true}
+              ]
+            }]
+          }'
+        
+        # Query SIEM for related events
+        echo "Querying SIEM for related events..."
+        
+        # Splunk search for last 24 hours
+        splunk search "index=security earliest=-24h | search $INCIDENT_TYPE OR $ALERT_SOURCE | head 100" \
+          --output csv > "/tmp/siem-events-$INCIDENT_ID.csv"
+        
+        # Check AWS GuardDuty findings
+        aws guardduty list-findings \
+          --detector-id "$(aws guardduty list-detectors --query 'DetectorIds[0]' --output text)" \
+          --finding-criteria '{"updatedAt":{"gte":1640995200000}}' \
+          --output json > "/tmp/guardduty-findings-$INCIDENT_ID.json"
+        
+        # Check Azure Security Center alerts
+        az security alert list --query '[?timeGeneratedUtc>=`2024-01-01T00:00:00Z`]' \
+          --output json > "/tmp/azure-security-alerts-$INCIDENT_ID.json"
+        
+        # Check GCP Security Command Center findings
+        gcloud scc findings list \
+          --source="organizations/123456789012/sources/-" \
+          --filter="state=\"ACTIVE\" AND create_time>\"2024-01-01T00:00:00Z\"" \
+          --format="json" > "/tmp/gcp-security-findings-$INCIDENT_ID.json"
+        
+        # Store incident metadata
+        echo "$INCIDENT_ID" > /tmp/incident-id
+        echo "$SEVERITY" > /tmp/severity
+        echo "$INCIDENT_TYPE" > /tmp/incident-type
+        
+        echo "✅ Initial triage complete"
+      parameters:
+        timeout_minutes: 10
+
+  - name: "Immediate Containment"
+    type: "action"
+    description: "Implement immediate containment measures"
+    config:
+      command: |
+        #!/bin/bash
+        set -euo pipefail
+        
+        echo "=== IMMEDIATE CONTAINMENT ==="
+        
+        INCIDENT_ID=$(cat /tmp/incident-id)
+        SEVERITY=$(cat /tmp/severity)
+        INCIDENT_TYPE=$(cat /tmp/incident-type)
+        
+        # Implement containment based on incident type
+        case "$INCIDENT_TYPE" in
+          "malware"|"intrusion")
+            echo "Implementing network isolation..."
+            
+            # Block suspicious IPs
+            SUSPICIOUS_IPS=$(grep -oP '\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b' "/tmp/siem-events-$INCIDENT_ID.csv" | sort -u)
+            
+            for ip in $SUSPICIOUS_IPS; do
+              # Block in AWS Security Groups
+              aws ec2 authorize-security-group-ingress \
+                --group-id "sg-incident-response" \
+                --protocol tcp \
+                --port 0-65535 \
+                --source-group "$ip/32" \
+                --rule-description "Block suspicious IP $ip - Incident $INCIDENT_ID"
+              
+              # Block in Azure NSG
+              az network nsg rule create \
+                --resource-group security-rg \
+                --nsg-name incident-response-nsg \
+                --name "block-$ip-$INCIDENT_ID" \
+                --priority 100 \
+                --access Deny \
+                --protocol "*" \
+                --source-address-prefixes "$ip/32"
+              
+              # Block in GCP Firewall
+              gcloud compute firewall-rules create "block-$ip-$INCIDENT_ID" \
+                --direction=INGRESS \
+                --action=DENY \
+                --source-ranges="$ip/32" \
+                --description="Block suspicious IP - Incident $INCIDENT_ID"
+            done
+            ;;
+            
+          "data-breach"|"data-exfiltration")
+            echo "Implementing data protection measures..."
+            
+            # Enable S3 MFA delete
+            aws s3api put-bucket-versioning \
+              --bucket company-sensitive-data \
+              --versioning-configuration MFADelete=Enabled
+            
+            # Lock down IAM permissions
+            aws iam attach-role-policy \
+              --role-name emergency-lockdown \
+              --policy-arn "arn:aws:iam::123456789012:policy/EmergencyDataLockdown"
+            ;;
+            
+          "insider-threat")
+            echo "Implementing user access controls..."
+            
+            # Disable suspected user accounts
+            SUSPECTED_USERS=$(grep -o "user=[a-zA-Z0-9._-]*" "/tmp/siem-events-$INCIDENT_ID.csv" | cut -d= -f2 | sort -u)
+            
+            for user in $SUSPECTED_USERS; do
+              # Disable in AWS IAM
+              aws iam update-login-profile --user-name "$user" --password-reset-required
+              
+              # Disable in Azure AD
+              az ad user update --id "$user" --account-enabled false
+              
+              # Disable in Google Workspace
+              gcloud identity users update "$user" --suspended
+            done
+            ;;
+        esac
+        
+        # Isolate affected workloads
+        echo "Isolating affected workloads..."
+        
+        # Get affected instances from SIEM data
+        AFFECTED_INSTANCES=$(grep -oP 'instance-id=[a-zA-Z0-9-]*' "/tmp/siem-events-$INCIDENT_ID.csv" | cut -d= -f2 | sort -u)
+        
+        for instance in $AFFECTED_INSTANCES; do
+          # Create isolation security group
+          aws ec2 create-security-group \
+            --group-name "isolation-$instance-$INCIDENT_ID" \
+            --description "Isolation SG for incident $INCIDENT_ID"
+          
+          # Move instance to isolation
+          aws ec2 modify-instance-attribute \
+            --instance-id "$instance" \
+            --groups "isolation-$instance-$INCIDENT_ID"
+        done
+        
+        # Enable enhanced monitoring
+        echo "Enabling enhanced monitoring..."
+        
+        # Enable VPC Flow Logs
+        aws ec2 create-flow-logs \
+          --resource-type VPC \
+          --resource-ids "$(aws ec2 describe-vpcs --query 'Vpcs[0].VpcId' --output text)" \
+          --traffic-type ALL \
+          --log-destination-type s3 \
+          --log-destination "arn:aws:s3:::security-logs-$INCIDENT_ID"
+        
+        echo "✅ Immediate containment complete"
+      parameters:
+        timeout_minutes: 15
+
+  - name: "Evidence Collection"
+    type: "action"
+    description: "Collect and preserve digital evidence"
+    config:
+      command: |
+        #!/bin/bash
+        set -euo pipefail
+        
+        echo "=== EVIDENCE COLLECTION ==="
+        
+        INCIDENT_ID=$(cat /tmp/incident-id)
+        
+        # Create evidence collection directory
+        mkdir -p "/tmp/evidence-$INCIDENT_ID"
+        
+        # Collect system logs
+        echo "Collecting system logs..."
+        
+        # AWS CloudTrail logs
+        aws logs create-export-task \
+          --log-group-name "CloudTrail/SecurityLogs" \
+          --from "$(date -d '24 hours ago' +%s)000" \
+          --to "$(date +%s)000" \
+          --destination "security-evidence-$INCIDENT_ID" \
+          --destination-prefix "cloudtrail-$INCIDENT_ID"
+        
+        # VPC Flow Logs
+        aws s3 sync "s3://vpc-flow-logs/$(date +%Y/%m/%d)/" "/tmp/evidence-$INCIDENT_ID/vpc-flow-logs/"
+        
+        # Application logs from ELK
+        curl -X POST "http://elasticsearch.company.internal:9200/logs-*/_search" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "query": {
+              "range": {
+                "@timestamp": {
+                  "gte": "now-24h",
+                  "lte": "now"
+                }
+              }
+            },
+            "size": 10000
+          }' > "/tmp/evidence-$INCIDENT_ID/application-logs.json"
+        
+        # Memory dumps from affected instances
+        echo "Collecting memory dumps..."
+        
+        AFFECTED_INSTANCES=$(grep -oP 'instance-id=[a-zA-Z0-9-]*' "/tmp/siem-events-$INCIDENT_ID.csv" | cut -d= -f2 | sort -u)
+        
+        for instance in $AFFECTED_INSTANCES; do
+          # Create memory dump using SSM
+          aws ssm send-command \
+            --instance-ids "$instance" \
+            --document-name "AWS-RunShellScript" \
+            --parameters 'commands=["sudo /usr/bin/volatility -f /proc/kcore --profile=LinuxUbuntu1804x64 pslist > /tmp/memdump-'"$instance"'.txt"]'
+          
+          # Copy evidence to S3
+          aws ssm send-command \
+            --instance-ids "$instance" \
+            --document-name "AWS-RunShellScript" \
+            --parameters 'commands=["aws s3 cp /tmp/memdump-'"$instance"'.txt s3://security-evidence-'"$INCIDENT_ID"'/memory/"]'
+        done
+        
+        # Network packet captures
+        echo "Collecting network evidence..."
+        
+        # Enable packet capture on key network interfaces
+        for region in us-east-1 us-west-2; do
+          aws ec2 create-traffic-mirror-session \
+            --network-interface-id "$(aws ec2 describe-network-interfaces --region $region --query 'NetworkInterfaces[0].NetworkInterfaceId' --output text)" \
+            --traffic-mirror-target-id "eni-mirror-target" \
+            --traffic-mirror-filter-id "tmf-security-incident" \
+            --session-number 1
+        done
+        
+        # Database audit logs
+        echo "Collecting database evidence..."
+        
+        # RDS logs
+        aws rds download-db-log-file-portion \
+          --db-instance-identifier "prod-db" \
+          --log-file-name "audit/server_audit.log" \
+          --starting-token 0 \
+          --output text > "/tmp/evidence-$INCIDENT_ID/rds-audit.log"
+        
+        # Container logs
+        echo "Collecting container evidence..."
+        
+        # Kubernetes audit logs
+        kubectl get events --all-namespaces --sort-by='.lastTimestamp' \
+          --output json > "/tmp/evidence-$INCIDENT_ID/k8s-events.json"
+        
+        # Container runtime logs
+        for node in $(kubectl get nodes -o name); do
+          kubectl debug "$node" -it --image=alpine -- sh -c "chroot /host journalctl -u docker --since '24 hours ago'" \
+            > "/tmp/evidence-$INCIDENT_ID/docker-logs-$(echo $node | cut -d/ -f2).txt"
+        done
+        
+        # Calculate evidence checksums
+        echo "Calculating evidence checksums..."
+        
+        find "/tmp/evidence-$INCIDENT_ID" -type f -exec sha256sum {} \; > "/tmp/evidence-$INCIDENT_ID/checksums.txt"
+        
+        # Encrypt and upload evidence
+        echo "Securing evidence..."
+        
+        # Encrypt evidence directory
+        tar -czf "/tmp/evidence-$INCIDENT_ID.tar.gz" "/tmp/evidence-$INCIDENT_ID"
+        gpg --cipher-algo AES256 --compress-algo 1 --symmetric "/tmp/evidence-$INCIDENT_ID.tar.gz"
+        
+        # Upload to secure storage
+        aws s3 cp "/tmp/evidence-$INCIDENT_ID.tar.gz.gpg" "s3://security-evidence-vault/incidents/$INCIDENT_ID/"
+        
+        echo "✅ Evidence collection complete"
+      parameters:
+        timeout_minutes: 30
+
+  - name: "Threat Investigation"
+    type: "action"
+    description: "Analyze the threat and determine scope of compromise"
+    config:
+      command: |
+        #!/bin/bash
+        set -euo pipefail
+        
+        echo "=== THREAT INVESTIGATION ==="
+        
+        INCIDENT_ID=$(cat /tmp/incident-id)
+        
+        # Analyze indicators of compromise
+        echo "Analyzing IOCs..."
+        
+        # Extract IOCs from logs
+        python3 << 'EOF'
+import json
+import re
+import sys
+
+# Load SIEM events
+with open(f'/tmp/siem-events-{sys.argv[1]}.csv', 'r') as f:
+    logs = f.read()
+
+# Extract IP addresses
+ips = re.findall(r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b', logs)
+
+# Extract domains
+domains = re.findall(r'\b[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b', logs)
+
+# Extract file hashes
+hashes = re.findall(r'\b[a-fA-F0-9]{32,64}\b', logs)
+
+iocs = {
+    'ips': list(set(ips)),
+    'domains': list(set(domains)),
+    'hashes': list(set(hashes))
+}
+
+with open(f'/tmp/iocs-{sys.argv[1]}.json', 'w') as f:
+    json.dump(iocs, f, indent=2)
+EOF
+        
+        # Threat intelligence lookup
+        echo "Performing threat intelligence lookup..."
+        
+        # Check VirusTotal for IOCs
+        VT_API_KEY=$(vault kv get -field=api_key secret/virustotal/api)
+        
+        python3 << 'EOF'
+import json
+import requests
+import sys
+import time
+
+api_key = sys.argv[2]
+incident_id = sys.argv[1]
+
+with open(f'/tmp/iocs-{incident_id}.json', 'r') as f:
+    iocs = json.load(f)
+
+results = {'ips': {}, 'domains': {}, 'hashes': {}}
+
+# Check IPs
+for ip in iocs['ips'][:10]:  # Limit to avoid rate limits
+    response = requests.get(f'https://www.virustotal.com/vtapi/v2/ip-address/report', 
+                          params={'apikey': api_key, 'ip': ip})
+    if response.status_code == 200:
+        results['ips'][ip] = response.json()
+    time.sleep(1)
+
+# Check domains
+for domain in iocs['domains'][:10]:
+    response = requests.get(f'https://www.virustotal.com/vtapi/v2/domain/report',
+                          params={'apikey': api_key, 'domain': domain})
+    if response.status_code == 200:
+        results['domains'][domain] = response.json()
+    time.sleep(1)
+
+with open(f'/tmp/threat-intel-{incident_id}.json', 'w') as f:
+    json.dump(results, f, indent=2)
+EOF
+        
+        # Check threat feeds
+        echo "Checking threat intelligence feeds..."
+        
+        # MISP lookup
+        curl -X POST "https://misp.company.internal/attributes/restSearch" \
+          -H "Authorization: $(vault kv get -field=api_key secret/misp/api)" \
+          -H "Content-Type: application/json" \
+          -d "$(cat /tmp/iocs-$INCIDENT_ID.json)" \
+          > "/tmp/misp-results-$INCIDENT_ID.json"
+        
+        # Analyze attack patterns
+        echo "Analyzing attack patterns..."
+        
+        # MITRE ATT&CK mapping
+        python3 << 'EOF'
+import json
+import sys
+
+incident_id = sys.argv[1]
+
+# Load evidence
+with open(f'/tmp/siem-events-{incident_id}.csv', 'r') as f:
+    events = f.read()
+
+# Simple pattern matching for ATT&CK techniques
+attack_patterns = {}
+
+if 'powershell' in events.lower():
+    attack_patterns['T1059.001'] = 'Command and Scripting Interpreter: PowerShell'
+
+if 'mimikatz' in events.lower():
+    attack_patterns['T1003.001'] = 'OS Credential Dumping: LSASS Memory'
+
+if 'certutil' in events.lower():
+    attack_patterns['T1105'] = 'Ingress Tool Transfer'
+
+if 'schtasks' in events.lower():
+    attack_patterns['T1053.005'] = 'Scheduled Task/Job: Scheduled Task'
+
+with open(f'/tmp/attack-patterns-{incident_id}.json', 'w') as f:
+    json.dump(attack_patterns, f, indent=2)
+EOF
+        
+        # Timeline analysis
+        echo "Creating incident timeline..."
+        
+        # Correlate events across systems
+        python3 << 'EOF'
+import json
+import csv
+import sys
+from datetime import datetime
+
+incident_id = sys.argv[1]
+timeline = []
+
+# Process SIEM events
+with open(f'/tmp/siem-events-{incident_id}.csv', 'r') as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        timeline.append({
+            'timestamp': row.get('timestamp', ''),
+            'source': 'SIEM',
+            'event': row.get('event', ''),
+            'severity': row.get('severity', 'low')
+        })
+
+# Sort by timestamp
+timeline.sort(key=lambda x: x['timestamp'])
+
+with open(f'/tmp/timeline-{incident_id}.json', 'w') as f:
+    json.dump(timeline, f, indent=2)
+EOF
+        
+        # Generate investigation report
+        echo "Generating investigation summary..."
+        
+        cat > "/tmp/investigation-summary-$INCIDENT_ID.md" << EOF
+# Security Incident Investigation - $INCIDENT_ID
+
+## Executive Summary
+- **Incident ID**: $INCIDENT_ID
+- **Investigation Date**: $(date)
+- **Threat Type**: $(cat /tmp/incident-type)
+- **Severity**: $(cat /tmp/severity)
+
+## Indicators of Compromise
+$(python3 -c "import json; data=json.load(open('/tmp/iocs-$INCIDENT_ID.json')); print('### IP Addresses\n' + '\n'.join([f'- {ip}' for ip in data['ips'][:10]]) + '\n\n### Domains\n' + '\n'.join([f'- {domain}' for domain in data['domains'][:10]]))")
+
+## Attack Patterns Identified
+$(python3 -c "import json; data=json.load(open('/tmp/attack-patterns-$INCIDENT_ID.json')); print('\n'.join([f'- **{k}**: {v}' for k,v in data.items()]))")
+
+## Recommendations
+- Implement additional monitoring for identified attack patterns
+- Update security controls based on TTPs observed
+- Conduct threat hunting for similar indicators
+- Review and update incident response procedures
+EOF
+        
+        echo "✅ Threat investigation complete"
+      parameters:
+        timeout_minutes: 45
+
+  - name: "Remediation and Recovery"
+    type: "action"
+    description: "Implement remediation measures and restore normal operations"
+    config:
+      command: |
+        #!/bin/bash
+        set -euo pipefail
+        
+        echo "=== REMEDIATION AND RECOVERY ==="
+        
+        INCIDENT_ID=$(cat /tmp/incident-id)
+        INCIDENT_TYPE=$(cat /tmp/incident-type)
+        
+        # Patch vulnerabilities
+        echo "Applying security patches..."
+        
+        # Update all systems via Ansible
+        ansible-playbook -i inventory/prod security-patching.yml \
+          --extra-vars "incident_id=$INCIDENT_ID" \
+          --tags "critical,high"
+        
+        # Update container images
+        echo "Updating container images..."
+        
+        # Scan for vulnerabilities
+        trivy image --format json --output "/tmp/vuln-scan-$INCIDENT_ID.json" company/api:latest
+        
+        # Update base images
+        docker build --no-cache -t company/api:patched-$INCIDENT_ID .
+        docker push company/api:patched-$INCIDENT_ID
+        
+        # Deploy patched images
+        kubectl set image deployment/api api=company/api:patched-$INCIDENT_ID
+        kubectl rollout status deployment/api
+        
+        # Reset compromised credentials
+        echo "Rotating compromised credentials..."
+        
+        # Rotate API keys
+        python3 << 'EOF'
+import boto3
+import json
+import sys
+
+incident_id = sys.argv[1]
+secrets_client = boto3.client('secretsmanager')
+
+# List of secrets to rotate
+secrets_to_rotate = [
+    'prod/database/password',
+    'prod/api/keys',
+    'prod/jwt/secret'
+]
+
+for secret_name in secrets_to_rotate:
+    try:
+        response = secrets_client.rotate_secret(
+            SecretId=secret_name,
+            Description=f'Rotated due to security incident {incident_id}'
+        )
+        print(f"Rotated secret: {secret_name}")
+    except Exception as e:
+        print(f"Failed to rotate {secret_name}: {e}")
+EOF
+        
+        # Reset user accounts
+        echo "Resetting affected user accounts..."
+        
+        # Force password reset for all users
+        aws iam create-login-profile \
+          --user-name emergency-reset \
+          --password "$(openssl rand -base64 32)" \
+          --password-reset-required
+        
+        # Revoke all active sessions
+        aws iam delete-access-key --access-key-id "$(aws iam list-access-keys --user-name api-user --query 'AccessKeyMetadata[0].AccessKeyId' --output text)"
+        
+        # Update security configurations
+        echo "Updating security configurations..."
+        
+        # Harden security groups
+        python3 << 'EOF'
+import boto3
+
+ec2 = boto3.client('ec2')
+
+# Get all security groups
+response = ec2.describe_security_groups()
+
+for sg in response['SecurityGroups']:
+    # Remove overly permissive rules
+    for rule in sg.get('IpPermissions', []):
+        for ip_range in rule.get('IpRanges', []):
+            if ip_range.get('CidrIp') == '0.0.0.0/0':
+                print(f"Removing permissive rule from {sg['GroupId']}")
+                ec2.revoke_security_group_ingress(
+                    GroupId=sg['GroupId'],
+                    IpPermissions=[rule]
+                )
+EOF
+        
+        # Update WAF rules
+        aws wafv2 update-web-acl \
+          --scope CLOUDFRONT \
+          --id "$(aws wafv2 list-web-acls --scope CLOUDFRONT --query 'WebACLs[0].Id' --output text)" \
+          --default-action Allow={}
+        
+        # Restore services
+        echo "Restoring normal operations..."
+        
+        # Remove isolation controls
+        AFFECTED_INSTANCES=$(grep -oP 'instance-id=[a-zA-Z0-9-]*' "/tmp/siem-events-$INCIDENT_ID.csv" | cut -d= -f2 | sort -u)
+        
+        for instance in $AFFECTED_INSTANCES; do
+          # Restore normal security group
+          aws ec2 modify-instance-attribute \
+            --instance-id "$instance" \
+            --groups "sg-production"
+        done
+        
+        # Remove IP blocks after verification
+        echo "Reviewing and removing IP blocks..."
+        
+        # List blocked IPs for manual review
+        aws ec2 describe-security-groups \
+          --filters "Name=description,Values=*$INCIDENT_ID*" \
+          --query 'SecurityGroups[*].IpPermissions[*].IpRanges[*].CidrIp' \
+          --output table
+        
+        # Scale services back to normal
+        kubectl scale deployment api --replicas=3
+        kubectl scale deployment worker --replicas=5
+        
+        # Verify service health
+        echo "Verifying service health..."
+        
+        for service in api worker frontend; do
+          kubectl rollout status deployment/$service --timeout=300s
+          
+          # Health check
+          SERVICE_URL=$(kubectl get service $service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          curl -f "http://$SERVICE_URL/health" || echo "⚠️  $service health check failed"
+        done
+        
+        echo "✅ Remediation and recovery complete"
+      parameters:
+        timeout_minutes: 60
+
+  - name: "Post-Incident Activities"
+    type: "action"
+    description: "Complete post-incident documentation and lessons learned"
+    config:
+      command: |
+        #!/bin/bash
+        set -euo pipefail
+        
+        echo "=== POST-INCIDENT ACTIVITIES ==="
+        
+        INCIDENT_ID=$(cat /tmp/incident-id)
+        
+        # Generate final incident report
+        echo "Generating final incident report..."
+        
+        cat > "incident-reports/security-$INCIDENT_ID.md" << EOF
+# Security Incident Report - $INCIDENT_ID
+
+## Executive Summary
+- **Incident ID**: $INCIDENT_ID
+- **Date Detected**: $(date -d '4 hours ago')
+- **Date Resolved**: $(date)
+- **Incident Type**: $(cat /tmp/incident-type)
+- **Severity**: $(cat /tmp/severity)
+- **Total Downtime**: Minimal (services maintained during investigation)
+
+## Incident Timeline
+$(cat /tmp/timeline-$INCIDENT_ID.json | jq -r '.[] | "- **\(.timestamp)**: \(.event) (\(.source))"')
+
+## Root Cause Analysis
+$(cat /tmp/investigation-summary-$INCIDENT_ID.md | sed -n '/## Attack Patterns/,/## Recommendations/p')
+
+## Impact Assessment
+- **Systems Affected**: $(grep -oP 'instance-id=[a-zA-Z0-9-]*' "/tmp/siem-events-$INCIDENT_ID.csv" | wc -l) instances
+- **Data Compromised**: Under investigation
+- **Financial Impact**: TBD
+- **Regulatory Impact**: Notification requirements under review
+
+## Response Actions Taken
+1. Immediate containment and isolation
+2. Evidence collection and preservation
+3. Threat analysis and IOC identification
+4. System remediation and patching
+5. Credential rotation and access control updates
+
+## Lessons Learned
+### What Went Well
+- Rapid detection and response
+- Effective containment procedures
+- Good coordination between teams
+
+### Areas for Improvement
+- Earlier detection capabilities needed
+- Automated response procedures
+- Better threat intelligence integration
+
+## Recommendations
+1. Implement additional monitoring for identified attack patterns
+2. Enhance automated response capabilities
+3. Conduct red team exercise to test improvements
+4. Update security awareness training
+5. Review and update incident response procedures
+
+## Follow-up Actions
+- [ ] Complete forensic analysis of collected evidence
+- [ ] Implement additional security controls
+- [ ] Conduct post-incident review meeting
+- [ ] Update threat model and risk assessment
+- [ ] File regulatory notifications if required
+EOF
+        
+        # Update security metrics
+        echo "Updating security metrics..."
+        
+        # Log incident in security dashboard
+        curl -X POST "https://api.company.internal/security/incidents" \
+          -H "Authorization: Bearer $(vault kv get -field=token secret/internal-api/security)" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "incident_id": "'"$INCIDENT_ID"'",
+            "type": "'"$(cat /tmp/incident-type)"'",
+            "severity": "'"$(cat /tmp/severity)"'",
+            "detection_time": "'"$(date -d '4 hours ago' -Iseconds)"'",
+            "resolution_time": "'"$(date -Iseconds)"'",
+            "mttr_hours": 4
+          }'
+        
+        # Update SIEM with IOCs
+        echo "Updating threat intelligence..."
+        
+        # Add IOCs to watchlist
+        python3 << 'EOF'
+import json
+import sys
+
+incident_id = sys.argv[1]
+
+# Load IOCs
+with open(f'/tmp/iocs-{incident_id}.json', 'r') as f:
+    iocs = json.load(f)
+
+# Create SIEM watchlist entries
+watchlist_entries = []
+
+for ip in iocs['ips']:
+    watchlist_entries.append({
+        'type': 'ip',
+        'value': ip,
+        'source': f'incident-{incident_id}',
+        'confidence': 'high',
+        'action': 'alert'
+    })
+
+for domain in iocs['domains']:
+    watchlist_entries.append({
+        'type': 'domain', 
+        'value': domain,
+        'source': f'incident-{incident_id}',
+        'confidence': 'medium',
+        'action': 'alert'
+    })
+
+with open(f'/tmp/watchlist-{incident_id}.json', 'w') as f:
+    json.dump(watchlist_entries, f, indent=2)
+EOF
+        
+        # Send compliance notifications
+        echo "Sending compliance notifications..."
+        
+        # Check if notification is required
+        if [ "$(cat /tmp/severity)" = "high" ] || [ "$(cat /tmp/severity)" = "critical" ]; then
+          # Send to legal team
+          curl -X POST "https://api.sendgrid.com/v3/mail/send" \
+            -H "Authorization: Bearer $(vault kv get -field=api_key secret/sendgrid/api)" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "personalizations": [{
+                "to": [{"email": "legal@company.com"}],
+                "subject": "Security Incident Notification - '"$INCIDENT_ID"'"
+              }],
+              "from": {"email": "security@company.com"},
+              "content": [{
+                "type": "text/plain",
+                "value": "A security incident has been resolved. Please review for regulatory notification requirements.\n\nIncident ID: '"$INCIDENT_ID"'\nSeverity: '"$(cat /tmp/severity)"'\nType: '"$(cat /tmp/incident-type)"'\n\nFull report available in security portal."
+              }]
+            }'
+        fi
+        
+        # Schedule follow-up activities
+        echo "Scheduling follow-up activities..."
+        
+        # Create calendar events for follow-up
+        python3 << 'EOF'
+import json
+from datetime import datetime, timedelta
+
+incident_id = sys.argv[1]
+
+# Schedule post-incident review (1 week)
+review_date = datetime.now() + timedelta(days=7)
+
+follow_up_tasks = [
+    {
+        'title': f'Post-Incident Review - {incident_id}',
+        'date': review_date.isoformat(),
+        'participants': ['security-team', 'platform-engineering', 'management'],
+        'agenda': 'Review incident response, discuss lessons learned, plan improvements'
+    },
+    {
+        'title': f'Security Control Assessment - {incident_id}',
+        'date': (datetime.now() + timedelta(days=14)).isoformat(),
+        'participants': ['security-team'],
+        'agenda': 'Assess effectiveness of new security controls implemented post-incident'
+    }
+]
+
+with open(f'/tmp/follow-up-{incident_id}.json', 'w') as f:
+    json.dump(follow_up_tasks, f, indent=2)
+EOF
+        
+        # Clean up temporary files
+        rm -f /tmp/incident-id /tmp/severity /tmp/incident-type
+        rm -f /tmp/siem-events-$INCIDENT_ID.csv
+        rm -f /tmp/iocs-$INCIDENT_ID.json
+        rm -f /tmp/threat-intel-$INCIDENT_ID.json
+        rm -f /tmp/timeline-$INCIDENT_ID.json
+        
+        # Final notification
+        curl -X POST "$SLACK_WEBHOOK_URL" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "channel": "#security-incidents",
+            "text": "✅ SECURITY INCIDENT RESOLVED",
+            "attachments": [{
+              "color": "good",
+              "title": "Incident '"$INCIDENT_ID"' - Case Closed",
+              "fields": [
+                {"title": "Resolution Time", "value": "4 hours", "short": true},
+                {"title": "Impact", "value": "Minimal", "short": true},
+                {"title": "Status", "value": "All systems normal", "short": false}
+              ]
+            }]
+          }'
+        
+        echo "✅ Post-incident activities complete"
+        echo "📊 Final report: incident-reports/security-$INCIDENT_ID.md"
+        echo "🔒 All systems secured and operational"
+      parameters:
+        timeout_minutes: 20 

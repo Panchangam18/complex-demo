@@ -18,7 +18,7 @@ inputs = {
   vpc_cidr = "10.0.0.0/16"  # AWS Dev VPC
   
   # GCP configuration
-  gcp_project_id = "forge-demo-463617"
+  gcp_project_id = "complex-demo-464819"
   gcp_region     = "us-east1"
   gcp_vpc_cidr   = "10.16.0.0/16"  # GCP Dev VPC
   

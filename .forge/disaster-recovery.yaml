@@ -1,0 +1,434 @@
+goal: "Execute disaster recovery procedures across multicloud infrastructure with minimal downtime"
+generate_pr: true
+
+triggers:
+  - display_name: "Disaster Recovery Trigger"
+    description: "Triggered by automated monitoring alerts or manual DR invocation"
+    provider: "pagerduty"
+    config:
+      service_key: "PAGERDUTY_DR_KEY"
+      escalation_policy: "P1-Critical"
+    labels:
+      priority: "critical"
+      team: "platform-engineering"
+      classification: "disaster-recovery"
+
+steps:
+  - name: "Incident Assessment"
+    type: "action"
+    description: "Assess the scope and impact of the disaster"
+    config:
+      command: |
+        #!/bin/bash
+        set -euo pipefail
+        
+        echo "=== DISASTER RECOVERY INCIDENT ASSESSMENT ==="
+        
+        # Get incident details
+        INCIDENT_ID=${INCIDENT_ID:-$(date +%Y%m%d%H%M%S)}
+        AFFECTED_REGION=${AFFECTED_REGION:-"us-east-1"}
+        AFFECTED_CLOUD=${AFFECTED_CLOUD:-"aws"}
+        DR_TYPE=${DR_TYPE:-"region-failure"}
+        
+        echo "Incident ID: $INCIDENT_ID"
+        echo "Affected Region: $AFFECTED_REGION"
+        echo "Affected Cloud: $AFFECTED_CLOUD"
+        echo "DR Type: $DR_TYPE"
+        
+        # Create incident war room
+        curl -X POST "$SLACK_WEBHOOK_URL" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "channel": "#incident-response",
+            "text": "🚨 DISASTER RECOVERY INITIATED",
+            "attachments": [{
+              "color": "danger",
+              "title": "Incident Details",
+              "fields": [
+                {"title": "Incident ID", "value": "'"$INCIDENT_ID"'", "short": true},
+                {"title": "Affected Region", "value": "'"$AFFECTED_REGION"'", "short": true},
+                {"title": "Affected Cloud", "value": "'"$AFFECTED_CLOUD"'", "short": true},
+                {"title": "DR Type", "value": "'"$DR_TYPE"'", "short": true}
+              ]
+            }]
+          }'
+        
+        # Assess infrastructure status
+        echo "Assessing infrastructure status..."
+        
+        # Check AWS status
+        if [ "$AFFECTED_CLOUD" = "aws" ]; then
+          aws ec2 describe-instances --region "$AFFECTED_REGION" --filters "Name=instance-state-name,Values=running" --query 'Reservations[*].Instances[*].InstanceId' --output text | wc -w || echo "0"
+        fi
+        
+        # Check service availability
+        echo "Checking critical services..."
+        
+        CRITICAL_SERVICES=("api-gateway" "user-service" "payment-service" "notification-service")
+        
+        for service in "${CRITICAL_SERVICES[@]}"; do
+          if consul catalog service "$service" | jq -r '.[] | select(.ServiceAddress != null) | .ServiceAddress' | head -1 | xargs -I {} curl -f -m 5 "http://{}:8080/health" &>/dev/null; then
+            echo "✅ $service: HEALTHY"
+          else
+            echo "❌ $service: FAILED"
+          fi
+        done
+        
+        # Store incident state
+        echo "$INCIDENT_ID" > /tmp/incident-id
+        echo "$AFFECTED_REGION" > /tmp/affected-region
+        echo "$AFFECTED_CLOUD" > /tmp/affected-cloud
+        echo "$DR_TYPE" > /tmp/dr-type
+        
+        echo "✅ Incident assessment complete"
+      parameters:
+        timeout_minutes: 5
+
+  - name: "Failover Execution"
+    type: "action"
+    description: "Execute failover to backup region/cloud"
+    config:
+      command: |
+        #!/bin/bash
+        set -euo pipefail
+        
+        echo "=== FAILOVER EXECUTION ==="
+        
+        # Read incident details
+        INCIDENT_ID=$(cat /tmp/incident-id)
+        AFFECTED_REGION=$(cat /tmp/affected-region)
+        AFFECTED_CLOUD=$(cat /tmp/affected-cloud)
+        DR_TYPE=$(cat /tmp/dr-type)
+        
+        # Determine failover target
+        case "$AFFECTED_CLOUD:$AFFECTED_REGION" in
+          "aws:us-east-1")
+            FAILOVER_CLOUD="aws"
+            FAILOVER_REGION="us-west-2"
+            ;;
+          "aws:us-west-2")
+            FAILOVER_CLOUD="gcp"
+            FAILOVER_REGION="us-central1"
+            ;;
+          "gcp:us-central1")
+            FAILOVER_CLOUD="azure"
+            FAILOVER_REGION="eastus"
+            ;;
+          *)
+            FAILOVER_CLOUD="aws"
+            FAILOVER_REGION="us-east-1"
+            ;;
+        esac
+        
+        echo "Failing over to: $FAILOVER_CLOUD:$FAILOVER_REGION"
+        
+        # Update DNS to point to failover region
+        echo "Updating DNS routing..."
+        
+        # Update Route53/CloudFlare DNS
+        aws route53 change-resource-record-sets \
+          --hosted-zone-id "Z1234567890ABC" \
+          --change-batch '{
+            "Changes": [{
+              "Action": "UPSERT",
+              "ResourceRecordSet": {
+                "Name": "api.company.com",
+                "Type": "CNAME",
+                "TTL": 60,
+                "ResourceRecords": [{"Value": "api-'"$FAILOVER_CLOUD"'-'"$FAILOVER_REGION"'.company.com"}]
+              }
+            }]
+          }'
+        
+        # Scale up services in failover region
+        echo "Scaling up services in failover region..."
+        
+        # Switch to failover cluster
+        kubectl config use-context "${FAILOVER_CLOUD}-${FAILOVER_REGION}"
+        
+        # Scale up critical services
+        CRITICAL_SERVICES=("api-gateway" "user-service" "payment-service")
+        
+        for service in "${CRITICAL_SERVICES[@]}"; do
+          echo "Scaling up $service"
+          kubectl scale deployment "$service" --replicas=5 -n "$service"
+          kubectl rollout status deployment "$service" -n "$service" --timeout=300s
+        done
+        
+        # Update load balancer configurations
+        echo "Updating load balancer configurations..."
+        
+        # Update ALB/NLB target groups
+        if [ "$FAILOVER_CLOUD" = "aws" ]; then
+          aws elbv2 modify-target-group \
+            --target-group-arn "arn:aws:elasticloadbalancing:$FAILOVER_REGION:123456789012:targetgroup/api-gateway/1234567890123456" \
+            --health-check-path "/health" \
+            --health-check-interval-seconds 10
+        fi
+        
+        echo "✅ Failover execution complete"
+      parameters:
+        timeout_minutes: 20
+
+  - name: "Data Recovery"
+    type: "action"
+    description: "Restore data from backups and ensure consistency"
+    config:
+      command: |
+        #!/bin/bash
+        set -euo pipefail
+        
+        echo "=== DATA RECOVERY ==="
+        
+        # Read incident details
+        INCIDENT_ID=$(cat /tmp/incident-id)
+        AFFECTED_REGION=$(cat /tmp/affected-region)
+        FAILOVER_REGION=$(cat /tmp/failover-region 2>/dev/null || echo "us-west-2")
+        
+        # Restore database from backup
+        echo "Restoring database from backup..."
+        
+        # Get latest backup
+        LATEST_BACKUP=$(aws rds describe-db-snapshots \
+          --db-instance-identifier "prod-db" \
+          --query 'DBSnapshots[?Status==`available`] | sort_by(@, &SnapshotCreateTime) | [-1].DBSnapshotIdentifier' \
+          --output text)
+        
+        echo "Latest backup: $LATEST_BACKUP"
+        
+        # Restore database
+        aws rds restore-db-instance-from-db-snapshot \
+          --db-instance-identifier "prod-db-dr-$INCIDENT_ID" \
+          --db-snapshot-identifier "$LATEST_BACKUP" \
+          --db-instance-class "db.r5.2xlarge" \
+          --availability-zone "${FAILOVER_REGION}a" \
+          --no-publicly-accessible
+        
+        # Wait for database to be available
+        echo "Waiting for database to be ready..."
+        aws rds wait db-instance-available --db-instance-identifier "prod-db-dr-$INCIDENT_ID"
+        
+        # Update database endpoint in applications
+        echo "Updating database endpoints..."
+        
+        # Update Kubernetes secrets
+        kubectl create secret generic db-credentials \
+          --from-literal=host="prod-db-dr-$INCIDENT_ID.abc123.rds.amazonaws.com" \
+          --from-literal=username="admin" \
+          --from-literal=password="$(vault kv get -field=password secret/database/prod)" \
+          --dry-run=client -o yaml | kubectl apply -f -
+        
+        # Restart applications to pick up new database
+        for service in user-service payment-service; do
+          kubectl rollout restart deployment "$service" -n "$service"
+        done
+        
+        # Restore object storage data
+        echo "Restoring object storage data..."
+        
+        # Sync from backup bucket
+        aws s3 sync "s3://company-backup-${AFFECTED_REGION}/" "s3://company-data-${FAILOVER_REGION}/"
+        
+        echo "✅ Data recovery complete"
+      parameters:
+        timeout_minutes: 30
+
+  - name: "Service Validation"
+    type: "action"
+    description: "Validate all services are operational in failover environment"
+    config:
+      command: |
+        #!/bin/bash
+        set -euo pipefail
+        
+        echo "=== SERVICE VALIDATION ==="
+        
+        # Wait for services to stabilize
+        echo "Waiting for services to stabilize..."
+        sleep 60
+        
+        # Check critical service health
+        echo "Checking critical service health..."
+        
+        CRITICAL_SERVICES=("api-gateway" "user-service" "payment-service" "notification-service")
+        FAILED_SERVICES=()
+        
+        for service in "${CRITICAL_SERVICES[@]}"; do
+          SERVICE_URL=$(kubectl get service "$service" -n "$service" -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          
+          if [ -z "$SERVICE_URL" ]; then
+            SERVICE_URL=$(kubectl get service "$service" -n "$service" -o jsonpath='{.spec.clusterIP}')
+          fi
+          
+          if curl -f -m 10 "http://$SERVICE_URL:8080/health" &>/dev/null; then
+            echo "✅ $service: HEALTHY"
+          else
+            echo "❌ $service: FAILED"
+            FAILED_SERVICES+=("$service")
+          fi
+        done
+        
+        # Check database connectivity
+        echo "Checking database connectivity..."
+        
+        # Test database connection
+        kubectl run db-test-$(date +%s) \
+          --image=postgres:13 \
+          --rm -i --restart=Never \
+          --env="PGPASSWORD=$(vault kv get -field=password secret/database/prod)" \
+          -- psql -h "prod-db-dr-$(cat /tmp/incident-id).abc123.rds.amazonaws.com" -U admin -d company -c "SELECT 1;" || {
+          echo "❌ Database connectivity failed"
+          FAILED_SERVICES+=("database")
+        }
+        
+        # Check monitoring systems
+        echo "Checking monitoring systems..."
+        
+        # Check Prometheus
+        curl -f "http://prometheus.company.internal:9090/api/v1/query?query=up" &>/dev/null || {
+          echo "❌ Prometheus not accessible"
+          FAILED_SERVICES+=("prometheus")
+        }
+        
+        # Check Grafana
+        curl -f "http://grafana.company.internal:3000/api/health" &>/dev/null || {
+          echo "❌ Grafana not accessible"
+          FAILED_SERVICES+=("grafana")
+        }
+        
+        # Report validation results
+        if [ ${#FAILED_SERVICES[@]} -eq 0 ]; then
+          echo "✅ All services validated successfully"
+          
+          # Update incident status
+          curl -X POST "$SLACK_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "channel": "#incident-response",
+              "text": "✅ DR VALIDATION SUCCESSFUL",
+              "attachments": [{
+                "color": "good",
+                "title": "All services operational in failover environment"
+              }]
+            }'
+        else
+          echo "❌ Service validation failed for: ${FAILED_SERVICES[*]}"
+          exit 1
+        fi
+        
+        echo "✅ Service validation complete"
+      parameters:
+        timeout_minutes: 15
+
+  - name: "Communication and Documentation"
+    type: "action"
+    description: "Notify stakeholders and document the DR execution"
+    config:
+      command: |
+        #!/bin/bash
+        set -euo pipefail
+        
+        echo "=== COMMUNICATION AND DOCUMENTATION ==="
+        
+        # Read incident details
+        INCIDENT_ID=$(cat /tmp/incident-id)
+        AFFECTED_REGION=$(cat /tmp/affected-region)
+        AFFECTED_CLOUD=$(cat /tmp/affected-cloud)
+        
+        # Send stakeholder notifications
+        echo "Sending stakeholder notifications..."
+        
+        # Send email notification
+        cat > /tmp/dr-notification.html << EOF
+<h2>Disaster Recovery Executed</h2>
+<p><strong>Incident ID:</strong> $INCIDENT_ID</p>
+<p><strong>Affected Region:</strong> $AFFECTED_REGION</p>
+<p><strong>Affected Cloud:</strong> $AFFECTED_CLOUD</p>
+<p><strong>Status:</strong> Services restored and operational</p>
+<p><strong>Impact:</strong> Minimal downtime during failover</p>
+<p><strong>Next Steps:</strong> Monitor services and prepare for failback</p>
+EOF
+        
+        # Send via SendGrid
+        SENDGRID_API_KEY=$(vault kv get -field=api_key secret/sendgrid/api)
+        
+        curl -X POST "https://api.sendgrid.com/v3/mail/send" \
+          -H "Authorization: Bearer $SENDGRID_API_KEY" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "personalizations": [{
+              "to": [
+                {"email": "executives@company.com"},
+                {"email": "platform-engineering@company.com"}
+              ],
+              "subject": "DR Executed - Incident '"$INCIDENT_ID"'"
+            }],
+            "from": {"email": "dr-automation@company.com"},
+            "content": [{
+              "type": "text/html",
+              "value": "'"$(cat /tmp/dr-notification.html | tr -d '\n' | sed 's/"/\\"/g')"'"
+            }]
+          }'
+        
+        # Create incident report
+        echo "Creating incident report..."
+        
+        cat > "incident-reports/dr-$INCIDENT_ID.md" << EOF
+# Disaster Recovery Report - $INCIDENT_ID
+
+## Incident Summary
+- **Incident ID:** $INCIDENT_ID
+- **Date:** $(date)
+- **Affected Region:** $AFFECTED_REGION
+- **Affected Cloud:** $AFFECTED_CLOUD
+- **DR Type:** $(cat /tmp/dr-type)
+
+## Timeline
+- **Detection:** $(date -d '30 minutes ago')
+- **DR Initiated:** $(date -d '25 minutes ago')
+- **Services Restored:** $(date -d '5 minutes ago')
+- **Validation Complete:** $(date)
+
+## Actions Taken
+1. Incident assessment and scope determination
+2. Failover execution to backup region
+3. Data recovery from backups
+4. Service validation and health checks
+5. Stakeholder notification
+
+## Impact Assessment
+- **Downtime:** ~30 minutes
+- **Services Affected:** All primary services
+- **Data Loss:** None (recovered from backups)
+- **Customer Impact:** Minimal due to quick failover
+
+## Next Steps
+- [ ] Monitor services in failover environment
+- [ ] Investigate root cause of original failure
+- [ ] Plan failback to primary region
+- [ ] Update DR procedures based on lessons learned
+EOF
+        
+        # Update status page
+        echo "Updating status page..."
+        
+        # Update status.company.com
+        curl -X POST "https://api.statuspage.io/v1/pages/abc123/incidents" \
+          -H "Authorization: OAuth $(vault kv get -field=token secret/statuspage/api)" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "incident": {
+              "name": "Service Restored - DR Complete",
+              "status": "resolved",
+              "impact": "minor",
+              "body": "All services have been restored and are operating normally in our backup region."
+            }
+          }'
+        
+        # Clean up temporary files
+        rm -f /tmp/dr-notification.html
+        rm -f /tmp/incident-id /tmp/affected-region /tmp/affected-cloud /tmp/dr-type
+        
+        echo "✅ Communication and documentation complete"
+      parameters:
+        timeout_minutes: 5 

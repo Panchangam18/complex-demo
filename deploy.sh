@@ -55,7 +55,8 @@ log() {
     local level="$1"
     shift
     local message="$*"
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     echo -e "[$timestamp] [$level] $message" | tee -a "$LOG_FILE"
 }
 
@@ -67,11 +68,71 @@ print_section() {
     log "INFO" "Starting deployment phase: $1"
 }
 
+# Generic wait helper (resource description, command, timeout seconds)
+wait_for_resource() {
+    local description="$1"
+    local cmd="$2"
+    local timeout="${3:-300}"
+    local elapsed=0
+
+    echo -e "${BLUE}⏳ Waiting for ${description} (timeout ${timeout}s)${NC}"
+    until eval "${cmd}" >/dev/null 2>&1; do
+        sleep 5
+        elapsed=$((elapsed + 5))
+        if [ "${elapsed}" -ge "${timeout}" ]; then
+            echo -e "${RED}❌ Timeout waiting for ${description}${NC}"
+            return 1
+        fi
+        echo -ne "${YELLOW}> still waiting... (${elapsed}s)\\r${NC}"
+    done
+    echo -e "${GREEN}✅ ${description} is ready${NC}"
+}
+
+# Tool version checker. Arguments: cmd, minimum_version, friendly_name
+check_tool_version() {
+    local cmd="$1"
+    local min_ver="$2"
+    local name="${3:-$1}"
+
+    if ! command_exists "${cmd}"; then
+        log "ERROR" "${name} not installed"
+        echo -e "${RED}❌ ${name} not installed${NC}"
+        exit 1
+    fi
+
+    local current_ver
+    # shellcheck disable=SC2086
+    current_ver=$(${cmd} --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    if [[ -z "${current_ver}" ]]; then
+        # Some CLIs use different flag
+        current_ver=$(${cmd} version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    fi
+
+    # Fallback if still empty
+    if [[ -z "${current_ver}" ]]; then
+        log "WARNING" "Unable to parse version for ${name} – skipping comparison"
+        echo -e "${YELLOW}⚠️  Could not determine ${name} version${NC}"
+        return 0
+    fi
+
+    # version comparison using sort -V
+    if [[ "$(printf '%s\n%s' "${min_ver}" "${current_ver}" | sort -V | head -1)" != "${min_ver}" ]]; then
+        log "ERROR" "${name} ${current_ver} < required ${min_ver}"
+        echo -e "${RED}❌ ${name} version ${current_ver} is older than required ${min_ver}${NC}"
+        exit 1
+    fi
+
+    echo -e "${GREEN}✔ ${name} ${current_ver}${NC}"
+}
+
 # Print banner
 print_banner() {
     echo -e "${GREEN}"
     cat << 'EOF'
-    ╔══════════════════════════════════════════════════════════════════════════════╗
+    if [ "$DRY_RUN" == "true" ]; then
+        echo -e "${CYAN}[DRY-RUN]${NC} $phase"
+    fi
+    log "INFO" "Starting deployment phase: $phase"
     ║                                                                              ║
     ║                🚀 MULTI-CLOUD DEVOPS PLATFORM DEPLOYMENT 🚀                ║
     ║                                                                              ║
@@ -349,6 +410,13 @@ validate_prerequisites() {
             missing_commands+=("$cmd")
         fi
     done
+
+    # Minimum version enforcement (extend as needed)
+    check_tool_version "terraform" "1.4.0" "Terraform"
+    check_tool_version "kubectl" "1.24.0" "kubectl"
+    check_tool_version "aws" "2.7.0" "AWS CLI"
+    [ -n "$GCP_PROJECT_ID" ] && check_tool_version "gcloud" "439.0.0" "gcloud"
+    [ -n "$AZURE_SUBSCRIPTION_ID" ] && check_tool_version "az" "2.53.0" "Azure CLI"
     
     if [ ${#missing_commands[@]} -ne 0 ]; then
         log "ERROR" "Missing required commands: ${missing_commands[*]}"
@@ -395,6 +463,56 @@ validate_prerequisites() {
     
     echo -e "${GREEN}✅ All prerequisites validated${NC}"
     log "SUCCESS" "Prerequisites validation completed"
+}
+
+# ============================================================================
+# CROSS-CLOUD CONNECTIVITY VALIDATION
+# ============================================================================
+
+validate_cross_cloud_connectivity() {
+    start_phase "Cross-Cloud Connectivity Validation"
+    print_section "🌐 VALIDATING CROSS-CLOUD CONNECTIVITY"
+
+    # Simple connectivity tests (place-holders; extend with VPN / TGW checks)
+    local success=true
+
+    # AWS example – check sts call
+    if ! aws ec2 describe-vpcs --max-items 1 --profile "$AWS_PROFILE" >/dev/null 2>&1; then
+        log "ERROR" "AWS connectivity failed"
+        echo -e "${RED}❌ Unable to contact AWS EC2 API${NC}"
+        success=false
+    else
+        echo -e "${GREEN}✔ AWS connectivity OK${NC}"
+    fi
+
+    # GCP example
+    if [ -n "$GCP_PROJECT_ID" ]; then
+        if ! gcloud compute networks list --project "$GCP_PROJECT_ID" --limit=1 >/dev/null 2>&1; then
+            log "ERROR" "GCP connectivity failed"
+            echo -e "${RED}❌ Unable to contact GCP API${NC}"
+            success=false
+        else
+            echo -e "${GREEN}✔ GCP connectivity OK${NC}"
+        fi
+    fi
+
+    # Azure example
+    if [ -n "$AZURE_SUBSCRIPTION_ID" ]; then
+        if ! az account show >/dev/null 2>&1; then
+            log "ERROR" "Azure connectivity failed"
+            echo -e "${RED}❌ Unable to contact Azure API${NC}"
+            success=false
+        else
+            echo -e "${GREEN}✔ Azure connectivity OK${NC}"
+        fi
+    fi
+
+    if [ "$success" = true ]; then
+        complete_phase "Cross-Cloud Connectivity Validation"
+    else
+        fail_phase "Cross-Cloud Connectivity Validation" "Connectivity test failed"
+        return 1
+    fi
 }
 
 validate_environment() {

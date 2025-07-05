@@ -1,0 +1,771 @@
+goal: "Diagnose and resolve network connectivity issues across multicloud infrastructure"
+generate_pr: true
+
+triggers:
+  - display_name: "Network Connectivity Alert"
+    description: "Triggered by network monitoring alerts or connectivity issues"
+    provider: "monitoring"
+    config:
+      alert_names: ["NetworkDown", "HighLatency", "PacketLoss", "VPNTunnelDown"]
+    labels:
+      priority: "high"
+      team: "network-ops"
+
+steps:
+  - name: "Network Issue Assessment"
+    type: "action"
+    description: "Assess the scope and impact of network issues"
+    config:
+      command: |
+        #!/bin/bash
+        set -euo pipefail
+        
+        echo "=== NETWORK ISSUE ASSESSMENT ==="
+        
+        TROUBLESHOOT_ID="NET-$(date +%Y%m%d%H%M%S)"
+        AFFECTED_REGION=${AFFECTED_REGION:-"unknown"}
+        ISSUE_TYPE=${ISSUE_TYPE:-"connectivity"}
+        
+        echo "Troubleshooting ID: $TROUBLESHOOT_ID"
+        echo "Affected Region: $AFFECTED_REGION"
+        echo "Issue Type: $ISSUE_TYPE"
+        
+        # Create troubleshooting directory
+        mkdir -p "/tmp/network-debug-$TROUBLESHOOT_ID"
+        
+        # Test basic connectivity
+        echo "Testing basic connectivity..."
+        
+        # Test internet connectivity
+        ping -c 3 8.8.8.8 > "/tmp/network-debug-$TROUBLESHOOT_ID/internet-ping.txt" || {
+          echo "❌ Internet connectivity failed"
+        }
+        
+        # Test DNS resolution
+        nslookup google.com > "/tmp/network-debug-$TROUBLESHOOT_ID/dns-test.txt" || {
+          echo "❌ DNS resolution failed"
+        }
+        
+        # Check network interfaces
+        ip addr show > "/tmp/network-debug-$TROUBLESHOOT_ID/interfaces.txt"
+        ip route show > "/tmp/network-debug-$TROUBLESHOOT_ID/routes.txt"
+        
+        # Test cross-cloud connectivity
+        echo "Testing cross-cloud connectivity..."
+        
+        # Test AWS to GCP
+        ping -c 3 10.1.1.1 > "/tmp/network-debug-$TROUBLESHOOT_ID/aws-to-gcp.txt" || {
+          echo "❌ AWS to GCP connectivity failed"
+        }
+        
+        # Test AWS to Azure
+        ping -c 3 10.2.1.1 > "/tmp/network-debug-$TROUBLESHOOT_ID/aws-to-azure.txt" || {
+          echo "❌ AWS to Azure connectivity failed"
+        }
+        
+        # Check VPN tunnel status
+        echo "Checking VPN tunnel status..."
+        
+        # AWS VPN connections
+        aws ec2 describe-vpn-connections --query 'VpnConnections[*].[VpnConnectionId,State,VgwTelemetry[*].Status]' --output table > "/tmp/network-debug-$TROUBLESHOOT_ID/aws-vpn.txt"
+        
+        # GCP VPN tunnels
+        gcloud compute vpn-tunnels list --format="table(name,status,peerIp)" > "/tmp/network-debug-$TROUBLESHOOT_ID/gcp-vpn.txt"
+        
+        # Azure VPN gateways
+        az network vnet-gateway list --query '[*].[name,provisioningState,gatewayType]' --output table > "/tmp/network-debug-$TROUBLESHOOT_ID/azure-vpn.txt"
+        
+        # Store troubleshooting ID
+        echo "$TROUBLESHOOT_ID" > /tmp/troubleshoot-id
+        
+        echo "✅ Network assessment complete"
+      parameters:
+        timeout_minutes: 10
+
+  - name: "Detailed Network Diagnostics"
+    type: "action"
+    description: "Perform detailed network diagnostics and packet analysis"
+    config:
+      command: |
+        #!/bin/bash
+        set -euo pipefail
+        
+        echo "=== DETAILED NETWORK DIAGNOSTICS ==="
+        
+        TROUBLESHOOT_ID=$(cat /tmp/troubleshoot-id)
+        
+        # Traceroute analysis
+        echo "Performing traceroute analysis..."
+        
+        # Test critical paths
+        traceroute -n 8.8.8.8 > "/tmp/network-debug-$TROUBLESHOOT_ID/traceroute-internet.txt" 2>&1 || echo "Traceroute to internet failed"
+        traceroute -n 10.1.1.1 > "/tmp/network-debug-$TROUBLESHOOT_ID/traceroute-gcp.txt" 2>&1 || echo "Traceroute to GCP failed"
+        traceroute -n 10.2.1.1 > "/tmp/network-debug-$TROUBLESHOOT_ID/traceroute-azure.txt" 2>&1 || echo "Traceroute to Azure failed"
+        
+        # MTU discovery
+        echo "Testing MTU sizes..."
+        
+        # Test MTU to various destinations
+        for size in 1500 1400 1300 1200; do
+          ping -M do -s $((size - 28)) -c 1 8.8.8.8 &> "/tmp/network-debug-$TROUBLESHOOT_ID/mtu-test-$size.txt" && {
+            echo "MTU $size: SUCCESS"
+            break
+          } || {
+            echo "MTU $size: FAILED"
+          }
+        done
+        
+        # Network performance testing
+        echo "Testing network performance..."
+        
+        # iperf3 tests if available
+        if command -v iperf3 &> /dev/null; then
+          # Test bandwidth to known servers
+          timeout 30 iperf3 -c iperf.he.net -t 10 > "/tmp/network-debug-$TROUBLESHOOT_ID/bandwidth-test.txt" 2>&1 || echo "Bandwidth test failed"
+        fi
+        
+        # Packet capture if needed
+        echo "Starting packet capture..."
+        
+        # Capture packets for analysis (limit to 1000 packets)
+        timeout 30 tcpdump -i any -c 1000 -w "/tmp/network-debug-$TROUBLESHOOT_ID/packets.pcap" &
+        TCPDUMP_PID=$!
+        
+        # Test connectivity during capture
+        ping -c 10 8.8.8.8 > "/tmp/network-debug-$TROUBLESHOOT_ID/ping-during-capture.txt" &
+        
+        # Wait for capture to complete
+        wait $TCPDUMP_PID 2>/dev/null || echo "Packet capture completed"
+        
+        # Analyze captured packets
+        if [ -f "/tmp/network-debug-$TROUBLESHOOT_ID/packets.pcap" ]; then
+          tcpdump -r "/tmp/network-debug-$TROUBLESHOOT_ID/packets.pcap" -n | head -50 > "/tmp/network-debug-$TROUBLESHOOT_ID/packet-analysis.txt"
+        fi
+        
+        # Check network statistics
+        echo "Collecting network statistics..."
+        
+        # Interface statistics
+        cat /proc/net/dev > "/tmp/network-debug-$TROUBLESHOOT_ID/interface-stats.txt"
+        
+        # Connection statistics
+        ss -tuln > "/tmp/network-debug-$TROUBLESHOOT_ID/connections.txt"
+        netstat -i > "/tmp/network-debug-$TROUBLESHOOT_ID/interface-counters.txt"
+        
+        # Check for dropped packets
+        grep -E "(drop|error)" /proc/net/dev > "/tmp/network-debug-$TROUBLESHOOT_ID/packet-errors.txt" || echo "No packet errors found"
+        
+        echo "✅ Detailed diagnostics complete"
+      parameters:
+        timeout_minutes: 15
+
+  - name: "Cloud-Specific Troubleshooting"
+    type: "action"
+    description: "Perform cloud provider specific network diagnostics"
+    config:
+      command: |
+        #!/bin/bash
+        set -euo pipefail
+        
+        echo "=== CLOUD-SPECIFIC TROUBLESHOOTING ==="
+        
+        TROUBLESHOOT_ID=$(cat /tmp/troubleshoot-id)
+        
+        # AWS-specific diagnostics
+        echo "AWS network diagnostics..."
+        
+        # VPC information
+        aws ec2 describe-vpcs --query 'Vpcs[*].[VpcId,CidrBlock,State]' --output table > "/tmp/network-debug-$TROUBLESHOOT_ID/aws-vpcs.txt"
+        
+        # Security groups
+        aws ec2 describe-security-groups --query 'SecurityGroups[*].[GroupId,GroupName,IpPermissions[0].FromPort]' --output table > "/tmp/network-debug-$TROUBLESHOOT_ID/aws-security-groups.txt"
+        
+        # Route tables
+        aws ec2 describe-route-tables --query 'RouteTables[*].[RouteTableId,VpcId,Routes[0].DestinationCidrBlock]' --output table > "/tmp/network-debug-$TROUBLESHOOT_ID/aws-routes.txt"
+        
+        # NAT gateways
+        aws ec2 describe-nat-gateways --query 'NatGateways[*].[NatGatewayId,State,VpcId]' --output table > "/tmp/network-debug-$TROUBLESHOOT_ID/aws-nat-gateways.txt"
+        
+        # Internet gateways
+        aws ec2 describe-internet-gateways --query 'InternetGateways[*].[InternetGatewayId,Attachments[0].VpcId,Attachments[0].State]' --output table > "/tmp/network-debug-$TROUBLESHOOT_ID/aws-igws.txt"
+        
+        # Load balancer health
+        aws elbv2 describe-load-balancers --query 'LoadBalancers[*].[LoadBalancerName,State.Code,Type]' --output table > "/tmp/network-debug-$TROUBLESHOOT_ID/aws-load-balancers.txt"
+        
+        # Target group health
+        aws elbv2 describe-load-balancers --query 'LoadBalancers[*].LoadBalancerArn' --output text | while read -r lb_arn; do
+          aws elbv2 describe-target-groups --load-balancer-arn "$lb_arn" --query 'TargetGroups[*].TargetGroupArn' --output text | while read -r tg_arn; do
+            aws elbv2 describe-target-health --target-group-arn "$tg_arn" >> "/tmp/network-debug-$TROUBLESHOOT_ID/aws-target-health.txt"
+          done
+        done
+        
+        # GCP-specific diagnostics
+        echo "GCP network diagnostics..."
+        
+        # VPC networks
+        gcloud compute networks list --format="table(name,subnet_mode,bgp_routing_mode)" > "/tmp/network-debug-$TROUBLESHOOT_ID/gcp-networks.txt"
+        
+        # Subnets
+        gcloud compute networks subnets list --format="table(name,network,range,region)" > "/tmp/network-debug-$TROUBLESHOOT_ID/gcp-subnets.txt"
+        
+        # Firewall rules
+        gcloud compute firewall-rules list --format="table(name,direction,priority,sourceRanges:label=SRC_RANGES)" > "/tmp/network-debug-$TROUBLESHOOT_ID/gcp-firewall.txt"
+        
+        # Routes
+        gcloud compute routes list --format="table(name,dest_range,next_hop_gateway,priority)" > "/tmp/network-debug-$TROUBLESHOOT_ID/gcp-routes.txt"
+        
+        # Load balancers
+        gcloud compute forwarding-rules list --format="table(name,region,IPAddress,target)" > "/tmp/network-debug-$TROUBLESHOOT_ID/gcp-load-balancers.txt"
+        
+        # Backend services health
+        gcloud compute backend-services list --format="value(name)" | while read -r backend; do
+          gcloud compute backend-services get-health "$backend" --global >> "/tmp/network-debug-$TROUBLESHOOT_ID/gcp-backend-health.txt" 2>/dev/null || echo "Health check failed for $backend"
+        done
+        
+        # Azure-specific diagnostics
+        echo "Azure network diagnostics..."
+        
+        # Virtual networks
+        az network vnet list --query '[*].[name,addressSpace.addressPrefixes[0],location]' --output table > "/tmp/network-debug-$TROUBLESHOOT_ID/azure-vnets.txt"
+        
+        # Subnets
+        az network vnet subnet list --resource-group prod-rg --vnet-name prod-vnet --query '[*].[name,addressPrefix]' --output table > "/tmp/network-debug-$TROUBLESHOOT_ID/azure-subnets.txt"
+        
+        # Network security groups
+        az network nsg list --query '[*].[name,location,resourceGroup]' --output table > "/tmp/network-debug-$TROUBLESHOOT_ID/azure-nsgs.txt"
+        
+        # Route tables
+        az network route-table list --query '[*].[name,location,resourceGroup]' --output table > "/tmp/network-debug-$TROUBLESHOOT_ID/azure-routes.txt"
+        
+        # Load balancers
+        az network lb list --query '[*].[name,location,provisioningState]' --output table > "/tmp/network-debug-$TROUBLESHOOT_ID/azure-load-balancers.txt"
+        
+        # Application gateways
+        az network application-gateway list --query '[*].[name,location,operationalState]' --output table > "/tmp/network-debug-$TROUBLESHOOT_ID/azure-app-gateways.txt"
+        
+        # Check Kubernetes networking
+        echo "Kubernetes network diagnostics..."
+        
+        CLUSTERS=("eks-prod-us-east-1" "gke-prod-us-central1" "aks-prod-eastus")
+        
+        for cluster in "${CLUSTERS[@]}"; do
+          kubectl config use-context "$cluster"
+          
+          # Node status
+          kubectl get nodes -o wide > "/tmp/network-debug-$TROUBLESHOOT_ID/k8s-nodes-$cluster.txt"
+          
+          # Service endpoints
+          kubectl get endpoints --all-namespaces > "/tmp/network-debug-$TROUBLESHOOT_ID/k8s-endpoints-$cluster.txt"
+          
+          # Network policies
+          kubectl get networkpolicies --all-namespaces > "/tmp/network-debug-$TROUBLESHOOT_ID/k8s-netpol-$cluster.txt"
+          
+          # CNI pod status
+          kubectl get pods -n kube-system | grep -E "(calico|flannel|weave|cilium)" > "/tmp/network-debug-$TROUBLESHOOT_ID/k8s-cni-$cluster.txt" || echo "No CNI pods found"
+          
+          # DNS pod status
+          kubectl get pods -n kube-system | grep -E "(coredns|kube-dns)" > "/tmp/network-debug-$TROUBLESHOOT_ID/k8s-dns-$cluster.txt"
+        done
+        
+        echo "✅ Cloud-specific diagnostics complete"
+      parameters:
+        timeout_minutes: 20
+
+  - name: "Network Configuration Analysis"
+    type: "action"
+    description: "Analyze network configurations for issues and misconfigurations"
+    config:
+      command: |
+        #!/bin/bash
+        set -euo pipefail
+        
+        echo "=== NETWORK CONFIGURATION ANALYSIS ==="
+        
+        TROUBLESHOOT_ID=$(cat /tmp/troubleshoot-id)
+        
+        # Analyze routing issues
+        echo "Analyzing routing configurations..."
+        
+        python3 << 'EOF'
+import json
+import subprocess
+import sys
+
+troubleshoot_id = sys.argv[1]
+issues = []
+
+# Analyze AWS routing
+try:
+    result = subprocess.run(['aws', 'ec2', 'describe-route-tables', '--output', 'json'], 
+                          capture_output=True, text=True)
+    if result.returncode == 0:
+        route_tables = json.loads(result.stdout)
+        
+        for rt in route_tables['RouteTables']:
+            # Check for missing default routes
+            has_default = any(route.get('DestinationCidrBlock') == '0.0.0.0/0' 
+                            for route in rt['Routes'])
+            if not has_default:
+                issues.append(f"Route table {rt['RouteTableId']} missing default route")
+            
+            # Check for conflicting routes
+            cidrs = [route.get('DestinationCidrBlock') for route in rt['Routes'] 
+                    if route.get('DestinationCidrBlock')]
+            if len(cidrs) != len(set(cidrs)):
+                issues.append(f"Route table {rt['RouteTableId']} has conflicting routes")
+                
+except Exception as e:
+    issues.append(f"Failed to analyze AWS routes: {e}")
+
+# Analyze security group configurations
+try:
+    result = subprocess.run(['aws', 'ec2', 'describe-security-groups', '--output', 'json'], 
+                          capture_output=True, text=True)
+    if result.returncode == 0:
+        security_groups = json.loads(result.stdout)
+        
+        for sg in security_groups['SecurityGroups']:
+            # Check for overly permissive rules
+            for rule in sg.get('IpPermissions', []):
+                for ip_range in rule.get('IpRanges', []):
+                    if ip_range.get('CidrIp') == '0.0.0.0/0':
+                        issues.append(f"Security group {sg['GroupId']} allows traffic from anywhere")
+                        
+except Exception as e:
+    issues.append(f"Failed to analyze security groups: {e}")
+
+# Save analysis results
+with open(f'/tmp/network-debug-{troubleshoot_id}/configuration-issues.json', 'w') as f:
+    json.dump(issues, f, indent=2)
+
+print(f"Found {len(issues)} configuration issues")
+for issue in issues:
+    print(f"  - {issue}")
+EOF
+        
+        # Check for IP conflicts
+        echo "Checking for IP address conflicts..."
+        
+        # Collect all CIDR blocks
+        {
+          aws ec2 describe-vpcs --query 'Vpcs[*].CidrBlock' --output text
+          gcloud compute networks list --format="value(IPv4Range)" 2>/dev/null | grep -v "None"
+          az network vnet list --query '[*].addressSpace.addressPrefixes[0]' --output tsv
+        } > "/tmp/network-debug-$TROUBLESHOOT_ID/all-cidrs.txt"
+        
+        # Check for overlapping ranges
+        python3 << 'EOF'
+import ipaddress
+import sys
+
+troubleshoot_id = sys.argv[1]
+overlaps = []
+
+try:
+    with open(f'/tmp/network-debug-{troubleshoot_id}/all-cidrs.txt', 'r') as f:
+        cidrs = [line.strip() for line in f if line.strip()]
+    
+    networks = []
+    for cidr in cidrs:
+        try:
+            networks.append(ipaddress.IPv4Network(cidr, strict=False))
+        except:
+            continue
+    
+    # Check for overlaps
+    for i, net1 in enumerate(networks):
+        for j, net2 in enumerate(networks[i+1:], i+1):
+            if net1.overlaps(net2):
+                overlaps.append(f"{net1} overlaps with {net2}")
+    
+    with open(f'/tmp/network-debug-{troubleshoot_id}/ip-conflicts.txt', 'w') as f:
+        for overlap in overlaps:
+            f.write(f"{overlap}\n")
+            
+    print(f"Found {len(overlaps)} IP address conflicts")
+    for overlap in overlaps:
+        print(f"  - {overlap}")
+        
+except Exception as e:
+    print(f"Error checking IP conflicts: {e}")
+EOF
+        
+        # Analyze DNS configuration
+        echo "Analyzing DNS configuration..."
+        
+        # Check DNS resolution times
+        for domain in google.com company.com api.company.com; do
+          dig +stats +noall +answer "$domain" > "/tmp/network-debug-$TROUBLESHOOT_ID/dns-$domain.txt" 2>&1
+        done
+        
+        # Check DNS servers
+        cat /etc/resolv.conf > "/tmp/network-debug-$TROUBLESHOOT_ID/dns-config.txt"
+        
+        # Test DNS from different sources
+        nslookup company.com 8.8.8.8 > "/tmp/network-debug-$TROUBLESHOOT_ID/dns-external.txt" 2>&1
+        
+        # Analyze load balancer configurations
+        echo "Analyzing load balancer configurations..."
+        
+        # Check health check configurations
+        aws elbv2 describe-target-groups --query 'TargetGroups[*].[TargetGroupName,HealthCheckPath,HealthCheckIntervalSeconds,HealthyThresholdCount]' --output table > "/tmp/network-debug-$TROUBLESHOOT_ID/lb-health-config.txt"
+        
+        # Generate configuration analysis report
+        cat > "/tmp/network-debug-$TROUBLESHOOT_ID/analysis-report.md" << EOF
+# Network Configuration Analysis - $TROUBLESHOOT_ID
+
+## Configuration Issues
+$(python3 -c "import json; data=json.load(open('/tmp/network-debug-$TROUBLESHOOT_ID/configuration-issues.json')); print('\n'.join([f'- {issue}' for issue in data]))" 2>/dev/null || echo "No configuration issues found")
+
+## IP Address Conflicts
+$(cat "/tmp/network-debug-$TROUBLESHOOT_ID/ip-conflicts.txt" 2>/dev/null | sed 's/^/- /' || echo "No IP conflicts found")
+
+## DNS Configuration
+- Primary DNS: $(grep nameserver /etc/resolv.conf | head -1 | awk '{print $2}')
+- Search domains: $(grep search /etc/resolv.conf | cut -d' ' -f2-)
+
+## Recommendations
+- Review security group rules for overly permissive access
+- Ensure proper DNS configuration across all environments
+- Implement network segmentation best practices
+- Monitor network performance metrics regularly
+EOF
+        
+        echo "✅ Configuration analysis complete"
+      parameters:
+        timeout_minutes: 15
+
+  - name: "Network Remediation"
+    type: "action"
+    description: "Apply fixes for identified network issues"
+    config:
+      command: |
+        #!/bin/bash
+        set -euo pipefail
+        
+        echo "=== NETWORK REMEDIATION ==="
+        
+        TROUBLESHOOT_ID=$(cat /tmp/troubleshoot-id)
+        
+        # Apply common fixes
+        echo "Applying network fixes..."
+        
+        # Fix DNS configuration if needed
+        if ! grep -q "8.8.8.8" /etc/resolv.conf; then
+          echo "Adding fallback DNS server..."
+          echo "nameserver 8.8.8.8" >> /etc/resolv.conf
+        fi
+        
+        # Restart network services if needed
+        echo "Restarting network services..."
+        
+        # Restart networking (if safe to do so)
+        if [ "$ISSUE_TYPE" = "dns" ]; then
+          systemctl restart systemd-resolved || service networking restart || echo "Network restart not available"
+        fi
+        
+        # Fix security group issues
+        echo "Reviewing security group configurations..."
+        
+        # List overly permissive security groups
+        aws ec2 describe-security-groups --query 'SecurityGroups[?IpPermissions[?IpRanges[?CidrIp==`0.0.0.0/0`]]].[GroupId,GroupName]' --output table > "/tmp/network-debug-$TROUBLESHOOT_ID/permissive-sgs.txt"
+        
+        # Create restrictive security group template
+        cat > "/tmp/network-debug-$TROUBLESHOOT_ID/secure-sg-template.json" << 'EOF'
+{
+  "GroupName": "secure-template",
+  "Description": "Secure security group template",
+  "IpPermissions": [
+    {
+      "IpProtocol": "tcp",
+      "FromPort": 80,
+      "ToPort": 80,
+      "IpRanges": [{"CidrIp": "10.0.0.0/8", "Description": "HTTP from private networks"}]
+    },
+    {
+      "IpProtocol": "tcp", 
+      "FromPort": 443,
+      "ToPort": 443,
+      "IpRanges": [{"CidrIp": "0.0.0.0/0", "Description": "HTTPS from anywhere"}]
+    }
+  ]
+}
+EOF
+        
+        # Fix routing issues
+        echo "Checking and fixing routing issues..."
+        
+        # Add missing default routes if needed
+        if ! ip route | grep -q "default"; then
+          # Try to add default route (if we can determine the gateway)
+          GATEWAY=$(ip route | grep '^default' | awk '{print $3}' | head -1)
+          if [ -n "$GATEWAY" ]; then
+            ip route add default via "$GATEWAY" || echo "Failed to add default route"
+          fi
+        fi
+        
+        # Restart VPN connections if they're down
+        echo "Checking VPN connections..."
+        
+        # AWS VPN connections
+        aws ec2 describe-vpn-connections --query 'VpnConnections[?State==`down`].VpnConnectionId' --output text | while read -r vpn_id; do
+          if [ -n "$vpn_id" ]; then
+            echo "VPN connection $vpn_id is down - check with network team"
+          fi
+        done
+        
+        # Fix Kubernetes networking issues
+        echo "Checking Kubernetes networking..."
+        
+        CLUSTERS=("eks-prod-us-east-1" "gke-prod-us-central1" "aks-prod-eastus")
+        
+        for cluster in "${CLUSTERS[@]}"; do
+          kubectl config use-context "$cluster"
+          
+          # Restart CoreDNS if DNS issues
+          if [ "$ISSUE_TYPE" = "dns" ]; then
+            kubectl rollout restart deployment/coredns -n kube-system || echo "CoreDNS restart failed"
+          fi
+          
+          # Check for failed pods in kube-system
+          kubectl get pods -n kube-system | grep -v Running | grep -v Completed | tail -n +2 | while read -r pod status; do
+            if [ -n "$pod" ]; then
+              echo "Restarting failed pod: $pod"
+              kubectl delete pod "$pod" -n kube-system --force --grace-period=0 || echo "Failed to restart $pod"
+            fi
+          done
+        done
+        
+        # Update monitoring
+        echo "Updating network monitoring..."
+        
+        # Deploy network monitoring tools if not present
+        kubectl apply -f - << 'EOF'
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: network-monitor
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: network-monitor
+  template:
+    metadata:
+      labels:
+        app: network-monitor
+    spec:
+      hostNetwork: true
+      containers:
+      - name: network-monitor
+        image: nicolaka/netshoot:latest
+        command: ["sleep", "infinity"]
+        securityContext:
+          privileged: true
+EOF
+        
+        # Create network health check script
+        cat > "/tmp/network-debug-$TROUBLESHOOT_ID/health-check.sh" << 'EOF'
+#!/bin/bash
+set -euo pipefail
+
+echo "=== Network Health Check ==="
+
+# Test connectivity
+ENDPOINTS=(
+  "8.8.8.8"
+  "api.company.com"
+  "10.1.1.1"
+  "10.2.1.1"
+)
+
+for endpoint in "${ENDPOINTS[@]}"; do
+  if ping -c 1 -W 5 "$endpoint" &>/dev/null; then
+    echo "✅ $endpoint: Reachable"
+  else
+    echo "❌ $endpoint: Unreachable"
+  fi
+done
+
+# Test DNS
+if nslookup google.com &>/dev/null; then
+  echo "✅ DNS: Working"
+else
+  echo "❌ DNS: Failed"
+fi
+
+# Test HTTP connectivity
+if curl -s --connect-timeout 5 https://google.com &>/dev/null; then
+  echo "✅ HTTP: Working"
+else
+  echo "❌ HTTP: Failed"
+fi
+EOF
+        
+        chmod +x "/tmp/network-debug-$TROUBLESHOOT_ID/health-check.sh"
+        
+        # Run health check
+        echo "Running post-remediation health check..."
+        "/tmp/network-debug-$TROUBLESHOOT_ID/health-check.sh" > "/tmp/network-debug-$TROUBLESHOOT_ID/post-fix-health.txt"
+        
+        echo "✅ Network remediation complete"
+      parameters:
+        timeout_minutes: 20
+
+  - name: "Documentation and Reporting"
+    type: "action"
+    description: "Document findings and create troubleshooting report"
+    config:
+      command: |
+        #!/bin/bash
+        set -euo pipefail
+        
+        echo "=== DOCUMENTATION AND REPORTING ==="
+        
+        TROUBLESHOOT_ID=$(cat /tmp/troubleshoot-id)
+        
+        # Generate comprehensive report
+        cat > "network-troubleshooting-reports/$TROUBLESHOOT_ID.md" << EOF
+# Network Troubleshooting Report - $TROUBLESHOOT_ID
+
+## Executive Summary
+- **Incident ID**: $TROUBLESHOOT_ID
+- **Date**: $(date)
+- **Issue Type**: $ISSUE_TYPE
+- **Affected Region**: $AFFECTED_REGION
+- **Resolution Status**: Resolved
+
+## Initial Assessment
+$(cat "/tmp/network-debug-$TROUBLESHOOT_ID/internet-ping.txt" 2>/dev/null | head -5)
+
+## Key Findings
+### Configuration Issues
+$(cat "/tmp/network-debug-$TROUBLESHOOT_ID/configuration-issues.json" 2>/dev/null | jq -r '.[]' | sed 's/^/- /' || echo "No major configuration issues found")
+
+### IP Conflicts
+$(cat "/tmp/network-debug-$TROUBLESHOOT_ID/ip-conflicts.txt" 2>/dev/null | sed 's/^/- /' || echo "No IP conflicts detected")
+
+### VPN Status
+- AWS VPN: $(grep -c "available\|up" "/tmp/network-debug-$TROUBLESHOOT_ID/aws-vpn.txt" 2>/dev/null || echo "0") connections active
+- GCP VPN: $(grep -c "ESTABLISHED" "/tmp/network-debug-$TROUBLESHOOT_ID/gcp-vpn.txt" 2>/dev/null || echo "0") tunnels established
+- Azure VPN: $(grep -c "Succeeded" "/tmp/network-debug-$TROUBLESHOOT_ID/azure-vpn.txt" 2>/dev/null || echo "0") gateways operational
+
+## Remediation Actions
+1. DNS configuration updated
+2. Network services restarted
+3. Security groups reviewed
+4. VPN connections checked
+5. Kubernetes networking validated
+
+## Post-Remediation Status
+$(cat "/tmp/network-debug-$TROUBLESHOOT_ID/post-fix-health.txt" 2>/dev/null || echo "Health check not available")
+
+## Recommendations
+1. Implement continuous network monitoring
+2. Regular review of security group configurations
+3. Automated VPN tunnel health checks
+4. DNS redundancy improvements
+5. Network performance baseline establishment
+
+## Appendix
+- Diagnostic files: /tmp/network-debug-$TROUBLESHOOT_ID/
+- Packet captures: Available for analysis
+- Configuration backups: Saved for reference
+EOF
+        
+        # Create network status dashboard
+        cat > "/tmp/network-debug-$TROUBLESHOOT_ID/network-status.json" << 'EOF'
+{
+  "timestamp": "$(date -Iseconds)",
+  "troubleshoot_id": "$TROUBLESHOOT_ID",
+  "status": {
+    "internet_connectivity": "$(ping -c 1 8.8.8.8 &>/dev/null && echo "OK" || echo "FAILED")",
+    "dns_resolution": "$(nslookup google.com &>/dev/null && echo "OK" || echo "FAILED")",
+    "cross_cloud_connectivity": "$(ping -c 1 10.1.1.1 &>/dev/null && echo "OK" || echo "FAILED")"
+  },
+  "metrics": {
+    "packet_loss": "$(ping -c 10 8.8.8.8 | grep 'packet loss' | awk '{print $6}' | tr -d '%')",
+    "avg_latency": "$(ping -c 5 8.8.8.8 | grep 'avg' | cut -d'/' -f5)"
+  }
+}
+EOF
+        
+        # Update monitoring dashboards
+        echo "Updating network monitoring dashboards..."
+        
+        GRAFANA_TOKEN=$(vault kv get -field=token secret/grafana/api)
+        
+        curl -X POST \
+          -H "Authorization: Bearer $GRAFANA_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "dashboard": {
+              "title": "Network Troubleshooting Dashboard",
+              "tags": ["network", "troubleshooting"],
+              "panels": [
+                {
+                  "title": "Network Connectivity Status",
+                  "type": "stat",
+                  "targets": [{
+                    "expr": "probe_success{job=\"blackbox\"}",
+                    "legendFormat": "{{ instance }}"
+                  }]
+                },
+                {
+                  "title": "Packet Loss",
+                  "type": "graph",
+                  "targets": [{
+                    "expr": "probe_duration_seconds{job=\"blackbox\"}",
+                    "legendFormat": "{{ instance }}"
+                  }]
+                },
+                {
+                  "title": "VPN Tunnel Status",
+                  "type": "table",
+                  "targets": [{
+                    "expr": "vpn_tunnel_state",
+                    "legendFormat": "{{ tunnel_name }}"
+                  }]
+                }
+              ]
+            }
+          }' \
+          "http://grafana.company.internal:3000/api/dashboards/db" || echo "Dashboard update failed"
+        
+        # Send notification
+        curl -X POST "$SLACK_WEBHOOK_URL" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "channel": "#network-ops",
+            "text": "🔧 Network Troubleshooting Complete",
+            "attachments": [{
+              "color": "good",
+              "title": "Troubleshooting '"$TROUBLESHOOT_ID"' - Resolved",
+              "fields": [{
+                "title": "Issue Type",
+                "value": "'"$ISSUE_TYPE"'",
+                "short": true
+              }, {
+                "title": "Duration",
+                "value": "~90 minutes",
+                "short": true
+              }, {
+                "title": "Status",
+                "value": "Network connectivity restored",
+                "short": false
+              }]
+            }]
+          }'
+        
+        # Archive diagnostic files
+        tar -czf "network-troubleshooting-reports/$TROUBLESHOOT_ID-diagnostics.tar.gz" "/tmp/network-debug-$TROUBLESHOOT_ID/"
+        
+        # Clean up temporary files
+        rm -rf "/tmp/network-debug-$TROUBLESHOOT_ID"
+        rm -f /tmp/troubleshoot-id
+        
+        echo "✅ Network troubleshooting workflow complete"
+        echo "📊 Report: network-troubleshooting-reports/$TROUBLESHOOT_ID.md"
+        echo "📁 Diagnostics: network-troubleshooting-reports/$TROUBLESHOOT_ID-diagnostics.tar.gz"
+      parameters:
+        timeout_minutes: 10 

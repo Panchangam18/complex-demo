@@ -1,3 +1,17 @@
+# Developer Notes
+
+the main files to consider for deployment and destruction are deploy.sh and destroy.sh respectively
+
+to run load tests, you should be in root and have kubeconfig configured with the deployed cluster, then run the following command:
+
+make run-load-tests          # all tests
+make run-backend-load-test   # backend tests  
+make run-frontend-load-test  # frontend tests
+
+peep Code/client/src/tests/stresstests for more info on what the tests actually do
+
+---
+
 # Multicloud DevOps Stack – Comprehensive Architecture & Integration Guide
 
 ## 1. Executive Summary
