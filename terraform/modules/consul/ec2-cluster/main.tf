@@ -5,16 +5,12 @@ resource "random_password" "consul_master_token" {
   special = true
 }
 
-# Generate WAN federation secret if not provided
-resource "random_password" "wan_federation_secret" {
-  count   = var.wan_federation_secret == "" ? 1 : 0
-  length  = 32
-  special = false
-}
+# NOTE: WAN federation secret is now passed as a variable from root module
+# No need to create it conditionally here since it's already created at root level
 
 locals {
   consul_master_token = var.enable_acls ? random_password.consul_master_token[0].result : ""
-  wan_secret = var.wan_federation_secret != "" ? var.wan_federation_secret : (length(random_password.wan_federation_secret) > 0 ? random_password.wan_federation_secret[0].result : "")
+  wan_secret = var.wan_federation_secret
 }
 
 # Get Ubuntu AMI

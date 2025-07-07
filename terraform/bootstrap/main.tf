@@ -1,6 +1,6 @@
 # Bootstrap Terraform Backend Infrastructure
-# This creates S3 bucket and DynamoDB table in AWS, and Cloud Storage bucket in GCP
-# for storing Terraform state files
+# This creates S3 bucket and DynamoDB table in AWS for storing Terraform state files
+# The AWS backend will handle state for all cloud resources (AWS, GCP, Azure)
 
 terraform {
   required_version = ">= 1.5.0"
@@ -10,13 +10,13 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
-    google = {
-      source  = "hashicorp/google"
-      version = "~> 5.0"
-    }
     random = {
       source  = "hashicorp/random"
       version = "~> 3.0"
+    }
+    local = {
+      source  = "hashicorp/local"
+      version = "~> 2.0"
     }
   }
 }
@@ -42,22 +42,11 @@ locals {
   aws_bucket_name = "${local.project_name}-tfstate-${local.bucket_suffix}"
   aws_table_name  = "${local.project_name}-tfstate-locks"
   
-  # GCP resources
-  gcp_bucket_name = "${local.project_name}-tfstate-${local.bucket_suffix}"
-  
   common_tags = {
     Project     = local.project_name
     Environment = local.environment
     Purpose     = "Terraform Backend"
     ManagedBy   = "Terraform Bootstrap"
-  }
-  
-  # GCP labels must be lowercase with underscores
-  gcp_labels = {
-    project     = local.project_name
-    environment = local.environment
-    purpose     = "terraform-backend"
-    managed_by  = "terraform-bootstrap"
   }
 }
 
@@ -68,12 +57,6 @@ provider "aws" {
   default_tags {
     tags = local.common_tags
   }
-}
-
-# GCP Provider Configuration
-provider "google" {
-  project = var.gcp_project_id
-  region  = var.gcp_region
 }
 
 # AWS S3 Bucket for Terraform State
@@ -145,49 +128,6 @@ resource "aws_dynamodb_table" "terraform_locks" {
   )
 }
 
-# GCP Storage Bucket for Terraform State
-resource "google_storage_bucket" "terraform_state" {
-  name     = local.gcp_bucket_name
-  location = var.gcp_region
-  
-  force_destroy = false
-  
-  versioning {
-    enabled = true
-  }
-  
-  lifecycle_rule {
-    condition {
-      num_newer_versions = 10
-    }
-    action {
-      type = "Delete"
-    }
-  }
-  
-  labels = local.gcp_labels
-}
-
-# Output the backend configurations
-output "aws_backend_config" {
-  description = "AWS S3 backend configuration for Terraform"
-  value = {
-    bucket         = aws_s3_bucket.terraform_state.id
-    region         = var.aws_region
-    key            = "terraform.tfstate" # This will be overridden per environment
-    dynamodb_table = aws_dynamodb_table.terraform_locks.id
-    encrypt        = true
-  }
-}
-
-output "gcp_backend_config" {
-  description = "GCP Storage backend configuration for Terraform"
-  value = {
-    bucket = google_storage_bucket.terraform_state.name
-    prefix = "terraform/state" # This will be overridden per environment
-  }
-}
-
 # Generate backend configuration files
 resource "local_file" "aws_backend_config" {
   filename = "${path.module}/generated/backend-aws.tf"
@@ -195,12 +135,5 @@ resource "local_file" "aws_backend_config" {
     bucket         = aws_s3_bucket.terraform_state.id
     region         = var.aws_region
     dynamodb_table = aws_dynamodb_table.terraform_locks.id
-  })
-}
-
-resource "local_file" "gcp_backend_config" {
-  filename = "${path.module}/generated/backend-gcp.tf"
-  content  = templatefile("${path.module}/templates/backend-gcp.tf.tpl", {
-    bucket = google_storage_bucket.terraform_state.name
   })
 }

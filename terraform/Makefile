@@ -59,7 +59,7 @@ apply: ## Complete pipeline: Build → Push → Deploy infrastructure & applicat
 	@echo "======================================================================"
 	@echo "Phase 2: Applying Terraform infrastructure changes"
 	@echo "======================================================================"
-	@cd $(TG_PATH) && $(TG_CMD) apply -auto-approve
+	@cd $(TG_PATH) && $(TG_CMD) init -reconfigure && $(TG_CMD) apply -auto-approve
 	@echo ""
 	@echo "======================================================================"
 	@echo "Phase 3: Deploying applications to Kubernetes"
@@ -90,7 +90,7 @@ apply: ## Complete pipeline: Build → Push → Deploy infrastructure & applicat
 
 apply-infra-only: ## Apply only Terraform infrastructure changes (no app rebuild)
 	@echo "Applying Terraform changes for $(ENV)/$(REGION)..."
-	@cd $(TG_PATH) && $(TG_CMD) apply -auto-approve
+	@cd $(TG_PATH) && $(TG_CMD) init -reconfigure && $(TG_CMD) apply -auto-approve
 	@echo ""
 	@echo "🎉 Infrastructure Deployment Complete!"
 	@echo "======================================"

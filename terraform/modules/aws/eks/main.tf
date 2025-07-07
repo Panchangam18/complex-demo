@@ -258,22 +258,43 @@ resource "aws_iam_role_policy_attachment" "eks_nodes_ssm" {
   role       = aws_iam_role.eks_nodes.name
 }
 
+# Get the latest EKS-optimized AMI
+data "aws_ami" "eks_worker" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["amazon-eks-node-${var.cluster_version}-v*"]
+  }
+
+  filter {
+    name   = "architecture"
+    values = ["x86_64"]
+  }
+}
+
 # Launch template for node groups
 resource "aws_launch_template" "eks_nodes" {
   for_each = var.node_groups
 
   name_prefix = "${var.cluster_name}-${each.key}-"
   
+  # Specify the EKS-optimized AMI
+  image_id = data.aws_ami.eks_worker.image_id
+  
+  # User data to bootstrap nodes into the EKS cluster
+  user_data = base64encode(<<-EOF
+#!/bin/bash
+/etc/eks/bootstrap.sh ${aws_eks_cluster.main.name}
+EOF
+  )
+  
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
     http_put_response_hop_limit = 1
     instance_metadata_tags      = "enabled"
-  }
-
-  network_interfaces {
-    security_groups = [aws_security_group.eks_pods.id]
-    delete_on_termination = true
   }
 
   block_device_mappings {
@@ -317,7 +338,6 @@ resource "aws_eks_node_group" "main" {
   node_group_name = each.key
   node_role_arn   = aws_iam_role.eks_nodes.arn
   subnet_ids      = var.subnet_ids
-  version         = var.cluster_version
 
   instance_types = each.value.instance_types
 

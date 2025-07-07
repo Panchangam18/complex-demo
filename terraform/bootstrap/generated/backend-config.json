@@ -1,0 +1,78 @@
+{
+  "aws_backend_config": {
+    "sensitive": false,
+    "type": [
+      "object",
+      {
+        "bucket": "string",
+        "dynamodb_table": "string",
+        "encrypt": "bool",
+        "key": "string",
+        "region": "string"
+      }
+    ],
+    "value": {
+      "bucket": "complex-demo-tfstate-jyv43s",
+      "dynamodb_table": "complex-demo-tfstate-locks",
+      "encrypt": true,
+      "key": "terraform.tfstate",
+      "region": "us-east-2"
+    }
+  },
+  "aws_dynamodb_table_arn": {
+    "sensitive": false,
+    "type": "string",
+    "value": "arn:aws:dynamodb:us-east-2:013364997013:table/complex-demo-tfstate-locks"
+  },
+  "aws_dynamodb_table_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "complex-demo-tfstate-locks"
+  },
+  "aws_s3_bucket_arn": {
+    "sensitive": false,
+    "type": "string",
+    "value": "arn:aws:s3:::complex-demo-tfstate-jyv43s"
+  },
+  "aws_s3_bucket_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "complex-demo-tfstate-jyv43s"
+  },
+  "backend_configuration": {
+    "sensitive": false,
+    "type": [
+      "object",
+      {
+        "aws": [
+          "object",
+          {
+            "backend": "string",
+            "config": [
+              "object",
+              {
+                "bucket": "string",
+                "dynamodb_table": "string",
+                "encrypt": "bool",
+                "key": "string",
+                "region": "string"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "value": {
+      "aws": {
+        "backend": "s3",
+        "config": {
+          "bucket": "complex-demo-tfstate-jyv43s",
+          "dynamodb_table": "complex-demo-tfstate-locks",
+          "encrypt": true,
+          "key": "ENV/REGION/terraform.tfstate",
+          "region": "us-east-2"
+        }
+      }
+    }
+  }
+}

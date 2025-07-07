@@ -59,6 +59,9 @@ cat > /etc/consul.d/consul.json <<EOF
     "down_policy": "extend-cache"
   },
 %{ endif ~}
+%{ if wan_federation_secret != "" ~}
+  "wan_federation_secret": "${wan_federation_secret}",
+%{ endif ~}
   "performance": {
     "raft_multiplier": 1
   }
@@ -136,6 +139,64 @@ fi
 echo "Installing Envoy for Consul Connect..."
 curl -L https://getenvoy.io/cli | bash -s -- -b /usr/local/bin
 /usr/local/bin/getenvoy run standard:1.22.2 -- --version || true
+%{ endif ~}
+
+# Configure mesh gateway for WAN federation
+%{ if wan_federation_secret != "" ~}
+echo "Configuring mesh gateway for WAN federation..."
+
+# Create mesh gateway configuration
+cat > /etc/consul.d/mesh-gateway.json <<EOF
+{
+  "service": {
+    "name": "mesh-gateway",
+    "kind": "mesh-gateway",
+    "port": 8443,
+    "proxy": {
+      "config": {
+        "envoy_mesh_gateway_bind_tagged_addresses": true,
+        "envoy_mesh_gateway_bind_addresses": {
+          "wan": {
+            "address": "{{ GetPrivateInterfaces | include \"network\" \"10.0.0.0/8\" | attr \"address\" }}",
+            "port": 8443
+          }
+        }
+      }
+    }
+  }
+}
+EOF
+
+# Create mesh gateway systemd service
+cat > /etc/systemd/system/consul-mesh-gateway.service <<EOF
+[Unit]
+Description=Consul Mesh Gateway
+Documentation=https://www.consul.io/
+Requires=consul.service
+After=consul.service
+ConditionFileNotEmpty=/etc/consul.d/mesh-gateway.json
+
+[Service]
+Type=exec
+User=consul
+Group=consul
+ExecStart=/usr/local/bin/consul connect envoy -mesh-gateway -register -service mesh-gateway -address "{{ GetPrivateInterfaces | include \"network\" \"10.0.0.0/8\" | attr \"address\" }}:8443"
+ExecStop=/bin/kill -TERM \$MAINPID
+Restart=on-failure
+RestartSec=2
+KillMode=mixed
+KillSignal=SIGINT
+TimeoutStopSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable and start mesh gateway service
+systemctl daemon-reload
+systemctl enable consul-mesh-gateway
+systemctl start consul-mesh-gateway
 %{ endif ~}
 
 # Configure log rotation

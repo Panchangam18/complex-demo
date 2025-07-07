@@ -49,6 +49,7 @@ resource "kubernetes_secret" "wan_federation" {
     gossipEncryptionKey = var.gossip_key 
     caCert             = ""  # Will be populated by Consul
     caKey              = ""  # Will be populated by Consul
+    serverConfigJSON   = var.wan_federation_secret
   }
 
   type = "Opaque"
@@ -106,5 +107,5 @@ resource "helm_release" "consul" {
   # Wait for deployment to be ready
   wait          = true
   wait_for_jobs = true
-  timeout       = 120  # 2 minutes timeout - fail fast
+  timeout       = 300  # 5 minutes timeout - allow time for mesh gateways
 } 

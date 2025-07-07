@@ -28,6 +28,11 @@ resource "azurerm_resource_group" "network" {
       Purpose     = "Network Infrastructure"
     }
   )
+  
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = [tags]
+  }
 }
 
 # Virtual Network

@@ -18,14 +18,15 @@ output "aws_dynamodb_table_arn" {
   value       = aws_dynamodb_table.terraform_locks.arn
 }
 
-output "gcp_storage_bucket_name" {
-  description = "Name of the GCS bucket for Terraform state"
-  value       = google_storage_bucket.terraform_state.name
-}
-
-output "gcp_storage_bucket_url" {
-  description = "URL of the GCS bucket for Terraform state"
-  value       = google_storage_bucket.terraform_state.url
+output "aws_backend_config" {
+  description = "AWS S3 backend configuration for Terraform"
+  value = {
+    bucket         = aws_s3_bucket.terraform_state.id
+    region         = var.aws_region
+    key            = "terraform.tfstate" # This will be overridden per environment
+    dynamodb_table = aws_dynamodb_table.terraform_locks.id
+    encrypt        = true
+  }
 }
 
 output "backend_configuration" {
@@ -39,13 +40,6 @@ output "backend_configuration" {
         region         = var.aws_region
         dynamodb_table = aws_dynamodb_table.terraform_locks.id
         encrypt        = true
-      }
-    }
-    gcp = {
-      backend = "gcs"
-      config = {
-        bucket = google_storage_bucket.terraform_state.name
-        prefix = "terraform/state/ENV/REGION"
       }
     }
   }

@@ -7,11 +7,15 @@ global:
     secretName: consul-gossip-encryption-key
     secretKey: key
 
-  # Federation configuration for WAN joining
+  # Simplified federation configuration 
   federation:
-    enabled: ${wan_federation_secret != ""}
+    enabled: true
     k8sAuthMethodHost: https://kubernetes.default.svc.cluster.local:443
-    
+    primaryDatacenter: ${primary_datacenter}
+    primaryGateways: ${primary_consul_servers}
+    k8sSecretName: consul-federation
+    k8sSecretKey: serverConfigJSON
+
   # ACLs configuration
   acls:
     manageSystemACLs: ${enable_acls}
@@ -39,14 +43,11 @@ client:
       memory: "128Mi"
       cpu: "100m"
   
-  # Join the primary datacenter
-  join: ${primary_consul_servers}
-  
   extraConfig: |
     {
       "datacenter": "${datacenter_name}",
       "primary_datacenter": "${primary_datacenter}",
-      "retry_join": ${primary_consul_servers},
+      "retry_join_wan": ${primary_consul_servers},
       "log_level": "INFO",
       "ports": {
         "grpc": 8502
@@ -76,6 +77,10 @@ connectInject:
   # Only inject when explicitly requested
   default: false
 
+  # Disable Gateway API CRDs to prevent conflicts with GKE Autopilot
+  apiGateway:
+    manageExternalCRDs: false
+
 # Simplified service catalog sync
 syncCatalog:
   enabled: ${enable_sync_catalog}
@@ -93,9 +98,31 @@ syncCatalog:
   
   consulNodeName: "k8s-${datacenter_name}"
 
-# Disable heavy components for now
+# Enable mesh gateway for cross-cloud communication
 meshGateway:
-  enabled: false
+  enabled: true
+  replicas: 1
+  
+  # Service configuration for mesh gateway  
+  service:
+    type: LoadBalancer
+    port: 8443
+    annotations: |
+      cloud.google.com/load-balancer-type: "External"
+  
+  # Resource allocation
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+  
+  # Mesh gateway configuration
+  wanAddress:
+    source: "Service"
+    port: 8443
 
 ingressGateways:
   enabled: false

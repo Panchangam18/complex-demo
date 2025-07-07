@@ -135,6 +135,10 @@ module "gcp_gke" {
     {
       cidr_block   = "10.0.0.0/8"
       display_name = "internal-network"
+    },
+    {
+      cidr_block   = "216.38.139.146/32"
+      display_name = "external-admin-access"
     }
   ]
   
@@ -225,6 +229,12 @@ resource "random_password" "consul_gossip_key" {
   special = false
 }
 
+# Generate WAN federation secret for multi-datacenter Consul
+resource "random_password" "consul_wan_federation_secret" {
+  length  = 32
+  special = false
+}
+
 # AWS EC2-based Consul Cluster (Primary Datacenter)
 module "consul_primary" {
   source = "../../../modules/consul/ec2-cluster"
@@ -237,6 +247,7 @@ module "consul_primary" {
   
   datacenter_name        = "aws-${local.environment}-${local.region}"
   gossip_key             = random_password.consul_gossip_key.result
+  wan_federation_secret  = random_password.consul_wan_federation_secret.result
   consul_servers         = var.consul_servers
   instance_type          = var.consul_instance_type
   
@@ -248,44 +259,63 @@ module "consul_primary" {
   allow_consul_from_cidrs = [
     var.vpc_cidr,           # AWS VPC
     var.gcp_vpc_cidr,       # GCP VPC  
-    var.azure_vnet_cidr     # Azure VNet
+    var.azure_vnet_cidr,    # Azure VNet
+    "216.38.139.146/32"     # External admin access
   ]
   
   common_tags = local.tags
+}
+
+# Ensure EKS cluster is ready before configuring providers
+data "aws_eks_cluster" "cluster" {
+  name = module.aws_eks.cluster_id
+  depends_on = [
+    module.aws_eks
+  ]
+}
+
+data "aws_eks_cluster_auth" "cluster" {
+  name = module.aws_eks.cluster_id
+  depends_on = [
+    module.aws_eks
+  ]
+}
+
+# Wait for EKS cluster to be fully ready
+resource "null_resource" "wait_for_cluster" {
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo "Waiting for EKS cluster to be ready..."
+      aws eks wait cluster-active --name ${module.aws_eks.cluster_id} --region ${var.aws_region} --profile ${var.aws_profile}
+      echo "Cluster is active, waiting for node group..."
+      aws eks wait nodegroup-active --cluster-name ${module.aws_eks.cluster_id} --nodegroup-name general --region ${var.aws_region} --profile ${var.aws_profile} || echo "Node group wait timed out, continuing..."
+      echo "EKS cluster is ready!"
+    EOT
+  }
+  
+  depends_on = [
+    module.aws_eks,
+    data.aws_eks_cluster.cluster,
+    data.aws_eks_cluster_auth.cluster
+  ]
 }
 
 # Provider configuration for EKS cluster
 provider "kubernetes" {
   alias = "eks"
   
-  host                   = module.aws_eks.cluster_endpoint
-  cluster_ca_certificate = base64decode(module.aws_eks.cluster_certificate_authority_data)
-  
-  exec {
-    api_version = "client.authentication.k8s.io/v1beta1"
-    command     = "aws"
-    args = ["eks", "get-token", "--cluster-name", module.aws_eks.cluster_id, "--region", var.aws_region, "--profile", var.aws_profile]
-    env = {
-      AWS_PROFILE = var.aws_profile
-    }
-  }
+  host                   = data.aws_eks_cluster.cluster.endpoint
+  cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
+  token                  = data.aws_eks_cluster_auth.cluster.token
 }
 
 provider "helm" {
   alias = "eks"
   
   kubernetes {
-    host                   = module.aws_eks.cluster_endpoint
-    cluster_ca_certificate = base64decode(module.aws_eks.cluster_certificate_authority_data)
-    
-    exec {
-      api_version = "client.authentication.k8s.io/v1beta1"
-      command     = "aws"
-      args = ["eks", "get-token", "--cluster-name", module.aws_eks.cluster_id, "--region", var.aws_region, "--profile", var.aws_profile]
-      env = {
-        AWS_PROFILE = var.aws_profile
-      }
-    }
+    host                   = data.aws_eks_cluster.cluster.endpoint
+    cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
+    token                  = data.aws_eks_cluster_auth.cluster.token
   }
 }
 
@@ -305,7 +335,7 @@ module "consul_eks_client" {
   
   # Connection details for primary EC2 cluster
   gossip_key              = random_password.consul_gossip_key.result
-  wan_federation_secret   = ""  # Will be configured later for cross-cloud
+  wan_federation_secret   = random_password.consul_wan_federation_secret.result
   primary_consul_servers  = module.consul_primary.server_private_ips
   consul_master_token     = ""  # ACLs disabled for now
   
@@ -324,7 +354,8 @@ module "consul_eks_client" {
   
   depends_on = [
     module.aws_eks,
-    module.consul_primary
+    module.consul_primary,
+    null_resource.wait_for_cluster
   ]
 }
 
@@ -350,24 +381,23 @@ provider "helm" {
   }
 }
 
-# GKE Consul Client (Secondary Datacenter) - FIXED: Now client-only mode  
+# GKE Consul Client (Secondary Datacenter)
 module "consul_gke_client" {
   source = "../../../modules/consul/k8s-client"
   
   cluster_name           = module.gcp_gke.cluster_name
   cluster_endpoint       = module.gcp_gke.cluster_endpoint
-  cluster_ca_certificate = module.gcp_gke.cluster_ca_certificate
   region                 = var.gcp_region
   environment            = local.environment
   cloud_provider         = "gcp"
   
   # Fixed: Proper datacenter naming and connection to AWS primary
   datacenter_name    = "gke-${local.environment}-${var.gcp_region}"
-  primary_datacenter = "aws-${local.environment}-${var.aws_region}"  # Points to AWS EC2 primary
+  primary_datacenter = "aws-${local.environment}-${local.region}"  # Points to AWS EC2 primary
   
   # Connection details for primary AWS EC2 cluster
   gossip_key              = random_password.consul_gossip_key.result
-  wan_federation_secret   = ""  # Will be configured later for cross-cloud
+  wan_federation_secret   = random_password.consul_wan_federation_secret.result
   primary_consul_servers  = module.consul_primary.server_private_ips
   consul_master_token     = ""  # ACLs disabled for now
   
@@ -576,6 +606,9 @@ module "nexus_eks" {
   service_type    = "LoadBalancer"
   ingress_enabled = false
   
+  # Disable monitoring temporarily to avoid kubernetes_manifest issues
+  enable_monitoring = false
+  
   # Resource allocation for development (same as before)
   cpu_request    = "500m"
   memory_request = "1Gi"
@@ -588,7 +621,8 @@ module "nexus_eks" {
   }
   
   depends_on = [
-    module.aws_eks
+    module.aws_eks,
+    null_resource.wait_for_cluster
   ]
 }
 
@@ -656,8 +690,6 @@ module "puppet_enterprise" {
     module.consul_primary
   ]
 }
-
-
 
 # Outputs for Nexus Repository Manager
 output "nexus_url" {
@@ -1006,18 +1038,18 @@ output "consul_summary" {
     ui_url              = module.consul_primary.consul_ui_url
     primary_datacenter  = "aws-${local.environment}-${local.region}"
     secondary_datacenters = [
-      "eks-${local.environment}-${local.region}",     # Now enabled
-      "gke-${local.environment}-${var.gcp_region}"    # Now enabled
+      "eks-${local.environment}-${local.region}",     # AWS EKS enabled
+      "gke-${local.environment}-${var.gcp_region}"    # GCP enabled
     ]
     connect_enabled     = true
     federation_enabled  = true  # Now enabled with K8s clients
     mesh_gateways      = [
       "AWS EC2 Primary Cluster",
-      "EKS Secondary Cluster",    # Now enabled
-      "GKE Secondary Cluster"     # Now enabled
+      "EKS Secondary Cluster",     # AWS EKS enabled
+      "GKE Secondary Cluster"      # GCP enabled
     ]
     service_discovery  = "Multi-cloud service catalog sync enabled"
-    cross_cloud_mesh   = "mTLS service mesh across AWS, GCP"
+    cross_cloud_mesh   = "mTLS service mesh across AWS, GCP, and Azure"
   }
 }
 

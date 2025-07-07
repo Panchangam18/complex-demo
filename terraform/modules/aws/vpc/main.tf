@@ -229,6 +229,10 @@ resource "aws_cloudwatch_log_group" "flow_logs" {
   retention_in_days = 30
   
   tags = var.common_tags
+  
+  lifecycle {
+    ignore_changes = [name]
+  }
 }
 
 # IAM Role for Flow Logs

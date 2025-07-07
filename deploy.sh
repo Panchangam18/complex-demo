@@ -28,8 +28,8 @@ readonly LOG_FILE="${PROJECT_ROOT}/deployment-${TIMESTAMP}.log"
 # Default values
 ENV=${ENV:-dev}
 REGION=${REGION:-us-east-2}
-AWS_PROFILE=${AWS_PROFILE:-default}
-GCP_PROJECT_ID=${GCP_PROJECT_ID:-""}
+AWS_PROFILE=${AWS_PROFILE:-sandbox-permanent}
+GCP_PROJECT_ID=${GCP_PROJECT_ID:-"complex-demo-465023"}
 AZURE_SUBSCRIPTION_ID=${AZURE_SUBSCRIPTION_ID:-""}
 
 # Deployment control flags
@@ -101,11 +101,16 @@ check_tool_version() {
     fi
 
     local current_ver
-    # shellcheck disable=SC2086
-    current_ver=$(${cmd} --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-    if [[ -z "${current_ver}" ]]; then
-        # Some CLIs use different flag
-        current_ver=$(${cmd} version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    # Special case for kubectl
+    if [[ "${cmd}" == "kubectl" ]]; then
+        current_ver=$(kubectl version --client 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    else
+        # shellcheck disable=SC2086
+        current_ver=$(${cmd} --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        if [[ -z "${current_ver}" ]]; then
+            # Some CLIs use different flag
+            current_ver=$(${cmd} version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        fi
     fi
 
     # Fallback if still empty
@@ -129,10 +134,7 @@ check_tool_version() {
 print_banner() {
     echo -e "${GREEN}"
     cat << 'EOF'
-    if [ "$DRY_RUN" == "true" ]; then
-        echo -e "${CYAN}[DRY-RUN]${NC} $phase"
-    fi
-    log "INFO" "Starting deployment phase: $phase"
+    ╔══════════════════════════════════════════════════════════════════════════════╗
     ║                                                                              ║
     ║                🚀 MULTI-CLOUD DEVOPS PLATFORM DEPLOYMENT 🚀                ║
     ║                                                                              ║
@@ -207,9 +209,7 @@ bootstrap_terraform_backend() {
     fi
     
     # Set Terraform variables
-    export TF_VAR_aws_region="us-east-1"
-    export TF_VAR_gcp_project_id="$GCP_PROJECT_ID"
-    export TF_VAR_gcp_region="us-east1"
+    export TF_VAR_aws_region="us-east-2"
     export AWS_PROFILE="$AWS_PROFILE"
     
     if [ "$DRY_RUN" == "true" ]; then
@@ -255,9 +255,9 @@ update_terragrunt_backend_config() {
     fi
     
     # Extract backend configuration
-    local aws_bucket=$(jq -r '.aws.config.bucket' generated/backend-config.json)
-    local aws_region=$(jq -r '.aws.config.region' generated/backend-config.json)
-    local aws_table=$(jq -r '.aws.config.dynamodb_table' generated/backend-config.json)
+    local aws_bucket=$(jq -r '.aws_backend_config.value.bucket' generated/backend-config.json)
+    local aws_region=$(jq -r '.aws_backend_config.value.region' generated/backend-config.json)
+    local aws_table=$(jq -r '.aws_backend_config.value.dynamodb_table' generated/backend-config.json)
     
     # Update terragrunt.hcl
     cd "$PROJECT_ROOT/terraform"
