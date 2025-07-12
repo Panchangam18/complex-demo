@@ -1,0 +1,202 @@
+goal: Audit existing aws cost resources
+clone_codebase: true
+enable_human_input: false
+triggers:
+
+trigger_id: ''
+
+  project_id: 84de7b15-6c86-48f2-b351-91a2331e6c20
+  display_name: testing
+  provider: aws
+  config:
+    event_pattern:
+      source:
+  - aws.ec2
+
+      detail-type:
+  - ''
+
+    service: ec2
+    event_type: Instance State Change
+    resource_arn: ''
+  target_url: ''
+  enabled: true
+  error_count: 0
+  created_at: '2025-07-11T20:11:44.918Z'
+  updated_at: '2025-07-11T20:11:44.918Z'
+
+trigger_id: ''
+
+  project_id: 84de7b15-6c86-48f2-b351-91a2331e6c20
+  display_name: mloojl
+  provider: cronscheduler
+  config:
+    cron_expression: 0 0 * * *
+  target_url: ''
+  enabled: true
+  error_count: 0
+  created_at: '2025-07-12T00:13:57.691Z'
+  updated_at: '2025-07-12T00:13:57.691Z'
+steps:
+
+name: Get all the cost category definitions
+
+  type: integration
+  integration: aws
+  method: ce.ListCostCategoryDefinitions
+
+name: Analyze cost categories
+
+  type: integration
+  integration: aws
+  method: ce.DescribeCostCategoryDefinition
+  parameters:
+    CostCategoryArn: ''
+
+name: Get all our cost allocation tags
+
+  type: integration
+  integration: aws
+  method: ce.ListCostAllocationTags
+  parameters:
+    Status: Active
+    TagKeys: null
+
+name: Get AWS Budgets
+
+  type: integration
+  integration: aws
+  method: budgets.DescribeBudgets
+  parameters:
+    MaxResults: ''
+    AccountId: ''
+
+name: Get Budget Performance History
+
+  type: integration
+  integration: aws
+  method: budgets.DescribeBudgetPerformanceHistory
+
+name: Get Budget Notifications
+
+  type: integration
+  integration: aws
+  method: budgets.DescribeNotificationsForBudget
+
+name: Get Budget Subscribers
+
+  type: integration
+  integration: aws
+  method: budgets.DescribeSubscribersForNotification
+  parameters:
+    AccountId: test
+    BudgetName: hello
+
+name: Get Cost and Usage
+
+  type: integration
+  integration: aws
+  method: ce.GetCostAndUsage
+  parameters:
+    TimePeriod:
+      Start: '2024-01-01'
+      End: '2024-12-31'
+    Granularity: MONTHLY
+    Metrics:
+- AmortizedCost
+
+- UnblendedCost
+
+
+name: Get Cost Forecast
+
+  type: integration
+  integration: aws
+  method: ce.GetCostForecast
+  parameters:
+    TimePeriod:
+      Start: '2024-07-01'
+      End: '2024-12-31'
+    Metric: UNBLENDED_COST
+    Granularity: MONTHLY
+
+name: Get Reservation Coverage
+
+  type: integration
+  integration: aws
+  method: ce.GetReservationCoverage
+  parameters:
+    TimePeriod:
+      Start: '2024-01-01'
+      End: '2024-12-31'
+    Granularity: MONTHLY
+
+name: Get Savings Plans Coverage
+
+  type: integration
+  integration: aws
+  method: ce.GetSavingsPlansCoverage
+  parameters:
+    TimePeriod:
+      Start: '2024-01-01'
+      End: '2024-12-31'
+    Granularity: MONTHLY
+
+name: Get Savings Plans Utilization
+
+  type: integration
+  integration: aws
+  method: ce.GetSavingsPlansUtilization
+  parameters:
+    TimePeriod:
+      Start: '2024-01-01'
+      End: '2024-12-31'
+
+name: Get Savings Plans Utilization Details
+
+  type: integration
+  integration: aws
+  method: ce.GetSavingsPlansUtilizationDetails
+  parameters:
+    TimePeriod:
+      Start: '2024-01-01'
+      End: '2024-12-31'
+
+name: Get Rightsizing Recommendations
+
+  type: integration
+  integration: aws
+  method: ce.GetRightsizingRecommendation
+  parameters:
+    Service: AmazonEC2
+
+name: Get Reservation Utilization
+
+  type: integration
+  integration: aws
+  method: ce.GetReservationUtilization
+  parameters:
+    TimePeriod:
+      Start: '2024-01-01'
+      End: '2024-12-31'
+
+name: Get Cost Anomalies
+
+  type: integration
+  integration: aws
+  method: ce.GetAnomalies
+  parameters:
+    DateInterval:
+      StartDate: '2024-01-01'
+      EndDate: '2024-12-31'
+
+name: Get Cost and Usage Report Definitions
+
+  type: integration
+  integration: aws
+  method: cur.DescribeReportDefinitions
+
+name: Write a formal report in markdown
+
+  type: prompt
+  prompt: Write a detailed prompt in markdown of our audit
