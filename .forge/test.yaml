@@ -2,20 +2,15 @@ goal: Audit existing aws cost resources
 clone_codebase: true
 enable_human_input: false
 triggers:
-
-trigger_id: ''
-
-  project_id: 84de7b15-6c86-48f2-b351-91a2331e6c20
+- trigger_id: ''
   display_name: testing
   provider: aws
   config:
     event_pattern:
       source:
-  - aws.ec2
-
+      - aws.ec2
       detail-type:
-  - ''
-
+      - ''
     service: ec2
     event_type: Instance State Change
     resource_arn: ''
@@ -24,9 +19,7 @@ trigger_id: ''
   error_count: 0
   created_at: '2025-07-11T20:11:44.918Z'
   updated_at: '2025-07-11T20:11:44.918Z'
-
-trigger_id: ''
-
+- trigger_id: ''
   project_id: 84de7b15-6c86-48f2-b351-91a2331e6c20
   display_name: mloojl
   provider: cronscheduler
@@ -38,62 +31,46 @@ trigger_id: ''
   created_at: '2025-07-12T00:13:57.691Z'
   updated_at: '2025-07-12T00:13:57.691Z'
 steps:
-
-name: Get all the cost category definitions
-
+- name: Get all the cost category definitions
   type: integration
   integration: aws
   method: ce.ListCostCategoryDefinitions
-
-name: Analyze cost categories
-
+- name: Analyze cost categories
   type: integration
   integration: aws
   method: ce.DescribeCostCategoryDefinition
   parameters:
     CostCategoryArn: ''
-
-name: Get all our cost allocation tags
-
+- name: Get all our cost allocation tags
   type: integration
   integration: aws
   method: ce.ListCostAllocationTags
   parameters:
     Status: Active
     TagKeys: null
-
-name: Get AWS Budgets
-
+- name: Get AWS Budgets
   type: integration
   integration: aws
   method: budgets.DescribeBudgets
   parameters:
     MaxResults: ''
     AccountId: ''
-
-name: Get Budget Performance History
-
+- name: Get Budget Performance History
   type: integration
   integration: aws
   method: budgets.DescribeBudgetPerformanceHistory
-
-name: Get Budget Notifications
-
+- name: Get Budget Notifications
   type: integration
   integration: aws
   method: budgets.DescribeNotificationsForBudget
-
-name: Get Budget Subscribers
-
+- name: Get Budget Subscribers
   type: integration
   integration: aws
   method: budgets.DescribeSubscribersForNotification
   parameters:
     AccountId: test
     BudgetName: hello
-
-name: Get Cost and Usage
-
+- name: Get Cost and Usage
   type: integration
   integration: aws
   method: ce.GetCostAndUsage
@@ -103,13 +80,9 @@ name: Get Cost and Usage
       End: '2024-12-31'
     Granularity: MONTHLY
     Metrics:
-- AmortizedCost
-
-- UnblendedCost
-
-
-name: Get Cost Forecast
-
+    - AmortizedCost
+    - UnblendedCost
+- name: Get Cost Forecast
   type: integration
   integration: aws
   method: ce.GetCostForecast
@@ -119,9 +92,7 @@ name: Get Cost Forecast
       End: '2024-12-31'
     Metric: UNBLENDED_COST
     Granularity: MONTHLY
-
-name: Get Reservation Coverage
-
+- name: Get Reservation Coverage
   type: integration
   integration: aws
   method: ce.GetReservationCoverage
@@ -130,9 +101,7 @@ name: Get Reservation Coverage
       Start: '2024-01-01'
       End: '2024-12-31'
     Granularity: MONTHLY
-
-name: Get Savings Plans Coverage
-
+- name: Get Savings Plans Coverage
   type: integration
   integration: aws
   method: ce.GetSavingsPlansCoverage
@@ -141,9 +110,7 @@ name: Get Savings Plans Coverage
       Start: '2024-01-01'
       End: '2024-12-31'
     Granularity: MONTHLY
-
-name: Get Savings Plans Utilization
-
+- name: Get Savings Plans Utilization
   type: integration
   integration: aws
   method: ce.GetSavingsPlansUtilization
@@ -151,9 +118,7 @@ name: Get Savings Plans Utilization
     TimePeriod:
       Start: '2024-01-01'
       End: '2024-12-31'
-
-name: Get Savings Plans Utilization Details
-
+- name: Get Savings Plans Utilization Details
   type: integration
   integration: aws
   method: ce.GetSavingsPlansUtilizationDetails
@@ -161,17 +126,13 @@ name: Get Savings Plans Utilization Details
     TimePeriod:
       Start: '2024-01-01'
       End: '2024-12-31'
-
-name: Get Rightsizing Recommendations
-
+- name: Get Rightsizing Recommendations
   type: integration
   integration: aws
   method: ce.GetRightsizingRecommendation
   parameters:
     Service: AmazonEC2
-
-name: Get Reservation Utilization
-
+- name: Get Reservation Utilization
   type: integration
   integration: aws
   method: ce.GetReservationUtilization
@@ -179,9 +140,7 @@ name: Get Reservation Utilization
     TimePeriod:
       Start: '2024-01-01'
       End: '2024-12-31'
-
-name: Get Cost Anomalies
-
+- name: Get Cost Anomalies
   type: integration
   integration: aws
   method: ce.GetAnomalies
@@ -189,14 +148,10 @@ name: Get Cost Anomalies
     DateInterval:
       StartDate: '2024-01-01'
       EndDate: '2024-12-31'
-
-name: Get Cost and Usage Report Definitions
-
+- name: Get Cost and Usage Report Definitions
   type: integration
   integration: aws
   method: cur.DescribeReportDefinitions
-
-name: Write a formal report in markdown
-
+- name: Write a formal report in markdown
   type: prompt
   prompt: Write a detailed prompt in markdown of our audit
