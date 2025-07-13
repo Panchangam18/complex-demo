@@ -15,6 +15,12 @@ variable "vpc_cidr" {
   type        = string
 }
 
+variable "key_name" {
+  description = "Name of the AWS key pair for EC2 instances"
+  type        = string
+  default     = "coolest-aws-key"
+}
+
 variable "gcp_project_id" {
   description = "GCP project ID"
   type        = string
