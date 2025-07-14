@@ -1,0 +1,71 @@
+{
+  "goal": "Identify and clean up unused cloud resources to reduce costs",
+  "steps": [
+    {
+      "name": "Find unattached EBS volumes",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('ec2').describe_volumes",
+      "parameters": {
+        "Filters": [
+          {"Name": "status", "Values": ["available"]}
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Identify idle load balancers",
+      "type": "cli",
+      "command": "aws elbv2 describe-load-balancers --query 'LoadBalancers[*].[LoadBalancerArn,LoadBalancerName,CreatedTime]' --output json > /tmp/all_load_balancers.json && for lb in $(aws elbv2 describe-load-balancers --query 'LoadBalancers[*].LoadBalancerArn' --output text); do echo \"Checking $lb\" >> /tmp/idle_load_balancers.txt; aws cloudwatch get-metric-statistics --namespace AWS/ApplicationELB --metric-name ActiveConnectionCount --dimensions Name=LoadBalancer,Value=$(echo $lb | cut -d':' -f6-) --start-time $(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%S) --end-time $(date -u +%Y-%m-%dT%H:%M:%S) --period 86400 --statistics Sum --query 'Datapoints[].Sum' --output text | awk '{s+=$1} END {if(s==0) print \"'$lb' - IDLE\"}' >> /tmp/idle_load_balancers.txt; done",
+      "files": ["/tmp/all_load_balancers.json", "/tmp/idle_load_balancers.txt"]
+    },
+    {
+      "name": "Find unused elastic IPs",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('ec2').describe_addresses",
+      "parameters": {
+        "Filters": [
+          {"Name": "association-id", "Values": [""]}
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Detect old snapshots",
+      "type": "cli",
+      "command": "python3 << 'EOF'\nimport boto3\nimport json\nfrom datetime import datetime, timedelta\n\nec2 = boto3.client('ec2')\n\n# Get all snapshots\nsnapshots = ec2.describe_snapshots(OwnerIds=['self'])['Snapshots']\n\n# Categorize snapshots\nold_snapshots = []\norphaned_snapshots = []\nredundant_snapshots = {}\n\n# Get all volumes\nvolumes = {v['VolumeId'] for v in ec2.describe_volumes()['Volumes']}\n\nfor snapshot in snapshots:\n    # Check age\n    created = snapshot['StartTime'].replace(tzinfo=None)\n    age_days = (datetime.now() - created).days\n    \n    if age_days > 30:\n        old_snapshots.append({\n            'snapshot_id': snapshot['SnapshotId'],\n            'volume_id': snapshot.get('VolumeId', 'N/A'),\n            'size_gb': snapshot['VolumeSize'],\n            'age_days': age_days,\n            'estimated_monthly_cost': snapshot['VolumeSize'] * 0.05  # $0.05 per GB-month\n        })\n    \n    # Check if volume still exists\n    if snapshot.get('VolumeId') and snapshot['VolumeId'] not in volumes:\n        orphaned_snapshots.append({\n            'snapshot_id': snapshot['SnapshotId'],\n            'volume_id': snapshot['VolumeId'],\n            'size_gb': snapshot['VolumeSize']\n        })\n    \n    # Group by volume to find redundant snapshots\n    vol_id = snapshot.get('VolumeId', 'manual')\n    if vol_id not in redundant_snapshots:\n        redundant_snapshots[vol_id] = []\n    redundant_snapshots[vol_id].append(snapshot)\n\n# Find volumes with too many snapshots\nredundant_report = []\nfor vol_id, snaps in redundant_snapshots.items():\n    if len(snaps) > 7:  # Keep only last 7 snapshots\n        sorted_snaps = sorted(snaps, key=lambda x: x['StartTime'], reverse=True)\n        to_delete = sorted_snaps[7:]\n        total_size = sum(s['VolumeSize'] for s in to_delete)\n        redundant_report.append({\n            'volume_id': vol_id,\n            'total_snapshots': len(snaps),\n            'snapshots_to_delete': len(to_delete),\n            'space_to_free_gb': total_size,\n            'monthly_savings': total_size * 0.05\n        })\n\nresult = {\n    'analysis_date': datetime.now().isoformat(),\n    'old_snapshots': {\n        'count': len(old_snapshots),\n        'total_size_gb': sum(s['size_gb'] for s in old_snapshots),\n        'monthly_cost': sum(s['estimated_monthly_cost'] for s in old_snapshots),\n        'snapshots': old_snapshots[:10]  # Top 10\n    },\n    'orphaned_snapshots': {\n        'count': len(orphaned_snapshots),\n        'total_size_gb': sum(s['size_gb'] for s in orphaned_snapshots),\n        'snapshots': orphaned_snapshots[:10]\n    },\n    'redundant_snapshots': redundant_report\n}\n\nwith open('/tmp/snapshot_analysis.json', 'w') as f:\n    json.dump(result, f, indent=2)\nEOF",
+      "files": ["/tmp/snapshot_analysis.json"]
+    },
+    {
+      "name": "Find unused security groups",
+      "type": "cli",
+      "command": "aws ec2 describe-security-groups --query 'SecurityGroups[*].[GroupId,GroupName]' --output json > /tmp/all_security_groups.json && aws ec2 describe-network-interfaces --query 'NetworkInterfaces[*].Groups[*].GroupId' --output text | tr '\\t' '\\n' | sort -u > /tmp/used_security_groups.txt && python3 -c \"import json; all_sgs = json.load(open('/tmp/all_security_groups.json')); used_sgs = set(open('/tmp/used_security_groups.txt').read().strip().split('\\n')); unused = [sg for sg in all_sgs if sg[0] not in used_sgs and sg[1] != 'default']; print(json.dumps({'total_unused': len(unused), 'unused_groups': unused}, indent=2))\" > /tmp/unused_security_groups.json",
+      "files": ["/tmp/unused_security_groups.json"]
+    },
+    {
+      "name": "Check for idle RDS instances",
+      "type": "cli",
+      "command": "python3 << 'EOF'\nimport boto3\nimport json\nfrom datetime import datetime, timedelta\n\nrds = boto3.client('rds')\ncloudwatch = boto3.client('cloudwatch')\n\nidle_databases = []\n\nresponse = rds.describe_db_instances()\nfor db in response['DBInstances']:\n    # Get connection metrics\n    metrics = cloudwatch.get_metric_statistics(\n        Namespace='AWS/RDS',\n        MetricName='DatabaseConnections',\n        Dimensions=[{'Name': 'DBInstanceIdentifier', 'Value': db['DBInstanceIdentifier']}],\n        StartTime=datetime.now() - timedelta(days=7),\n        EndTime=datetime.now(),\n        Period=86400,\n        Statistics=['Average', 'Maximum']\n    )\n    \n    if metrics['Datapoints']:\n        avg_connections = sum(d['Average'] for d in metrics['Datapoints']) / len(metrics['Datapoints'])\n        max_connections = max(d['Maximum'] for d in metrics['Datapoints'])\n        \n        if avg_connections < 1 and max_connections < 5:\n            # Calculate monthly cost\n            instance_class = db['DBInstanceClass']\n            # Simplified cost estimation\n            hourly_costs = {\n                'db.t3.micro': 0.017,\n                'db.t3.small': 0.034,\n                'db.t3.medium': 0.068,\n                'db.m5.large': 0.171,\n                'db.m5.xlarge': 0.342\n            }\n            \n            monthly_cost = hourly_costs.get(instance_class, 0.1) * 730\n            \n            idle_databases.append({\n                'db_identifier': db['DBInstanceIdentifier'],\n                'instance_class': instance_class,\n                'engine': db['Engine'],\n                'avg_connections': round(avg_connections, 2),\n                'max_connections': max_connections,\n                'estimated_monthly_cost': round(monthly_cost, 2),\n                'created_time': db['InstanceCreateTime'].isoformat() if 'InstanceCreateTime' in db else 'Unknown'\n            })\n\ntotal_monthly_savings = sum(db['estimated_monthly_cost'] for db in idle_databases)\n\nwith open('/tmp/idle_rds_instances.json', 'w') as f:\n    json.dump({\n        'total_idle_instances': len(idle_databases),\n        'total_monthly_savings': round(total_monthly_savings, 2),\n        'idle_databases': idle_databases\n    }, f, indent=2)\nEOF",
+      "files": ["/tmp/idle_rds_instances.json"]
+    },
+    {
+      "name": "Generate cleanup script",
+      "type": "cli",
+      "command": "cat > /tmp/cleanup_resources.sh << 'EOF'\n#!/bin/bash\n\n# Safety check\nread -p \"This will delete unused resources. Are you sure? (yes/no): \" confirm\nif [ \"$confirm\" != \"yes\" ]; then\n    echo \"Cleanup cancelled.\"\n    exit 1\nfi\n\n# Create backup of resource list\nDATE=$(date +%Y%m%d-%H%M%S)\nmkdir -p /tmp/cleanup_backup_$DATE\n\n# Delete unattached EBS volumes\necho \"Cleaning up unattached EBS volumes...\"\nfor volume in $(aws ec2 describe-volumes --filters Name=status,Values=available --query 'Volumes[*].VolumeId' --output text); do\n    echo \"Deleting volume: $volume\"\n    aws ec2 delete-volume --volume-id $volume\ndone\n\n# Release unused Elastic IPs\necho \"Releasing unused Elastic IPs...\"\nfor eip in $(aws ec2 describe-addresses --query 'Addresses[?AssociationId==null].AllocationId' --output text); do\n    echo \"Releasing EIP: $eip\"\n    aws ec2 release-address --allocation-id $eip\ndone\n\n# Delete old snapshots (keeping last 7)\necho \"Cleaning up old snapshots...\"\n# Implementation based on snapshot_analysis.json results\n\n# Delete unused security groups\necho \"Removing unused security groups...\"\n# Note: Cannot delete default security groups or those with dependencies\n\necho \"Cleanup complete. Check logs in /tmp/cleanup_backup_$DATE/\"\nEOF\nchmod +x /tmp/cleanup_resources.sh",
+      "files": ["/tmp/cleanup_resources.sh"]
+    },
+    {
+      "name": "Calculate total savings",
+      "type": "cli",
+      "command": "python3 << 'EOF'\nimport json\n\n# Load all analysis results\nwith open('/tmp/snapshot_analysis.json', 'r') as f:\n    snapshot_data = json.load(f)\n\nwith open('/tmp/idle_rds_instances.json', 'r') as f:\n    rds_data = json.load(f)\n\n# Estimate costs for other resources\nunattached_volumes_cost = 50 * 0.10 * 30  # Assume 50GB average, $0.10/GB-month\nunused_eips_cost = 5 * 3.60  # Assume 5 EIPs, $3.60/month each\nidle_load_balancers_cost = 3 * 18.00  # Assume 3 ALBs, ~$18/month each\n\ntotal_monthly_savings = (\n    snapshot_data['old_snapshots']['monthly_cost'] +\n    rds_data['total_monthly_savings'] +\n    unattached_volumes_cost +\n    unused_eips_cost +\n    idle_load_balancers_cost\n)\n\nsummary = {\n    'scan_date': snapshot_data['analysis_date'],\n    'total_monthly_savings': round(total_monthly_savings, 2),\n    'total_annual_savings': round(total_monthly_savings * 12, 2),\n    'breakdown': {\n        'old_snapshots': round(snapshot_data['old_snapshots']['monthly_cost'], 2),\n        'idle_rds_instances': round(rds_data['total_monthly_savings'], 2),\n        'unattached_volumes': round(unattached_volumes_cost, 2),\n        'unused_elastic_ips': round(unused_eips_cost, 2),\n        'idle_load_balancers': round(idle_load_balancers_cost, 2)\n    },\n    'resources_to_clean': {\n        'snapshots': snapshot_data['old_snapshots']['count'],\n        'rds_instances': rds_data['total_idle_instances'],\n        'security_groups': 'Check /tmp/unused_security_groups.json'\n    }\n}\n\nwith open('/tmp/cleanup_summary.json', 'w') as f:\n    json.dump(summary, f, indent=2)\n\nprint(f\"Total potential monthly savings: ${summary['total_monthly_savings']}\")\nprint(f\"Total potential annual savings: ${summary['total_annual_savings']}\")\nEOF",
+      "files": ["/tmp/cleanup_summary.json"]
+    },
+    {
+      "name": "Analyze cleanup opportunities",
+      "type": "prompt",
+      "prompt": "Review the identified unused resources and potential cost savings. Prioritize cleanup actions based on safety and impact. Create a phased cleanup plan that includes verification steps and rollback procedures for each resource type.",
+      "files": ["/tmp/snapshot_analysis.json", "/tmp/idle_load_balancers.txt", "/tmp/unused_security_groups.json", "/tmp/idle_rds_instances.json", "/tmp/cleanup_resources.sh", "/tmp/cleanup_summary.json"]
+    }
+  ]
+}

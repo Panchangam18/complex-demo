@@ -1,0 +1,64 @@
+{
+  "goal": "Detect and remediate infrastructure drift from Terraform state",
+  "steps": [
+    {
+      "name": "Initialize Terraform backend",
+      "type": "cli",
+      "command": "cd /infrastructure && terraform init -backend-config=backend.hcl",
+      "files": []
+    },
+    {
+      "name": "Generate drift report",
+      "type": "cli",
+      "command": "cd /infrastructure && terraform plan -detailed-exitcode -out=/tmp/tfplan.binary > /tmp/drift_report.txt 2>&1; echo $? > /tmp/exit_code.txt",
+      "files": ["/tmp/drift_report.txt", "/tmp/exit_code.txt"]
+    },
+    {
+      "name": "Convert plan to JSON",
+      "type": "cli",
+      "command": "cd /infrastructure && terraform show -json /tmp/tfplan.binary > /tmp/tfplan.json",
+      "files": ["/tmp/tfplan.json"]
+    },
+    {
+      "name": "Check CloudFormation drift",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('cloudformation').detect_stack_drift",
+      "parameters": {
+        "StackName": "production-vpc-stack"
+      },
+      "files": []
+    },
+    {
+      "name": "Get drift detection results",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('cloudformation').describe_stack_drift_detection_status",
+      "parameters": {
+        "StackDriftDetectionId": "${DRIFT_DETECTION_ID}"
+      },
+      "files": []
+    },
+    {
+      "name": "Tag drifted resources",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('resourcegroupstaggingapi').tag_resources",
+      "parameters": {
+        "ResourceARNList": ["${DRIFTED_RESOURCE_ARNS}"],
+        "Tags": {
+          "DriftDetected": "true",
+          "DriftDetectionTime": "${TIMESTAMP}",
+          "RemediationRequired": "true"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Analyze and remediate drift",
+      "type": "prompt",
+      "prompt": "Analyze the Terraform drift report and CloudFormation drift results. Identify critical drift that affects security or functionality. Create a remediation plan that prioritizes fixes based on risk and provides both automatic and manual remediation options.",
+      "files": ["/tmp/drift_report.txt", "/tmp/tfplan.json", "/tmp/exit_code.txt"]
+    }
+  ]
+}

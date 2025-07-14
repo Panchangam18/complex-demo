@@ -1,0 +1,54 @@
+{
+  "goal": "Promote application version through GitOps environments with validation",
+  "steps": [
+    {
+      "name": "Clone GitOps repository",
+      "type": "cli",
+      "command": "git clone https://github.com/org/gitops-environments.git /tmp/gitops-envs && cd /tmp/gitops-envs",
+      "files": ["/tmp/gitops-envs"]
+    },
+    {
+      "name": "Get current version in staging",
+      "type": "cli",
+      "command": "cd /tmp/gitops-envs && yq eval '.spec.source.targetRevision' environments/staging/application.yaml > /tmp/staging_version.txt",
+      "files": ["/tmp/staging_version.txt"]
+    },
+    {
+      "name": "Run staging validation tests",
+      "type": "cli",
+      "command": "kubectl run validation-test --image=test-runner:latest --rm -i --restart=Never --namespace=staging -- pytest /tests/staging_validation.py -v > /tmp/staging_tests.txt",
+      "files": ["/tmp/staging_tests.txt"]
+    },
+    {
+      "name": "Analyze test results",
+      "type": "prompt",
+      "prompt": "Review the staging validation test results in /tmp/staging_tests.txt. Determine if all tests passed and the application is ready for production promotion. Check for performance metrics, functional tests, and integration test results.",
+      "files": ["/tmp/staging_tests.txt"]
+    },
+    {
+      "name": "Update production version",
+      "type": "cli",
+      "command": "cd /tmp/gitops-envs && VERSION=$(cat /tmp/staging_version.txt) && yq eval -i '.spec.source.targetRevision = strenv(VERSION)' environments/production/application.yaml",
+      "files": ["/tmp/gitops-envs/environments/production/application.yaml"]
+    },
+    {
+      "name": "Create promotion pull request",
+      "type": "cli",
+      "command": "cd /tmp/gitops-envs && git checkout -b promote-$(date +%Y%m%d-%H%M%S) && git add environments/production/application.yaml && git commit -m 'Promote $(cat /tmp/staging_version.txt) to production' && git push origin HEAD",
+      "files": []
+    },
+    {
+      "name": "Create deployment event",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "api.Event.create",
+      "parameters": {
+        "title": "Production Deployment Promotion",
+        "text": "Promoting version ${version} from staging to production via GitOps",
+        "tags": ["deployment:production", "gitops:promotion", "version:${version}"],
+        "alert_type": "info"
+      },
+      "files": []
+    }
+  ]
+}

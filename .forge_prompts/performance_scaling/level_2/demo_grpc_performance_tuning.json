@@ -1,0 +1,60 @@
+{
+  "goal": "Optimize gRPC service performance and connection pooling",
+  "steps": [
+    {
+      "name": "Profile gRPC service",
+      "type": "cli",
+      "command": "kubectl port-forward -n production svc/grpc-service 50051:50051 & PF_PID=$! && sleep 5 && grpcurl -plaintext -d '{\"test\": true}' localhost:50051 api.v1.Service/GetStatus > /tmp/grpc_test.json && kill $PF_PID",
+      "files": ["/tmp/grpc_test.json"]
+    },
+    {
+      "name": "Enable gRPC metrics",
+      "type": "cli",
+      "command": "kubectl apply -f - <<EOF\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: grpc-config\n  namespace: production\ndata:\n  server.yaml: |\n    server:\n      port: 50051\n      reflection: true\n      metrics:\n        enabled: true\n        port: 9090\n      \n      keepalive:\n        max_connection_idle: 300s\n        max_connection_age: 3600s\n        max_connection_age_grace: 60s\n        time: 120s\n        timeout: 20s\n      \n      connection:\n        max_concurrent_streams: 1000\n        initial_window_size: 1048576  # 1MB\n        initial_conn_window_size: 16777216  # 16MB\n      \n      interceptors:\n        - logging\n        - metrics\n        - recovery\n        - ratelimit\nEOF",
+      "files": []
+    },
+    {
+      "name": "Implement connection pooling",
+      "type": "cli",
+      "command": "cat > /tmp/grpc_pool.go << 'EOF'\npackage main\n\nimport (\n    \"context\"\n    \"sync\"\n    \"time\"\n    \"google.golang.org/grpc\"\n    \"google.golang.org/grpc/keepalive\"\n    \"google.golang.org/grpc/balancer/roundrobin\"\n)\n\ntype GRPCPool struct {\n    connections []*grpc.ClientConn\n    addresses   []string\n    mu          sync.RWMutex\n    index       int\n}\n\nfunc NewGRPCPool(addresses []string, size int) (*GRPCPool, error) {\n    pool := &GRPCPool{\n        addresses: addresses,\n        connections: make([]*grpc.ClientConn, 0, size),\n    }\n    \n    opts := []grpc.DialOption{\n        grpc.WithInsecure(),\n        grpc.WithDefaultServiceConfig(`{\"loadBalancingPolicy\":\"round_robin\"}`,\n        grpc.WithKeepaliveParams(keepalive.ClientParameters{\n            Time:                10 * time.Second,\n            Timeout:             3 * time.Second,\n            PermitWithoutStream: true,\n        }),\n        grpc.WithInitialWindowSize(1 << 20),      // 1MB\n        grpc.WithInitialConnWindowSize(1 << 24),  // 16MB\n        grpc.WithDefaultCallOptions(\n            grpc.MaxCallRecvMsgSize(10 * 1024 * 1024), // 10MB\n            grpc.MaxCallSendMsgSize(10 * 1024 * 1024), // 10MB\n        ),\n    }\n    \n    for i := 0; i < size; i++ {\n        addr := addresses[i%len(addresses)]\n        conn, err := grpc.Dial(addr, opts...)\n        if err != nil {\n            return nil, err\n        }\n        pool.connections = append(pool.connections, conn)\n    }\n    \n    return pool, nil\n}\n\nfunc (p *GRPCPool) GetConnection() *grpc.ClientConn {\n    p.mu.Lock()\n    defer p.mu.Unlock()\n    \n    conn := p.connections[p.index]\n    p.index = (p.index + 1) % len(p.connections)\n    \n    return conn\n}\nEOF",
+      "files": ["/tmp/grpc_pool.go"]
+    },
+    {
+      "name": "Benchmark gRPC performance",
+      "type": "cli",
+      "command": "ghz --insecure --proto /protos/api.proto --call api.v1.Service.Process --data-file /tmp/test_data.json --connections 10 --concurrency 50 --duration 30s --rate-limit 1000 --format json localhost:50051 > /tmp/grpc_benchmark.json",
+      "files": ["/tmp/grpc_benchmark.json"]
+    },
+    {
+      "name": "Optimize protobuf messages",
+      "type": "cli",
+      "command": "cat > /tmp/optimized.proto << 'EOF'\nsyntax = \"proto3\";\n\npackage api.v1;\n\nimport \"google/protobuf/timestamp.proto\";\n\n// Use field numbers efficiently\nmessage OptimizedRequest {\n  // Frequently used fields get lower numbers (1-15 = 1 byte)\n  string id = 1;\n  string user_id = 2;\n  int32 version = 3;\n  \n  // Less frequent fields (16-2047 = 2 bytes)\n  google.protobuf.Timestamp created_at = 16;\n  map<string, string> metadata = 17;\n  \n  // Optional fields to reduce message size\n  optional string description = 32;\n  optional bytes payload = 33;\n  \n  // Use enums for fixed values\n  enum RequestType {\n    UNKNOWN = 0;\n    CREATE = 1;\n    UPDATE = 2;\n    DELETE = 3;\n  }\n  RequestType type = 4;\n  \n  // Pack repeated fields\n  repeated int32 tags = 5 [packed = true];\n}\n\n// Stream large responses\nservice OptimizedService {\n  // Unary for small responses\n  rpc Get(GetRequest) returns (GetResponse);\n  \n  // Server streaming for large result sets\n  rpc List(ListRequest) returns (stream ListResponse);\n  \n  // Bidirectional streaming for real-time\n  rpc Subscribe(stream SubscribeRequest) returns (stream SubscribeResponse);\n}\nEOF",
+      "files": ["/tmp/optimized.proto"]
+    },
+    {
+      "name": "Configure gRPC load balancing",
+      "type": "cli",
+      "command": "kubectl apply -f - <<EOF\napiVersion: v1\nkind: Service\nmetadata:\n  name: grpc-service-headless\n  namespace: production\n  annotations:\n    service.alpha.kubernetes.io/tolerate-unready-endpoints: \"true\"\nspec:\n  clusterIP: None\n  selector:\n    app: grpc-service\n  ports:\n  - name: grpc\n    port: 50051\n    targetPort: 50051\n---\napiVersion: networking.k8s.io/v1\nkind: Ingress\nmetadata:\n  name: grpc-ingress\n  namespace: production\n  annotations:\n    kubernetes.io/ingress.class: nginx\n    nginx.ingress.kubernetes.io/backend-protocol: \"GRPC\"\n    nginx.ingress.kubernetes.io/grpc-backend: \"true\"\n    nginx.ingress.kubernetes.io/proxy-body-size: \"10m\"\nspec:\n  rules:\n  - host: grpc.example.com\n    http:\n      paths:\n      - path: /\n        pathType: Prefix\n        backend:\n          service:\n            name: grpc-service\n            port:\n              number: 50051\nEOF",
+      "files": []
+    },
+    {
+      "name": "Monitor gRPC metrics",
+      "type": "integration",
+      "integration": "prometheus",
+      "method": "query_range",
+      "parameters": {
+        "query": "histogram_quantile(0.99, sum(rate(grpc_server_handled_total[5m])) by (grpc_method, le))",
+        "start": "now-1h",
+        "end": "now",
+        "step": "1m"
+      },
+      "files": []
+    },
+    {
+      "name": "Analyze gRPC performance",
+      "type": "prompt",
+      "prompt": "Review the gRPC benchmark results, connection pooling implementation, and protobuf optimizations. Identify performance bottlenecks in message serialization, connection management, or streaming. Recommend specific improvements for throughput and latency.",
+      "files": ["/tmp/grpc_test.json", "/tmp/grpc_pool.go", "/tmp/grpc_benchmark.json", "/tmp/optimized.proto"]
+    }
+  ]
+}

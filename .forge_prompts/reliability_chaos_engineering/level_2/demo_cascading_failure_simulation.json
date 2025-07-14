@@ -1,0 +1,66 @@
+{
+  "goal": "Simulate and analyze cascading failure scenarios",
+  "steps": [
+    {
+      "name": "Map service dependencies",
+      "type": "cli",
+      "command": "kubectl get pods -A -o json | jq -r '.items[] | select(.status.phase==\"Running\") | {namespace: .metadata.namespace, name: .metadata.name, containers: [.spec.containers[].env[]? | select(.name | contains(\"ENDPOINT\") or contains(\"HOST\") or contains(\"URL\")) | {key: .name, value: .value}]}' > /tmp/service_dependencies.json",
+      "files": ["/tmp/service_dependencies.json"]
+    },
+    {
+      "name": "Create dependency graph",
+      "type": "cli",
+      "command": "python3 << 'EOF'\nimport json\nimport networkx as nx\nimport matplotlib.pyplot as plt\n\n# Build dependency graph\nG = nx.DiGraph()\n\n# Add common service dependencies\ndependencies = [\n    ('frontend', 'api'),\n    ('api', 'auth'),\n    ('api', 'database'),\n    ('api', 'cache'),\n    ('auth', 'database'),\n    ('auth', 'cache'),\n    ('payment', 'api'),\n    ('payment', 'external-gateway'),\n    ('notification', 'queue'),\n    ('worker', 'queue'),\n    ('worker', 'database')\n]\n\nfor src, dst in dependencies:\n    G.add_edge(src, dst)\n\n# Calculate failure impact\nfor node in G.nodes():\n    ancestors = nx.ancestors(G, node)\n    G.nodes[node]['impact_score'] = len(ancestors)\n\n# Save graph data\ngraph_data = {\n    'nodes': list(G.nodes()),\n    'edges': list(G.edges()),\n    'impact_scores': {n: G.nodes[n]['impact_score'] for n in G.nodes()}\n}\n\nwith open('/tmp/dependency_graph.json', 'w') as f:\n    json.dump(graph_data, f, indent=2)\nEOF",
+      "files": ["/tmp/dependency_graph.json"]
+    },
+    {
+      "name": "Trigger initial failure",
+      "type": "cli",
+      "command": "kubectl scale deployment cache --replicas=0 -n production && echo \"$(date): Cache service stopped\" > /tmp/cascade_timeline.log",
+      "files": ["/tmp/cascade_timeline.log"]
+    },
+    {
+      "name": "Monitor cascade propagation",
+      "type": "cli",
+      "command": "for i in {1..20}; do echo \"$(date): Iteration $i\" >> /tmp/cascade_timeline.log; kubectl get pods -n production -o json | jq -r '.items[] | select(.status.phase!=\"Running\" or (.status.conditions[]? | select(.type==\"Ready\" and .status==\"False\"))) | .metadata.name + \": \" + .status.phase' >> /tmp/cascade_timeline.log; kubectl top pods -n production --no-headers | awk '$3 > 80 || $5 > 80 {print $1 \": CPU \" $3 \" Memory \" $5}' >> /tmp/cascade_timeline.log; sleep 15; done",
+      "files": []
+    },
+    {
+      "name": "Capture error metrics",
+      "type": "integration",
+      "integration": "prometheus",
+      "method": "query_range",
+      "parameters": {
+        "query": "sum by (service) (rate(http_requests_total{status=~\"5..\"}[1m]))",
+        "start": "${CASCADE_START}",
+        "end": "${CASCADE_END}",
+        "step": "15s"
+      },
+      "files": []
+    },
+    {
+      "name": "Analyze queue buildup",
+      "type": "cli",
+      "command": "kubectl exec -n production $(kubectl get pods -n production -l app=rabbitmq -o jsonpath='{.items[0].metadata.name}') -- rabbitmqctl list_queues name messages consumers > /tmp/queue_status.txt",
+      "files": ["/tmp/queue_status.txt"]
+    },
+    {
+      "name": "Test circuit breakers",
+      "type": "cli",
+      "command": "for service in api auth payment; do echo \"Testing $service circuit breaker:\" >> /tmp/circuit_breaker_status.log; kubectl exec -n production $(kubectl get pods -n production -l app=$service -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo 'none') -- curl -s localhost:8080/actuator/health/circuitbreakers 2>/dev/null >> /tmp/circuit_breaker_status.log || echo \"Service unavailable\" >> /tmp/circuit_breaker_status.log; done",
+      "files": ["/tmp/circuit_breaker_status.log"]
+    },
+    {
+      "name": "Restore failed service",
+      "type": "cli",
+      "command": "kubectl scale deployment cache --replicas=3 -n production && echo \"$(date): Cache service restored\" >> /tmp/cascade_timeline.log",
+      "files": []
+    },
+    {
+      "name": "Analyze cascade impact",
+      "type": "prompt",
+      "prompt": "Analyze the dependency graph, cascade timeline, and circuit breaker status. Identify which services were most affected by the cascading failure, evaluate the effectiveness of circuit breakers, and recommend architectural changes to prevent cascade propagation.",
+      "files": ["/tmp/service_dependencies.json", "/tmp/dependency_graph.json", "/tmp/cascade_timeline.log", "/tmp/queue_status.txt", "/tmp/circuit_breaker_status.log"]
+    }
+  ]
+}

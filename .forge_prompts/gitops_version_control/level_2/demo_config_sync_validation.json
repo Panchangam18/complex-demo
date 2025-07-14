@@ -1,0 +1,41 @@
+{
+  "goal": "Validate and sync configuration changes across multiple Git repositories",
+  "steps": [
+    {
+      "name": "Clone all configuration repositories",
+      "type": "cli",
+      "command": "mkdir -p /tmp/config-sync && cd /tmp/config-sync && for repo in app-config infra-config secrets-config; do git clone https://github.com/org/${repo}.git; done",
+      "files": ["/tmp/config-sync"]
+    },
+    {
+      "name": "Extract configuration values",
+      "type": "cli",
+      "command": "cd /tmp/config-sync && find . -name '*.yaml' -o -name '*.yml' | xargs grep -E 'image:|version:|replicas:|domain:' > /tmp/config_values.txt",
+      "files": ["/tmp/config_values.txt"]
+    },
+    {
+      "name": "Validate configuration consistency",
+      "type": "prompt",
+      "prompt": "Analyze the configuration values in /tmp/config_values.txt. Identify any inconsistencies between repositories, such as mismatched image versions, conflicting domain names, or inconsistent replica counts across environments.",
+      "files": ["/tmp/config_values.txt"]
+    },
+    {
+      "name": "Generate configuration matrix",
+      "type": "cli",
+      "command": "cd /tmp/config-sync && python3 -c \"import yaml, json, glob; configs = {}; files = glob.glob('**/*.yaml', recursive=True); [configs.update({f: yaml.safe_load(open(f))}) for f in files]; print(json.dumps(configs, indent=2))\" > /tmp/config_matrix.json",
+      "files": ["/tmp/config_matrix.json"]
+    },
+    {
+      "name": "Apply configuration updates",
+      "type": "cli",
+      "command": "cd /tmp/config-sync/app-config && git checkout -b sync-$(date +%Y%m%d) && find . -name '*.yaml' -exec sed -i 's/version: .*/version: ${new_version}/g' {} \\; && git add . && git commit -m 'Sync configuration to version ${new_version}'",
+      "files": []
+    },
+    {
+      "name": "Trigger ArgoCD sync",
+      "type": "cli",
+      "command": "argocd app sync production-app --force --prune",
+      "files": []
+    }
+  ]
+}

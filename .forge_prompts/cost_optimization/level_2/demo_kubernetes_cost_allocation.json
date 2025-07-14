@@ -1,0 +1,82 @@
+{
+  "goal": "Implement cost allocation and chargeback for Kubernetes workloads",
+  "steps": [
+    {
+      "name": "Deploy cost monitoring",
+      "type": "cli",
+      "command": "helm repo add kubecost https://kubecost.github.io/cost-analyzer/ && helm install kubecost kubecost/cost-analyzer --namespace kubecost --create-namespace --set kubecostToken='${KUBECOST_TOKEN}' --set prometheus.nodeExporter.enabled=false --set prometheus.serviceAccounts.nodeExporter.create=false > /tmp/kubecost_install.log",
+      "files": ["/tmp/kubecost_install.log"]
+    },
+    {
+      "name": "Label resources for cost tracking",
+      "type": "cli",
+      "command": "kubectl label namespace production team=platform cost-center=engineering environment=prod --overwrite && kubectl label namespace staging team=platform cost-center=engineering environment=staging --overwrite && kubectl label deployment -n production --all team=platform --overwrite && kubectl get namespaces --show-labels > /tmp/namespace_labels.txt",
+      "files": ["/tmp/namespace_labels.txt"]
+    },
+    {
+      "name": "Collect resource usage metrics",
+      "type": "cli",
+      "command": "python3 << 'EOF'\nimport json\nimport subprocess\n\n# Get pod metrics\ncmd = \"kubectl top pods -A --no-headers\"\nresult = subprocess.run(cmd.split(), capture_output=True, text=True)\n\npod_metrics = []\nfor line in result.stdout.strip().split('\\n'):\n    if line:\n        parts = line.split()\n        if len(parts) >= 5:\n            namespace = parts[0]\n            pod = parts[1]\n            cpu = parts[2]\n            memory = parts[3]\n            \n            # Convert to standard units\n            cpu_cores = 0\n            if cpu.endswith('m'):\n                cpu_cores = float(cpu[:-1]) / 1000\n            else:\n                cpu_cores = float(cpu)\n            \n            memory_mb = 0\n            if memory.endswith('Mi'):\n                memory_mb = float(memory[:-2])\n            elif memory.endswith('Gi'):\n                memory_mb = float(memory[:-2]) * 1024\n            \n            pod_metrics.append({\n                'namespace': namespace,\n                'pod': pod,\n                'cpu_cores': cpu_cores,\n                'memory_mb': memory_mb\n            })\n\n# Aggregate by namespace\nnamespace_usage = {}\nfor metric in pod_metrics:\n    ns = metric['namespace']\n    if ns not in namespace_usage:\n        namespace_usage[ns] = {\n            'pod_count': 0,\n            'total_cpu_cores': 0,\n            'total_memory_mb': 0\n        }\n    \n    namespace_usage[ns]['pod_count'] += 1\n    namespace_usage[ns]['total_cpu_cores'] += metric['cpu_cores']\n    namespace_usage[ns]['total_memory_mb'] += metric['memory_mb']\n\n# Calculate costs (simplified pricing)\ncpu_cost_per_core_hour = 0.032  # ~$23/month per core\nmemory_cost_per_gb_hour = 0.004  # ~$3/month per GB\n\nfor ns, usage in namespace_usage.items():\n    hourly_cpu_cost = usage['total_cpu_cores'] * cpu_cost_per_core_hour\n    hourly_memory_cost = (usage['total_memory_mb'] / 1024) * memory_cost_per_gb_hour\n    \n    usage['hourly_cost'] = round(hourly_cpu_cost + hourly_memory_cost, 4)\n    usage['daily_cost'] = round(usage['hourly_cost'] * 24, 2)\n    usage['monthly_cost'] = round(usage['daily_cost'] * 30, 2)\n\nwith open('/tmp/namespace_costs.json', 'w') as f:\n    json.dump(namespace_usage, f, indent=2)\nEOF",
+      "files": ["/tmp/namespace_costs.json"]
+    },
+    {
+      "name": "Analyze PVC storage costs",
+      "type": "cli",
+      "command": "kubectl get pvc -A -o json | jq -r '.items[] | {namespace: .metadata.namespace, name: .metadata.name, storage: .spec.resources.requests.storage, storageClass: .spec.storageClassName, status: .status.phase}' > /tmp/pvc_inventory.json && python3 -c \"import json; pvcs=json.load(open('/tmp/pvc_inventory.json')); print(json.dumps({'total_pvcs': len(pvcs), 'by_namespace': {}}, indent=2))\" > /tmp/storage_costs.json",
+      "files": ["/tmp/pvc_inventory.json", "/tmp/storage_costs.json"]
+    },
+    {
+      "name": "Create cost allocation report",
+      "type": "cli",
+      "command": "python3 << 'EOF'\nimport json\nimport pandas as pd\nfrom datetime import datetime\n\n# Load namespace costs\nwith open('/tmp/namespace_costs.json', 'r') as f:\n    namespace_costs = json.load(f)\n\n# Team and cost center mapping\nteam_mapping = {\n    'production': {'team': 'platform', 'cost_center': 'engineering'},\n    'staging': {'team': 'platform', 'cost_center': 'engineering'},\n    'marketing-app': {'team': 'marketing', 'cost_center': 'marketing'},\n    'data-pipeline': {'team': 'data', 'cost_center': 'analytics'},\n    'monitoring': {'team': 'platform', 'cost_center': 'operations'},\n    'default': {'team': 'unallocated', 'cost_center': 'shared'}\n}\n\n# Calculate team costs\nteam_costs = {}\ncost_center_costs = {}\n\nfor namespace, costs in namespace_costs.items():\n    mapping = team_mapping.get(namespace, team_mapping['default'])\n    team = mapping['team']\n    cost_center = mapping['cost_center']\n    \n    if team not in team_costs:\n        team_costs[team] = {\n            'namespaces': [],\n            'total_cpu_cores': 0,\n            'total_memory_gb': 0,\n            'monthly_cost': 0\n        }\n    \n    if cost_center not in cost_center_costs:\n        cost_center_costs[cost_center] = {'monthly_cost': 0, 'teams': set()}\n    \n    team_costs[team]['namespaces'].append(namespace)\n    team_costs[team]['total_cpu_cores'] += costs['total_cpu_cores']\n    team_costs[team]['total_memory_gb'] += costs['total_memory_mb'] / 1024\n    team_costs[team]['monthly_cost'] += costs['monthly_cost']\n    \n    cost_center_costs[cost_center]['monthly_cost'] += costs['monthly_cost']\n    cost_center_costs[cost_center]['teams'].add(team)\n\n# Convert sets to lists for JSON serialization\nfor cc in cost_center_costs:\n    cost_center_costs[cc]['teams'] = list(cost_center_costs[cc]['teams'])\n\n# Calculate shared infrastructure costs\nshared_infrastructure = {\n    'control_plane': 500,  # EKS/GKE/AKS control plane\n    'monitoring': 300,     # Prometheus, Grafana, etc.\n    'ingress': 200,        # Load balancers\n    'storage': 400,        # Persistent volumes\n    'total': 1400\n}\n\n# Allocate shared costs proportionally\ntotal_allocated_cost = sum(tc['monthly_cost'] for tc in team_costs.values())\n\nfor team, costs in team_costs.items():\n    proportion = costs['monthly_cost'] / total_allocated_cost if total_allocated_cost > 0 else 0\n    costs['shared_infrastructure_allocation'] = round(shared_infrastructure['total'] * proportion, 2)\n    costs['total_monthly_cost'] = round(costs['monthly_cost'] + costs['shared_infrastructure_allocation'], 2)\n\n# Create chargeback report\nchargeback_report = {\n    'report_date': datetime.now().isoformat(),\n    'period': 'Monthly',\n    'currency': 'USD',\n    'summary': {\n        'total_cluster_cost': round(total_allocated_cost + shared_infrastructure['total'], 2),\n        'compute_costs': round(total_allocated_cost, 2),\n        'shared_infrastructure_costs': shared_infrastructure['total']\n    },\n    'by_team': team_costs,\n    'by_cost_center': cost_center_costs,\n    'shared_infrastructure': shared_infrastructure,\n    'recommendations': [\n        {\n            'team': 'platform',\n            'finding': 'Over-provisioned resources in staging',\n            'potential_savings': 150,\n            'action': 'Right-size staging deployments'\n        },\n        {\n            'team': 'data',\n            'finding': 'Idle pods during off-hours',\n            'potential_savings': 300,\n            'action': 'Implement pod autoscaling'\n        }\n    ]\n}\n\nwith open('/tmp/chargeback_report.json', 'w') as f:\n    json.dump(chargeback_report, f, indent=2)\n\n# Create CSV for finance team\nchargeback_df = pd.DataFrame([\n    {\n        'Team': team,\n        'Cost Center': cost_center_costs.get(team_mapping.get(team, {}).get('cost_center', 'shared'), {}).get('monthly_cost', 0),\n        'Compute Cost': data['monthly_cost'],\n        'Shared Infrastructure': data['shared_infrastructure_allocation'],\n        'Total Monthly Cost': data['total_monthly_cost']\n    }\n    for team, data in team_costs.items()\n])\n\nchargeback_df.to_csv('/tmp/kubernetes_chargeback.csv', index=False)\nEOF",
+      "files": ["/tmp/chargeback_report.json", "/tmp/kubernetes_chargeback.csv"]
+    },
+    {
+      "name": "Configure cost alerts",
+      "type": "cli",
+      "command": "kubectl apply -f - <<EOF\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cost-alerts\n  namespace: kubecost\ndata:\n  alerts.yaml: |\n    alerts:\n    - name: namespace-budget-exceeded\n      type: budget\n      threshold: 1000\n      window: 30d\n      aggregation: namespace\n      filter:\n        namespace:\n          - production\n          - staging\n      slackWebhookUrl: ${SLACK_WEBHOOK}\n    \n    - name: team-cost-spike\n      type: spend-change\n      threshold: 0.20  # 20% increase\n      window: 7d\n      aggregation: label\n      aggregationField: team\n      slackWebhookUrl: ${SLACK_WEBHOOK}\n    \n    - name: idle-resources\n      type: efficiency\n      threshold: 0.05  # 5% utilization\n      window: 3d\n      slackWebhookUrl: ${SLACK_WEBHOOK}\nEOF",
+      "files": []
+    },
+    {
+      "name": "Implement showback dashboard",
+      "type": "integration",
+      "integration": "grafana",
+      "method": "api.Dashboard.create",
+      "parameters": {
+        "dashboard": {
+          "title": "Kubernetes Cost Allocation",
+          "panels": [
+            {
+              "title": "Cost by Team",
+              "targets": [
+                {"expr": "sum(container_memory_usage_bytes) by (label_team) * 0.000004"}
+              ],
+              "type": "piechart"
+            },
+            {
+              "title": "Monthly Cost Trend",
+              "targets": [
+                {"expr": "sum(kubecost_cluster_monthly_cost) by (namespace)"}
+              ],
+              "type": "graph"
+            },
+            {
+              "title": "Resource Efficiency",
+              "targets": [
+                {"expr": "(sum(rate(container_cpu_usage_seconds_total[5m])) by (namespace)) / (sum(kube_pod_container_resource_requests_cpu_cores) by (namespace))"}
+              ],
+              "type": "heatmap"
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Analyze cost allocation",
+      "type": "prompt",
+      "prompt": "Review the cost allocation report and chargeback data. Identify teams with highest costs, validate the allocation methodology, and recommend optimizations for each team. Suggest improvements to the tagging strategy and cost allocation model.",
+      "files": ["/tmp/namespace_costs.json", "/tmp/chargeback_report.json", "/tmp/kubernetes_chargeback.csv"]
+    }
+  ]
+}

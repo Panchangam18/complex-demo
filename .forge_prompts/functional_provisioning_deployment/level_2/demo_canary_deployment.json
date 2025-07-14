@@ -1,0 +1,82 @@
+{
+  "goal": "Implement canary deployment with automated metrics analysis",
+  "steps": [
+    {
+      "name": "Deploy canary version",
+      "type": "cli",
+      "command": "kubectl apply -f - <<EOF\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: app-canary\n  namespace: production\nspec:\n  replicas: 2\n  selector:\n    matchLabels:\n      app: myapp\n      version: canary\n  template:\n    metadata:\n      labels:\n        app: myapp\n        version: canary\n    spec:\n      containers:\n      - name: app\n        image: myapp:${CANARY_VERSION}\nEOF",
+      "files": []
+    },
+    {
+      "name": "Configure traffic split",
+      "type": "cli",
+      "command": "kubectl apply -f - <<EOF\napiVersion: networking.istio.io/v1beta1\nkind: VirtualService\nmetadata:\n  name: myapp-vs\n  namespace: production\nspec:\n  http:\n  - match:\n    - headers:\n        canary:\n          exact: \"true\"\n    route:\n    - destination:\n        host: myapp\n        subset: canary\n  - route:\n    - destination:\n        host: myapp\n        subset: stable\n      weight: 95\n    - destination:\n        host: myapp\n        subset: canary\n      weight: 5\nEOF",
+      "files": []
+    },
+    {
+      "name": "Collect baseline metrics",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "api.Metric.query",
+      "parameters": {
+        "from": "now - 30m",
+        "to": "now - 5m",
+        "query": "avg:trace.http.request{service:myapp,version:stable} by {resource}"
+      },
+      "files": []
+    },
+    {
+      "name": "Monitor canary metrics",
+      "type": "integration",
+      "integration": "prometheus",
+      "method": "query_range",
+      "parameters": {
+        "query": "rate(http_requests_total{version=\"canary\"}[5m])",
+        "start": "now - 10m",
+        "end": "now",
+        "step": "30s"
+      },
+      "files": []
+    },
+    {
+      "name": "Run A/B test analysis",
+      "type": "cli",
+      "command": "python3 /scripts/canary_analysis.py --stable-version stable --canary-version ${CANARY_VERSION} --metrics p50,p95,p99,error_rate --confidence 0.95 > /tmp/canary_analysis.json",
+      "files": ["/tmp/canary_analysis.json"]
+    },
+    {
+      "name": "Create canary dashboard",
+      "type": "integration",
+      "integration": "grafana",
+      "method": "api.Dashboard.create",
+      "parameters": {
+        "dashboard": {
+          "title": "Canary Deployment - ${CANARY_VERSION}",
+          "panels": [
+            {
+              "title": "Request Rate Comparison",
+              "targets": [
+                {"expr": "rate(http_requests_total{version=\"stable\"}[5m])"},
+                {"expr": "rate(http_requests_total{version=\"canary\"}[5m])"}
+              ]
+            },
+            {
+              "title": "Error Rate Comparison",
+              "targets": [
+                {"expr": "rate(http_requests_total{version=\"stable\",status=~\"5..\"}[5m])"},
+                {"expr": "rate(http_requests_total{version=\"canary\",status=~\"5..\"}[5m])"}
+              ]
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Decide canary promotion",
+      "type": "prompt",
+      "prompt": "Analyze the canary metrics and A/B test results. Determine if the canary should be promoted based on performance, error rates, and statistical significance. If promoting, create a gradual rollout plan increasing traffic from 5% to 100%.",
+      "files": ["/tmp/canary_analysis.json"]
+    }
+  ]
+}

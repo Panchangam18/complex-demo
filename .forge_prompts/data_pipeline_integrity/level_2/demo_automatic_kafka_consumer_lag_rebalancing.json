@@ -1,0 +1,186 @@
+{
+  "goal": "Automatically rebalance Kafka consumer groups when partition lag builds up due to failed consumers",
+  "steps": [
+    {
+      "name": "Get Kafka consumer group details",
+      "type": "cli",
+      "command": "kafka-consumer-groups --bootstrap-server ${KAFKA_BROKERS} --describe --group ${CONSUMER_GROUP}",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor consumer lag metrics",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "MetricsApi.query_timeseries_data",
+      "parameters": {
+        "body": {
+          "data": {
+            "type": "timeseries_request",
+            "attributes": {
+              "formulas": [{"formula": "query1"}],
+              "queries": [{
+                "name": "query1",
+                "data_source": "metrics",
+                "query": "max:kafka.consumer_lag{topic:user-events,partition:3}"
+              }],
+              "from": "now-10m",
+              "to": "now"
+            }
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Check consumer heartbeats",
+      "type": "cli",
+      "command": "kafka-consumer-groups --bootstrap-server ${KAFKA_BROKERS} --describe --group ${CONSUMER_GROUP} --members --verbose | grep -E 'CONSUMER-ID|HEARTBEAT'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Get consumer pod logs",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "CoreV1Api.read_namespaced_pod_log",
+      "parameters": {
+        "name": "${CONSUMER_POD}",
+        "namespace": "data-pipeline",
+        "since_seconds": 600,
+        "tail_lines": 100
+      },
+      "files": []
+    },
+    {
+      "name": "Identify failed consumer",
+      "type": "prompt",
+      "prompt": "Analyze logs to identify which consumer is failing to process partition 3 messages. Look for OutOfMemoryError or other exceptions.",
+      "parameters": {
+        "error_patterns": ["OutOfMemoryError", "NetworkException", "DeserializationException"],
+        "partition": 3
+      },
+      "files": ["kafka/failed-consumer.json"]
+    },
+    {
+      "name": "Get pod resource usage",
+      "type": "cli",
+      "command": "kubectl top pod -n data-pipeline -l app=user-events-consumer --containers",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Calculate new resource limits",
+      "type": "prompt",
+      "prompt": "Based on current memory usage, calculate new memory limit with 50% buffer for the consumer pod.",
+      "parameters": {
+        "buffer_percent": 0.5,
+        "minimum_memory": "1Gi"
+      },
+      "files": ["kafka/new-resources.json"]
+    },
+    {
+      "name": "Update deployment resources",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "AppsV1Api.patch_namespaced_deployment",
+      "parameters": {
+        "name": "user-events-consumer",
+        "namespace": "data-pipeline",
+        "body": {
+          "spec": {
+            "template": {
+              "spec": {
+                "containers": [{
+                  "name": "consumer",
+                  "resources": {
+                    "limits": {
+                      "memory": "${NEW_MEMORY_LIMIT}"
+                    }
+                  }
+                }]
+              }
+            }
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Delete failed consumer pod",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "CoreV1Api.delete_namespaced_pod",
+      "parameters": {
+        "name": "${FAILED_POD}",
+        "namespace": "data-pipeline",
+        "grace_period_seconds": 30
+      },
+      "files": []
+    },
+    {
+      "name": "Trigger consumer rebalance",
+      "type": "cli",
+      "command": "kafka-consumer-groups --bootstrap-server ${KAFKA_BROKERS} --group ${CONSUMER_GROUP} --topic user-events:3 --reset-offsets --to-current --execute",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor rebalance progress",
+      "type": "cli",
+      "command": "for i in {1..20}; do kafka-consumer-groups --bootstrap-server ${KAFKA_BROKERS} --describe --group ${CONSUMER_GROUP} | grep 'user-events.*3'; sleep 10; done",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Check lag reduction",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "MetricsApi.query_timeseries_data",
+      "parameters": {
+        "body": {
+          "data": {
+            "type": "timeseries_request",
+            "attributes": {
+              "formulas": [{"formula": "query1"}],
+              "queries": [{
+                "name": "query1",
+                "data_source": "metrics",
+                "query": "max:kafka.consumer_lag{topic:user-events}"
+              }],
+              "from": "now-5m",
+              "to": "now"
+            }
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Scale consumer group if needed",
+      "type": "prompt",
+      "prompt": "If lag continues growing, scale consumer deployment to handle increased load.",
+      "parameters": {
+        "lag_threshold": 10000,
+        "scale_factor": 2
+      },
+      "files": ["kafka/scaling-decision.json"]
+    },
+    {
+      "name": "Apply scaling if required",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "AppsV1Api.patch_namespaced_deployment_scale",
+      "parameters": {
+        "name": "user-events-consumer",
+        "namespace": "data-pipeline",
+        "body": {
+          "spec": {
+            "replicas": "${NEW_REPLICA_COUNT}"
+          }
+        }
+      },
+      "files": []
+    }
+  ]
+}

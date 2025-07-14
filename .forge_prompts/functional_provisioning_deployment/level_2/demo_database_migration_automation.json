@@ -1,0 +1,62 @@
+{
+  "goal": "Automate zero-downtime database migration with validation",
+  "steps": [
+    {
+      "name": "Create database snapshot",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('rds').create_db_snapshot",
+      "parameters": {
+        "DBSnapshotIdentifier": "pre-migration-${TIMESTAMP}",
+        "DBInstanceIdentifier": "production-db",
+        "Tags": [
+          {"Key": "Type", "Value": "pre-migration"},
+          {"Key": "Version", "Value": "${MIGRATION_VERSION}"}
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Check replication lag",
+      "type": "cli",
+      "command": "mysql -h production-db-read.example.com -u admin -p${DB_PASSWORD} -e 'SHOW SLAVE STATUS\\G' | grep -E 'Seconds_Behind_Master|Slave_IO_Running|Slave_SQL_Running' > /tmp/replication_status.txt",
+      "files": ["/tmp/replication_status.txt"]
+    },
+    {
+      "name": "Run migration dry run",
+      "type": "cli",
+      "command": "flyway -url=jdbc:mysql://production-db.example.com:3306/myapp -user=admin -password=${DB_PASSWORD} -locations=filesystem:/migrations validate && flyway migrate -dryRun > /tmp/migration_plan.txt",
+      "files": ["/tmp/migration_plan.txt"]
+    },
+    {
+      "name": "Apply migrations",
+      "type": "cli",
+      "command": "flyway -url=jdbc:mysql://production-db.example.com:3306/myapp -user=admin -password=${DB_PASSWORD} -locations=filesystem:/migrations -outOfOrder=true migrate > /tmp/migration_output.log",
+      "files": ["/tmp/migration_output.log"]
+    },
+    {
+      "name": "Validate schema changes",
+      "type": "cli",
+      "command": "mysqldiff --server1=admin:${DB_PASSWORD}@production-db.example.com:3306 --server2=admin:${DB_PASSWORD}@production-db-read.example.com:3306 myapp:myapp --difftype=sql > /tmp/schema_diff.sql",
+      "files": ["/tmp/schema_diff.sql"]
+    },
+    {
+      "name": "Monitor query performance",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "api.Metric.query",
+      "parameters": {
+        "from": "now - 15m",
+        "to": "now",
+        "query": "avg:mysql.performance.queries{db:myapp} by {query_signature}"
+      },
+      "files": []
+    },
+    {
+      "name": "Create migration report",
+      "type": "prompt",
+      "prompt": "Analyze the migration output, replication status, and schema differences. Verify all migrations applied successfully, check for any performance degradation, and create a rollback plan if issues are detected.",
+      "files": ["/tmp/replication_status.txt", "/tmp/migration_plan.txt", "/tmp/migration_output.log", "/tmp/schema_diff.sql"]
+    }
+  ]
+}

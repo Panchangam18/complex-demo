@@ -1,0 +1,61 @@
+{
+  "goal": "Detect and respond to metric anomalies using machine learning",
+  "steps": [
+    {
+      "name": "Query recent metrics",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "api.Metric.query",
+      "parameters": {
+        "from": "now - 1h",
+        "to": "now",
+        "query": "avg:system.cpu.user{service:api-gateway} by {host}"
+      },
+      "files": []
+    },
+    {
+      "name": "Get historical baseline",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "api.Metric.query",
+      "parameters": {
+        "from": "now - 7d",
+        "to": "now - 1d",
+        "query": "avg:system.cpu.user{service:api-gateway} by {host}.rollup(avg, 3600)"
+      },
+      "files": []
+    },
+    {
+      "name": "Export metrics for analysis",
+      "type": "cli",
+      "command": "datadog metric query 'avg:system.cpu.user{service:api-gateway} by {host}' --from 'now-1h' --to 'now' --output json > /tmp/current_metrics.json && datadog metric query 'avg:system.cpu.user{service:api-gateway} by {host}' --from 'now-7d' --to 'now-1d' --output json > /tmp/baseline_metrics.json",
+      "files": ["/tmp/current_metrics.json", "/tmp/baseline_metrics.json"]
+    },
+    {
+      "name": "Analyze for anomalies",
+      "type": "prompt",
+      "prompt": "Compare current metrics in /tmp/current_metrics.json with the baseline in /tmp/baseline_metrics.json. Identify any hosts showing CPU usage more than 2 standard deviations from their weekly average. Consider time-of-day patterns and identify true anomalies versus expected variations.",
+      "files": ["/tmp/current_metrics.json", "/tmp/baseline_metrics.json"]
+    },
+    {
+      "name": "Get pod details for anomalous hosts",
+      "type": "cli",
+      "command": "kubectl get pods -o wide | grep ${anomalous_host} > /tmp/anomalous_pods.txt && kubectl top pods --all-namespaces | grep ${anomalous_host} >> /tmp/anomalous_pods.txt",
+      "files": ["/tmp/anomalous_pods.txt"]
+    },
+    {
+      "name": "Create anomaly monitor",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "api.Monitor.create",
+      "parameters": {
+        "type": "anomaly",
+        "query": "avg(last_4h):anomalies(avg:system.cpu.user{service:api-gateway} by {host}, 'basic', 2) >= 1",
+        "name": "CPU Anomaly Detection - API Gateway",
+        "message": "CPU usage anomaly detected on {{host.name}}. Current: {{value}}%\n\n@slack-ops-alerts",
+        "tags": ["service:api-gateway", "anomaly:cpu"]
+      },
+      "files": []
+    }
+  ]
+}

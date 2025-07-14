@@ -1,0 +1,53 @@
+{
+  "goal": "Optimize container startup time and resource allocation",
+  "steps": [
+    {
+      "name": "Profile container startup",
+      "type": "cli",
+      "command": "kubectl apply -f - <<EOF\napiVersion: v1\nkind: Pod\nmetadata:\n  name: startup-profiler\n  namespace: performance-test\nspec:\n  initContainers:\n  - name: timing-init\n    image: busybox\n    command: ['sh', '-c', 'echo \"Init started at $(date +%s.%N)\" > /shared/timing.log']\n    volumeMounts:\n    - name: shared\n      mountPath: /shared\n  containers:\n  - name: app\n    image: myapp:latest\n    command: ['sh', '-c', 'echo \"App started at $(date +%s.%N)\" >> /shared/timing.log && exec /app/start.sh']\n    volumeMounts:\n    - name: shared\n      mountPath: /shared\n    readinessProbe:\n      httpGet:\n        path: /health\n        port: 8080\n      initialDelaySeconds: 0\n      periodSeconds: 1\n  volumes:\n  - name: shared\n    emptyDir: {}\nEOF\nsleep 30\nkubectl logs startup-profiler -n performance-test > /tmp/startup_timing.log\nkubectl describe pod startup-profiler -n performance-test > /tmp/pod_events.log",
+      "files": ["/tmp/startup_timing.log", "/tmp/pod_events.log"]
+    },
+    {
+      "name": "Analyze image layers",
+      "type": "cli",
+      "command": "docker history myapp:latest --no-trunc --format \"table {{.CreatedBy}}\\t{{.Size}}\" > /tmp/image_layers.txt && docker inspect myapp:latest | jq '.[0].RootFS.Layers | length' > /tmp/layer_count.txt",
+      "files": ["/tmp/image_layers.txt", "/tmp/layer_count.txt"]
+    },
+    {
+      "name": "Optimize Dockerfile",
+      "type": "cli",
+      "command": "cat > /tmp/optimized_dockerfile << 'EOF'\n# Multi-stage build for smaller image\nFROM golang:1.21-alpine AS builder\nWORKDIR /build\n\n# Cache dependencies\nCOPY go.mod go.sum ./\nRUN go mod download\n\n# Build with optimizations\nCOPY . .\nRUN CGO_ENABLED=0 GOOS=linux go build -ldflags=\"-w -s\" -o app .\n\n# Minimal runtime image\nFROM gcr.io/distroless/static:nonroot\nCOPY --from=builder /build/app /app\n\n# Run as non-root\nUSER nonroot:nonroot\nENTRYPOINT [\"/app\"]\nEOF",
+      "files": ["/tmp/optimized_dockerfile"]
+    },
+    {
+      "name": "Configure JVM warmup",
+      "type": "cli",
+      "command": "cat > /tmp/jvm_optimization.yaml << 'EOF'\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: jvm-options\n  namespace: production\ndata:\n  java.opts: |\n    -XX:+UseG1GC\n    -XX:MaxGCPauseMillis=200\n    -XX:InitialRAMPercentage=50.0\n    -XX:MaxRAMPercentage=80.0\n    -XX:+UseStringDeduplication\n    -XX:+AlwaysPreTouch\n    -XX:+UseCompressedOops\n    -XX:+UseCompressedClassPointers\n    -XX:TieredStopAtLevel=1\n    -XX:CICompilerCount=2\n    -Xshare:on\n    -XX:+UseAppCDS\n    -XX:SharedArchiveFile=/app/app.jsa\nEOF",
+      "files": ["/tmp/jvm_optimization.yaml"]
+    },
+    {
+      "name": "Implement lazy loading",
+      "type": "cli",
+      "command": "cat > /tmp/lazy_loading.py << 'EOF'\nimport time\nimport importlib\nimport threading\nfrom functools import lru_cache\n\nclass LazyLoader:\n    def __init__(self):\n        self._modules = {}\n        self._loading = {}\n        self._lock = threading.Lock()\n    \n    @lru_cache(maxsize=128)\n    def load_module(self, module_name):\n        if module_name in self._modules:\n            return self._modules[module_name]\n        \n        with self._lock:\n            if module_name in self._loading:\n                # Wait for another thread to finish loading\n                while module_name in self._loading:\n                    time.sleep(0.01)\n                return self._modules.get(module_name)\n            \n            self._loading[module_name] = True\n        \n        try:\n            start = time.time()\n            module = importlib.import_module(module_name)\n            load_time = time.time() - start\n            \n            print(f\"Loaded {module_name} in {load_time:.3f}s\")\n            \n            self._modules[module_name] = module\n            return module\n        finally:\n            with self._lock:\n                del self._loading[module_name]\n\n# Preload critical modules in background\ndef preload_modules():\n    critical_modules = [\n        'numpy',\n        'pandas',\n        'requests',\n        'sqlalchemy'\n    ]\n    \n    loader = LazyLoader()\n    threads = []\n    \n    for module in critical_modules:\n        thread = threading.Thread(target=loader.load_module, args=(module,))\n        thread.start()\n        threads.append(thread)\n    \n    return threads\nEOF",
+      "files": ["/tmp/lazy_loading.py"]
+    },
+    {
+      "name": "Test parallel initialization",
+      "type": "cli",
+      "command": "kubectl apply -f - <<EOF\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: optimized-app\n  namespace: performance-test\nspec:\n  replicas: 3\n  template:\n    spec:\n      initContainers:\n      - name: cache-warmer\n        image: myapp:optimized\n        command: ['sh', '-c', 'curl -s http://localhost:8080/warmup || true']\n      containers:\n      - name: app\n        image: myapp:optimized\n        env:\n        - name: PARALLEL_INIT\n          value: \"true\"\n        - name: INIT_THREADS\n          value: \"4\"\n        readinessProbe:\n          httpGet:\n            path: /health/ready\n            port: 8080\n          initialDelaySeconds: 0\n          periodSeconds: 1\n          successThreshold: 1\n          failureThreshold: 30\n        livenessProbe:\n          httpGet:\n            path: /health/live\n            port: 8080\n          initialDelaySeconds: 10\n          periodSeconds: 5\nEOF",
+      "files": []
+    },
+    {
+      "name": "Measure startup improvements",
+      "type": "cli",
+      "command": "for i in {1..5}; do kubectl delete pod startup-test-$i --ignore-not-found=true -n performance-test && kubectl run startup-test-$i --image=myapp:optimized -n performance-test --restart=Never & done && sleep 60 && for i in {1..5}; do echo \"Pod startup-test-$i:\" && kubectl logs startup-test-$i -n performance-test | grep -E '(Started in|Ready after)' || echo \"Not ready\"; done > /tmp/startup_comparison.txt",
+      "files": ["/tmp/startup_comparison.txt"]
+    },
+    {
+      "name": "Analyze startup optimization",
+      "type": "prompt",
+      "prompt": "Review the container startup timing, image layer analysis, and optimization strategies. Calculate the startup time improvements and identify remaining bottlenecks. Recommend additional optimizations for faster container initialization and readiness.",
+      "files": ["/tmp/startup_timing.log", "/tmp/pod_events.log", "/tmp/image_layers.txt", "/tmp/optimized_dockerfile", "/tmp/jvm_optimization.yaml", "/tmp/lazy_loading.py", "/tmp/startup_comparison.txt"]
+    }
+  ]
+}

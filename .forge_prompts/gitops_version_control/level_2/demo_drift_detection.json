@@ -1,0 +1,43 @@
+{
+  "goal": "Detect and report drift between Git repository and live Kubernetes resources",
+  "steps": [
+    {
+      "name": "Clone GitOps repository",
+      "type": "cli",
+      "command": "git clone https://github.com/org/k8s-configs.git /tmp/gitops-repo && cd /tmp/gitops-repo && git checkout main",
+      "files": ["/tmp/gitops-repo"]
+    },
+    {
+      "name": "Export current cluster state",
+      "type": "cli",
+      "command": "kubectl get all,configmap,secret,ingress,pvc --all-namespaces -o yaml > /tmp/cluster_state.yaml",
+      "files": ["/tmp/cluster_state.yaml"]
+    },
+    {
+      "name": "Compare Git state with cluster state",
+      "type": "prompt",
+      "prompt": "Compare the Kubernetes manifests in /tmp/gitops-repo with the current cluster state in /tmp/cluster_state.yaml. Identify resources that exist in the cluster but not in Git, resources that have been modified from their Git definitions, and resources in Git that don't exist in the cluster.",
+      "files": ["/tmp/gitops-repo", "/tmp/cluster_state.yaml"]
+    },
+    {
+      "name": "Generate drift report",
+      "type": "cli",
+      "command": "kubectl diff -f /tmp/gitops-repo/manifests/ > /tmp/drift_report.txt 2>&1 || true",
+      "files": ["/tmp/drift_report.txt"]
+    },
+    {
+      "name": "Create drift alert",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "api.Monitor.create",
+      "parameters": {
+        "type": "metric alert",
+        "query": "avg(last_5m):avg:gitops.drift.count{environment:production} > 0",
+        "name": "GitOps Drift Detected",
+        "message": "GitOps drift detected in production cluster. Review drift report at /tmp/drift_report.txt",
+        "tags": ["gitops", "drift-detection", "production"]
+      },
+      "files": []
+    }
+  ]
+}

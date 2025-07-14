@@ -1,0 +1,58 @@
+{
+  "goal": "Secure software supply chain with SBOM and attestation",
+  "steps": [
+    {
+      "name": "Generate SBOM for containers",
+      "type": "cli",
+      "command": "syft $(kubectl get pods -n production -o jsonpath='{.items[0].spec.containers[0].image}') -o spdx-json > /tmp/sbom.json && syft $(kubectl get pods -n production -o jsonpath='{.items[0].spec.containers[0].image}') -o cyclonedx-json > /tmp/sbom_cyclonedx.json",
+      "files": ["/tmp/sbom.json", "/tmp/sbom_cyclonedx.json"]
+    },
+    {
+      "name": "Sign container images",
+      "type": "cli",
+      "command": "cosign sign --key /keys/cosign.key ${IMAGE_NAME}:${IMAGE_TAG} && cosign verify --key /keys/cosign.pub ${IMAGE_NAME}:${IMAGE_TAG} > /tmp/signature_verification.txt",
+      "files": ["/tmp/signature_verification.txt"]
+    },
+    {
+      "name": "Create attestation",
+      "type": "cli",
+      "command": "cosign attest --key /keys/cosign.key --predicate /tmp/sbom.json --type spdx ${IMAGE_NAME}:${IMAGE_TAG} && cosign verify-attestation --key /keys/cosign.pub --type spdx ${IMAGE_NAME}:${IMAGE_TAG} > /tmp/attestation_verification.txt",
+      "files": ["/tmp/attestation_verification.txt"]
+    },
+    {
+      "name": "Configure policy controller",
+      "type": "cli",
+      "command": "kubectl apply -f - <<EOF\napiVersion: policy.sigstore.dev/v1beta1\nkind: ClusterImagePolicy\nmetadata:\n  name: signed-images-only\nspec:\n  images:\n  - glob: \"**\"\n  authorities:\n  - key:\n      data: |\n        -----BEGIN PUBLIC KEY-----\n        ${COSIGN_PUBLIC_KEY}\n        -----END PUBLIC KEY-----\n  policy:\n    type: cue\n    data: |\n      import \"time\"\n      before: time.Now()\n      attestations: {\n        predicateType: \"https://spdx.dev/Document\"\n        predicate: {\n          creationInfo: {\n            created: <before\n          }\n        }\n      }\nEOF",
+      "files": []
+    },
+    {
+      "name": "Scan dependencies for vulnerabilities",
+      "type": "cli",
+      "command": "grype sbom:/tmp/sbom.json -o json > /tmp/vulnerability_report.json && nancy sleuth -p /app/go.sum -o json > /tmp/go_vulnerabilities.json 2>/dev/null || true",
+      "files": ["/tmp/vulnerability_report.json", "/tmp/go_vulnerabilities.json"]
+    },
+    {
+      "name": "Check license compliance",
+      "type": "cli",
+      "command": "tern report -f spdxjson -i ${IMAGE_NAME}:${IMAGE_TAG} > /tmp/license_report.json && python3 -c \"import json; data=json.load(open('/tmp/sbom.json')); licenses=[p.get('licenseConcluded', 'NOASSERTION') for p in data.get('packages', [])]; print(json.dumps({'total_packages': len(data.get('packages', [])), 'licenses': list(set(licenses)), 'unknown_licenses': licenses.count('NOASSERTION')}, indent=2))\" > /tmp/license_summary.json",
+      "files": ["/tmp/license_report.json", "/tmp/license_summary.json"]
+    },
+    {
+      "name": "Create supply chain policy",
+      "type": "integration",
+      "integration": "opa",
+      "method": "policies.create",
+      "parameters": {
+        "name": "supply-chain-security",
+        "rules": "package kubernetes.admission\n\ndeny[msg] {\n  input.request.kind.kind == \"Pod\"\n  container := input.request.object.spec.containers[_]\n  not image_signed(container.image)\n  msg := sprintf(\"Container image %v is not signed\", [container.image])\n}\n\ndeny[msg] {\n  input.request.kind.kind == \"Pod\"\n  container := input.request.object.spec.containers[_]\n  not has_sbom(container.image)\n  msg := sprintf(\"Container image %v lacks SBOM attestation\", [container.image])\n}\n\ndeny[msg] {\n  input.request.kind.kind == \"Pod\"\n  container := input.request.object.spec.containers[_]\n  critical_vulns(container.image) > 0\n  msg := sprintf(\"Container image %v has critical vulnerabilities\", [container.image])\n}"
+      },
+      "files": []
+    },
+    {
+      "name": "Analyze supply chain security",
+      "type": "prompt",
+      "prompt": "Review the SBOM, vulnerability reports, and attestation verifications. Create a supply chain security report that identifies risky dependencies, license compliance issues, and unsigned images. Recommend improvements to the build pipeline.",
+      "files": ["/tmp/sbom.json", "/tmp/vulnerability_report.json", "/tmp/license_summary.json", "/tmp/signature_verification.txt", "/tmp/attestation_verification.txt"]
+    }
+  ]
+}

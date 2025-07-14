@@ -1,0 +1,78 @@
+{
+  "goal": "Implement automated DDoS detection and mitigation",
+  "steps": [
+    {
+      "name": "Check current attack patterns",
+      "type": "cli",
+      "command": "aws wafv2 get-sampled-requests --web-acl-arn ${WAF_ACL_ARN} --rule-metric-name RateLimitRule --scope CLOUDFRONT --time-window StartTime=$(date -u -d '5 minutes ago' +%s),EndTime=$(date -u +%s) --max-items 500 > /tmp/waf_samples.json",
+      "files": ["/tmp/waf_samples.json"]
+    },
+    {
+      "name": "Analyze traffic patterns",
+      "type": "integration",
+      "integration": "cloudflare",
+      "method": "zones.analytics.dashboard",
+      "parameters": {
+        "zone_id": "${ZONE_ID}",
+        "since": "-30m",
+        "until": "now",
+        "continuous": true
+      },
+      "files": []
+    },
+    {
+      "name": "Enable rate limiting",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('wafv2').update_web_acl",
+      "parameters": {
+        "Scope": "CLOUDFRONT",
+        "Id": "${WEB_ACL_ID}",
+        "Rules": [
+          {
+            "Name": "RateLimitRule",
+            "Priority": 1,
+            "Statement": {
+              "RateBasedStatement": {
+                "Limit": 2000,
+                "AggregateKeyType": "IP"
+              }
+            },
+            "Action": {
+              "Block": {}
+            }
+          }
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Configure AWS Shield Advanced",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('shield').associate_drt_role",
+      "parameters": {
+        "RoleArn": "arn:aws:iam::123456789012:role/DRTRole"
+      },
+      "files": []
+    },
+    {
+      "name": "Create IP reputation list",
+      "type": "cli",
+      "command": "curl -s https://www.spamhaus.org/drop/drop.txt | grep -E '^[0-9]' | awk '{print $1}' > /tmp/malicious_ips.txt && aws wafv2 create-ip-set --name MaliciousIPs --scope CLOUDFRONT --ip-address-version IPV4 --addresses file:///tmp/malicious_ips.txt",
+      "files": ["/tmp/malicious_ips.txt"]
+    },
+    {
+      "name": "Deploy edge functions",
+      "type": "cli",
+      "command": "cat > /tmp/ddos_protection.js << 'EOF'\nfunction handler(event) {\n  const request = event.request;\n  const headers = request.headers;\n  \n  // Check for suspicious patterns\n  if (!headers['user-agent'] || headers['user-agent'].value.includes('bot')) {\n    return {\n      statusCode: 403,\n      statusDescription: 'Forbidden'\n    };\n  }\n  \n  return request;\n}\nEOF\naws cloudfront create-function --name ddos-protection --function-config Comment=\"DDoS Protection\",Runtime=\"cloudfront-js-1.0\" --function-code file:///tmp/ddos_protection.js",
+      "files": ["/tmp/ddos_protection.js"]
+    },
+    {
+      "name": "Create mitigation playbook",
+      "type": "prompt",
+      "prompt": "Analyze the WAF samples and traffic patterns to identify attack vectors. Create an automated response system that adjusts rate limits based on traffic patterns, blocks malicious IPs, and escalates to AWS Shield Response Team if needed.",
+      "files": ["/tmp/waf_samples.json", "/tmp/malicious_ips.txt", "/tmp/ddos_protection.js"]
+    }
+  ]
+}

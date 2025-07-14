@@ -1,0 +1,68 @@
+{
+  "goal": "Correlate logs across services to diagnose production issues",
+  "steps": [
+    {
+      "name": "Query error logs",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "api.Logs.list",
+      "parameters": {
+        "body": {
+          "filter": {
+            "query": "status:error service:(api-gateway OR backend-api OR database-proxy)",
+            "from": "now-30m",
+            "to": "now"
+          },
+          "page": {
+            "limit": 1000
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Export logs with trace IDs",
+      "type": "cli",
+      "command": "datadog logs query 'status:error service:(api-gateway OR backend-api OR database-proxy) @trace_id:*' --from 'now-30m' --to 'now' --output json > /tmp/error_logs.json",
+      "files": ["/tmp/error_logs.json"]
+    },
+    {
+      "name": "Group logs by trace ID",
+      "type": "cli",
+      "command": "jq -r 'group_by(.attributes.trace_id) | map({trace_id: .[0].attributes.trace_id, services: map(.service), errors: map(.message), timestamp: .[0].timestamp})' /tmp/error_logs.json > /tmp/correlated_errors.json",
+      "files": ["/tmp/correlated_errors.json"]
+    },
+    {
+      "name": "Analyze error patterns",
+      "type": "prompt",
+      "prompt": "Review the correlated errors in /tmp/correlated_errors.json. Identify error cascades where failures in one service trigger errors in others. Look for common root causes, timing patterns, and service dependencies that contribute to failures.",
+      "files": ["/tmp/correlated_errors.json"]
+    },
+    {
+      "name": "Get related metrics for error timeframe",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "api.Metric.query",
+      "parameters": {
+        "from": "now - 35m",
+        "to": "now",
+        "query": "avg:aws.rds.database_connections{*}, avg:kubernetes.cpu.usage{*}, avg:trace.servlet.request.errors{*}"
+      },
+      "files": []
+    },
+    {
+      "name": "Create composite monitor",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "api.Monitor.create",
+      "parameters": {
+        "type": "composite",
+        "query": "( \"Error Rate Monitor\" && \"Database Connection Monitor\" ) || \"Service Latency Monitor\"",
+        "name": "Correlated Service Failure Detection",
+        "message": "Multiple related service failures detected. Check correlated logs for trace IDs.\n\nRunbook: https://wiki.internal/runbooks/correlated-failures",
+        "tags": ["correlation:multi-service", "severity:critical"]
+      },
+      "files": []
+    }
+  ]
+}

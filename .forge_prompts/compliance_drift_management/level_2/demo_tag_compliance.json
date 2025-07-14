@@ -1,0 +1,56 @@
+{
+  "goal": "Enforce mandatory tagging compliance on EC2 instances",
+  "steps": [
+    {
+      "name": "List all EC2 instances",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ec2.describe_instances",
+      "parameters": {
+        "Filters": [
+          {
+            "Name": "instance-state-name",
+            "Values": ["running", "stopped"]
+          }
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Check for missing required tags",
+      "type": "cli",
+      "command": "aws ec2 describe-instances --query 'Reservations[*].Instances[?!Tags[?Key==`Environment`] || !Tags[?Key==`Owner`] || !Tags[?Key==`CostCenter`]].[InstanceId,Tags]' --output json > /tmp/non_compliant_instances.json",
+      "files": ["/tmp/non_compliant_instances.json"]
+    },
+    {
+      "name": "Generate tagging compliance report",
+      "type": "prompt",
+      "prompt": "Review the instances in /tmp/non_compliant_instances.json and create a detailed report showing which required tags (Environment, Owner, CostCenter) are missing from each instance.",
+      "files": ["/tmp/non_compliant_instances.json"]
+    },
+    {
+      "name": "Apply default tags to non-compliant instances",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ec2.create_tags",
+      "parameters": {
+        "Resources": ["${instance_id}"],
+        "Tags": [
+          {
+            "Key": "Environment",
+            "Value": "untagged"
+          },
+          {
+            "Key": "Owner",
+            "Value": "compliance-team"
+          },
+          {
+            "Key": "CostCenter",
+            "Value": "unassigned"
+          }
+        ]
+      },
+      "files": []
+    }
+  ]
+}

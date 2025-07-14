@@ -1,0 +1,58 @@
+{
+  "goal": "Test automated failover mechanisms across services",
+  "steps": [
+    {
+      "name": "Identify critical dependencies",
+      "type": "cli",
+      "command": "kubectl get services -A -o json | jq -r '.items[] | select(.metadata.labels.tier==\"critical\") | .metadata.namespace + \"/\" + .metadata.name' > /tmp/critical_services.txt && kubectl get endpoints -A -o json > /tmp/service_endpoints.json",
+      "files": ["/tmp/critical_services.txt", "/tmp/service_endpoints.json"]
+    },
+    {
+      "name": "Test database failover",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('rds').failover_db_cluster",
+      "parameters": {
+        "DBClusterIdentifier": "production-aurora-cluster",
+        "TargetDBInstanceIdentifier": "production-aurora-instance-2"
+      },
+      "files": []
+    },
+    {
+      "name": "Monitor failover progress",
+      "type": "cli",
+      "command": "for i in {1..30}; do aws rds describe-db-clusters --db-cluster-identifier production-aurora-cluster --query 'DBClusters[0].Status' --output text >> /tmp/failover_status.log; echo \"$(date): $(tail -1 /tmp/failover_status.log)\" >> /tmp/failover_timeline.log; sleep 10; done",
+      "files": ["/tmp/failover_status.log", "/tmp/failover_timeline.log"]
+    },
+    {
+      "name": "Test Redis sentinel failover",
+      "type": "cli",
+      "command": "kubectl exec -n production redis-sentinel-0 -- redis-cli -p 26379 SENTINEL failover mymaster > /tmp/redis_failover.log && sleep 5 && kubectl exec -n production redis-sentinel-0 -- redis-cli -p 26379 SENTINEL masters > /tmp/redis_masters.json",
+      "files": ["/tmp/redis_failover.log", "/tmp/redis_masters.json"]
+    },
+    {
+      "name": "Simulate zone failure",
+      "type": "cli",
+      "command": "kubectl cordon $(kubectl get nodes -l failure-domain.beta.kubernetes.io/zone=us-east-1a -o name) && kubectl drain $(kubectl get nodes -l failure-domain.beta.kubernetes.io/zone=us-east-1a -o name) --ignore-daemonsets --delete-emptydir-data --force > /tmp/zone_drain.log",
+      "files": ["/tmp/zone_drain.log"]
+    },
+    {
+      "name": "Check service availability",
+      "type": "cli",
+      "command": "python3 << 'EOF'\nimport requests\nimport json\nimport time\n\nservices = [\n    {'name': 'api', 'url': 'http://api-service.production.svc.cluster.local/health'},\n    {'name': 'auth', 'url': 'http://auth-service.production.svc.cluster.local/health'},\n    {'name': 'payment', 'url': 'http://payment-service.production.svc.cluster.local/health'},\n]\n\navailability_results = []\n\nfor i in range(60):  # Check for 5 minutes\n    timestamp = time.time()\n    for service in services:\n        try:\n            response = requests.get(service['url'], timeout=5)\n            available = response.status_code == 200\n            response_time = response.elapsed.total_seconds()\n        except:\n            available = False\n            response_time = None\n        \n        availability_results.append({\n            'timestamp': timestamp,\n            'service': service['name'],\n            'available': available,\n            'response_time': response_time\n        })\n    \n    time.sleep(5)\n\nwith open('/tmp/service_availability.json', 'w') as f:\n    json.dump(availability_results, f, indent=2)\nEOF",
+      "files": ["/tmp/service_availability.json"]
+    },
+    {
+      "name": "Restore zone",
+      "type": "cli",
+      "command": "kubectl uncordon $(kubectl get nodes -l failure-domain.beta.kubernetes.io/zone=us-east-1a -o name)",
+      "files": []
+    },
+    {
+      "name": "Analyze failover performance",
+      "type": "prompt",
+      "prompt": "Analyze the failover timeline, service availability data, and zone failure impact. Calculate RTO for each service, identify any failed failovers, and create recommendations for improving failover speed and reliability.",
+      "files": ["/tmp/critical_services.txt", "/tmp/failover_timeline.log", "/tmp/redis_masters.json", "/tmp/zone_drain.log", "/tmp/service_availability.json"]
+    }
+  ]
+}

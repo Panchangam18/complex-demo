@@ -1,0 +1,108 @@
+{
+  "goal": "Automate security incident detection and response workflow",
+  "steps": [
+    {
+      "name": "Check GuardDuty findings",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('guardduty').list_findings",
+      "parameters": {
+        "DetectorId": "${DETECTOR_ID}",
+        "FindingCriteria": {
+          "Criterion": {
+            "severity": {
+              "Gte": 7
+            },
+            "updatedAt": {
+              "Gte": "${LAST_CHECK_TIME}"
+            }
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Get finding details",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('guardduty').get_findings",
+      "parameters": {
+        "DetectorId": "${DETECTOR_ID}",
+        "FindingIds": ["${FINDING_IDS}"]
+      },
+      "files": []
+    },
+    {
+      "name": "Isolate compromised instance",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('ec2').modify_instance_attribute",
+      "parameters": {
+        "InstanceId": "${COMPROMISED_INSTANCE_ID}",
+        "Groups": ["${ISOLATION_SECURITY_GROUP_ID}"]
+      },
+      "files": []
+    },
+    {
+      "name": "Capture instance memory",
+      "type": "cli",
+      "command": "aws ssm send-command --instance-ids ${COMPROMISED_INSTANCE_ID} --document-name 'AWS-RunShellScript' --parameters 'commands=[\"sudo dd if=/dev/mem of=/tmp/memory_dump.img\", \"aws s3 cp /tmp/memory_dump.img s3://incident-response-bucket/incident-${INCIDENT_ID}/memory_dump.img\"]' --output json > /tmp/memory_capture.json",
+      "files": ["/tmp/memory_capture.json"]
+    },
+    {
+      "name": "Create forensic snapshot",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('ec2').create_snapshot",
+      "parameters": {
+        "VolumeId": "${COMPROMISED_VOLUME_ID}",
+        "Description": "Forensic snapshot for incident ${INCIDENT_ID}",
+        "TagSpecifications": [
+          {
+            "ResourceType": "snapshot",
+            "Tags": [
+              {"Key": "IncidentId", "Value": "${INCIDENT_ID}"},
+              {"Key": "Type", "Value": "forensic"},
+              {"Key": "Retention", "Value": "legal-hold"}
+            ]
+          }
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Query CloudTrail for actor activity",
+      "type": "cli",
+      "command": "aws cloudtrail lookup-events --lookup-attributes AttributeKey=ResourceName,AttributeValue=${COMPROMISED_INSTANCE_ID} --start-time $(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ) --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) > /tmp/cloudtrail_events.json",
+      "files": ["/tmp/cloudtrail_events.json"]
+    },
+    {
+      "name": "Create incident report",
+      "type": "integration",
+      "integration": "pagerduty",
+      "method": "incidents.create",
+      "parameters": {
+        "incident": {
+          "type": "incident",
+          "title": "Security Incident - ${FINDING_TYPE}",
+          "service": {
+            "id": "${SECURITY_SERVICE_ID}",
+            "type": "service_reference"
+          },
+          "urgency": "high",
+          "body": {
+            "type": "incident_body",
+            "details": "GuardDuty detected ${FINDING_TYPE} on instance ${COMPROMISED_INSTANCE_ID}"
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Analyze and contain threat",
+      "type": "prompt",
+      "prompt": "Analyze the GuardDuty findings, CloudTrail events, and memory capture status. Identify the attack vector, determine the blast radius, and create a containment strategy. Generate IOCs (Indicators of Compromise) and remediation steps.",
+      "files": ["/tmp/memory_capture.json", "/tmp/cloudtrail_events.json"]
+    }
+  ]
+}

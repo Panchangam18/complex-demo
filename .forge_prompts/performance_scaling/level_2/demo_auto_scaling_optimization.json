@@ -1,310 +1,66 @@
 {
-  "workflow_name": "intelligent_auto_scaling_optimization",
-  "description": "Real-time auto-scaling with predictive analytics and cost optimization",
-  "goal": "Automatically scale infrastructure based on predictive load patterns while optimizing for cost and performance",
-  "trigger": {
-    "type": "composite",
-    "triggers": [
-      {"type": "metric", "source": "cloudwatch:CPUUtilization > 70%"},
-      {"type": "metric", "source": "datadog:request_rate > threshold"},
-      {"type": "schedule", "cron": "*/5 * * * *"}
-    ]
-  },
-  "inputs": {
-    "current_metrics": "${trigger.metrics}",
-    "service_name": "${trigger.service}",
-    "environment": "${trigger.environment}"
-  },
+  "goal": "Optimize auto-scaling based on custom metrics and predictions",
   "steps": [
     {
-      "step": 1,
-      "action": "collect_performance_metrics",
-      "integration": "datadog.MetricsApi.query_timeseries_data",
+      "name": "Collect historical metrics",
+      "type": "integration",
+      "integration": "prometheus",
+      "method": "query_range",
       "parameters": {
-        "query": "avg:system.cpu.user{service:${inputs.service_name}}, avg:aws.elb.request_count{service:${inputs.service_name}}, avg:custom.app.response_time{service:${inputs.service_name}}",
-        "from": "${now() - 3600}",
-        "to": "${now()}"
+        "query": "avg(rate(http_requests_total[5m])) by (service)",
+        "start": "now-7d",
+        "end": "now",
+        "step": "5m"
       },
-      "output": "current_performance"
+      "files": []
     },
     {
-      "step": 2,
-      "action": "analyze_traffic_patterns",
-      "integration": "aws.cloudwatch.GetMetricStatistics",
-      "parameters": {
-        "Namespace": "AWS/ApplicationELB",
-        "MetricName": "RequestCountPerTarget",
-        "Dimensions": [
-          {"Name": "LoadBalancer", "Value": "${inputs.service_name}-alb"}
-        ],
-        "StartTime": "${now() - 86400}",
-        "EndTime": "${now()}",
-        "Period": 300,
-        "Statistics": ["Average", "Maximum", "Minimum"]
-      },
-      "output": "traffic_patterns"
+      "name": "Analyze traffic patterns",
+      "type": "cli",
+      "command": "python3 << 'EOF'\nimport pandas as pd\nimport numpy as np\nfrom datetime import datetime, timedelta\nimport json\n\n# Generate synthetic traffic pattern data\nnp.random.seed(42)\ndates = pd.date_range(start=datetime.now() - timedelta(days=7), end=datetime.now(), freq='H')\n\n# Create realistic traffic pattern\ntraffic = []\nfor date in dates:\n    hour = date.hour\n    day = date.weekday()\n    \n    # Base traffic\n    base = 1000\n    \n    # Hour of day pattern\n    if 9 <= hour <= 17:  # Business hours\n        base *= 3\n    elif 18 <= hour <= 22:  # Evening peak\n        base *= 2\n    elif 0 <= hour <= 6:  # Night\n        base *= 0.3\n    \n    # Day of week pattern\n    if day in [5, 6]:  # Weekend\n        base *= 0.6\n    \n    # Add noise\n    base += np.random.normal(0, base * 0.1)\n    \n    traffic.append({\n        'timestamp': date.isoformat(),\n        'requests_per_second': max(0, int(base)),\n        'hour': hour,\n        'day_of_week': day\n    })\n\nwith open('/tmp/traffic_patterns.json', 'w') as f:\n    json.dump(traffic, f, indent=2)\n\n# Calculate percentiles for scaling\nrps_values = [t['requests_per_second'] for t in traffic]\npercentiles = {\n    'p50': np.percentile(rps_values, 50),\n    'p75': np.percentile(rps_values, 75),\n    'p90': np.percentile(rps_values, 90),\n    'p95': np.percentile(rps_values, 95),\n    'p99': np.percentile(rps_values, 99)\n}\n\nwith open('/tmp/traffic_percentiles.json', 'w') as f:\n    json.dump(percentiles, f, indent=2)\nEOF",
+      "files": ["/tmp/traffic_patterns.json", "/tmp/traffic_percentiles.json"]
     },
     {
-      "step": 3,
-      "action": "predict_future_load",
-      "integration": "aws.sagemaker.InvokeEndpoint",
-      "parameters": {
-        "EndpointName": "load-prediction-model",
-        "Body": {
-          "historical_metrics": "${current_performance}",
-          "traffic_patterns": "${traffic_patterns}",
-          "time_features": {
-            "hour_of_day": "${hour()}",
-            "day_of_week": "${dayOfWeek()}",
-            "is_holiday": "${isHoliday()}"
-          },
-          "forecast_window_minutes": 30
-        }
-      },
-      "output": "load_prediction"
+      "name": "Configure HPA with custom metrics",
+      "type": "cli",
+      "command": "kubectl apply -f - <<EOF\napiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\nmetadata:\n  name: api-hpa-custom\n  namespace: production\nspec:\n  scaleTargetRef:\n    apiVersion: apps/v1\n    kind: Deployment\n    name: api\n  minReplicas: 3\n  maxReplicas: 50\n  metrics:\n  - type: Pods\n    pods:\n      metric:\n        name: http_requests_per_second\n      target:\n        type: AverageValue\n        averageValue: \"1000\"\n  - type: Resource\n    resource:\n      name: cpu\n      target:\n        type: Utilization\n        averageUtilization: 70\n  - type: Resource\n    resource:\n      name: memory\n      target:\n        type: Utilization\n        averageUtilization: 80\n  behavior:\n    scaleDown:\n      stabilizationWindowSeconds: 300\n      policies:\n      - type: Percent\n        value: 10\n        periodSeconds: 60\n      - type: Pods\n        value: 2\n        periodSeconds: 60\n    scaleUp:\n      stabilizationWindowSeconds: 60\n      policies:\n      - type: Percent\n        value: 50\n        periodSeconds: 60\n      - type: Pods\n        value: 5\n        periodSeconds: 60\nEOF",
+      "files": []
     },
     {
-      "step": 4,
-      "action": "calculate_optimal_capacity",
-      "integration": "aws.lambda.Invoke",
-      "parameters": {
-        "FunctionName": "capacity-optimizer",
-        "Payload": {
-          "predicted_load": "${load_prediction}",
-          "current_capacity": "${current_performance.instance_count}",
-          "sla_requirements": {
-            "target_response_time_ms": 200,
-            "availability_target": 0.999
-          },
-          "cost_constraints": {
-            "max_hourly_cost": 500,
-            "spot_instance_preference": 0.7
-          }
-        }
-      },
-      "output": "optimal_capacity"
+      "name": "Implement predictive scaling",
+      "type": "cli",
+      "command": "cat > /tmp/predictive_scaler.py << 'EOF'\nimport json\nimport numpy as np\nfrom sklearn.linear_model import LinearRegression\nfrom datetime import datetime, timedelta\n\n# Load traffic data\nwith open('/tmp/traffic_patterns.json', 'r') as f:\n    traffic = json.load(f)\n\n# Prepare features for prediction\nX = []\ny = []\n\nfor i, point in enumerate(traffic[:-1]):\n    X.append([\n        point['hour'],\n        point['day_of_week'],\n        point['requests_per_second']\n    ])\n    y.append(traffic[i+1]['requests_per_second'])\n\nX = np.array(X)\ny = np.array(y)\n\n# Train model\nmodel = LinearRegression()\nmodel.fit(X, y)\n\n# Predict next hour\ncurrent = traffic[-1]\nnext_hour = (current['hour'] + 1) % 24\nnext_day = current['day_of_week'] if next_hour > current['hour'] else (current['day_of_week'] + 1) % 7\n\nprediction = model.predict([[\n    next_hour,\n    next_day,\n    current['requests_per_second']\n]])[0]\n\n# Calculate required replicas\nrequests_per_pod = 200  # Assumed capacity\nrequired_replicas = max(3, int(np.ceil(prediction / requests_per_pod)))\n\nresult = {\n    'current_rps': current['requests_per_second'],\n    'predicted_rps': int(prediction),\n    'recommended_replicas': required_replicas,\n    'prediction_time': (datetime.now() + timedelta(hours=1)).isoformat()\n}\n\nwith open('/tmp/scaling_prediction.json', 'w') as f:\n    json.dump(result, f, indent=2)\nEOF\npython3 /tmp/predictive_scaler.py",
+      "files": ["/tmp/predictive_scaler.py", "/tmp/scaling_prediction.json"]
     },
     {
-      "step": 5,
-      "action": "check_spot_instance_availability",
-      "integration": "aws.ec2.DescribeSpotInstanceRequests",
-      "parameters": {
-        "Filters": [
-          {"Name": "instance-type", "Values": "${optimal_capacity.instance_types}"},
-          {"Name": "availability-zone", "Values": "${optimal_capacity.availability_zones}"}
-        ]
-      },
-      "output": "spot_availability"
+      "name": "Configure cluster autoscaler",
+      "type": "cli",
+      "command": "kubectl apply -f - <<EOF\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cluster-autoscaler-status\n  namespace: kube-system\ndata:\n  nodes.max: \"20\"\n  nodes.min: \"3\"\n  scale-down-delay-after-add: \"10m\"\n  scale-down-unneeded-time: \"10m\"\n  scale-down-utilization-threshold: \"0.5\"\n  skip-nodes-with-local-storage: \"false\"\n  skip-nodes-with-system-pods: \"false\"\n  balance-similar-node-groups: \"true\"\n  expander: \"priority\"\nEOF",
+      "files": []
     },
     {
-      "step": 6,
-      "action": "update_auto_scaling_policy",
-      "integration": "aws.autoscaling.PutScalingPolicy",
-      "parameters": {
-        "AutoScalingGroupName": "${inputs.service_name}-asg",
-        "PolicyName": "predictive-scaling-${timestamp()}",
-        "PolicyType": "PredictiveScaling",
-        "PredictiveScalingConfiguration": {
-          "MetricSpecifications": [{
-            "TargetValue": "${optimal_capacity.target_cpu_utilization}",
-            "PredefinedMetricPairSpecification": {
-              "PredefinedMetricType": "ASGCPUUtilization"
-            }
-          }],
-          "Mode": "ForecastAndScale",
-          "SchedulingBufferTime": 600
-        }
-      },
-      "output": "scaling_policy"
+      "name": "Test scaling behavior",
+      "type": "cli",
+      "command": "kubectl run load-generator --image=busybox --rm -it --restart=Never -- sh -c 'for i in $(seq 1 1000); do wget -q -O- http://api-service.production.svc.cluster.local/api/v1/test & done; wait' > /tmp/load_test.log 2>&1 &\nLOAD_PID=$!\nsleep 60\nkubectl get hpa api-hpa-custom -n production -o json > /tmp/hpa_status.json\nkill $LOAD_PID 2>/dev/null || true",
+      "files": ["/tmp/hpa_status.json"]
     },
     {
-      "step": 7,
-      "action": "pre_warm_instances",
-      "integration": "aws.ec2.RunInstances",
-      "condition": "${optimal_capacity.requires_pre_warming}",
+      "name": "Analyze scaling metrics",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "api.Metric.query",
       "parameters": {
-        "ImageId": "${optimal_capacity.ami_id}",
-        "InstanceType": "${optimal_capacity.instance_type}",
-        "MinCount": "${optimal_capacity.pre_warm_count}",
-        "MaxCount": "${optimal_capacity.pre_warm_count}",
-        "LaunchTemplate": {
-          "LaunchTemplateId": "${inputs.service_name}-template",
-          "Version": "$Latest"
-        },
-        "TagSpecifications": [{
-          "ResourceType": "instance",
-          "Tags": [
-            {"Key": "PreWarmed", "Value": "true"},
-            {"Key": "Service", "Value": "${inputs.service_name}"}
-          ]
-        }]
+        "from": "now - 1h",
+        "to": "now",
+        "query": "avg:kubernetes.hpa.current_replicas{hpa:api-hpa-custom} by {hpa}"
       },
-      "output": "pre_warmed_instances"
+      "files": []
     },
     {
-      "step": 8,
-      "action": "configure_load_balancer_routing",
-      "integration": "aws.elbv2.ModifyTargetGroupAttributes",
-      "parameters": {
-        "TargetGroupArn": "${inputs.service_name}-tg",
-        "Attributes": [
-          {
-            "Key": "deregistration_delay.timeout_seconds",
-            "Value": "${optimal_capacity.deregistration_delay}"
-          },
-          {
-            "Key": "load_balancing.algorithm.type",
-            "Value": "${optimal_capacity.load_balancing_algorithm}"
-          }
-        ]
-      },
-      "output": "lb_configuration"
-    },
-    {
-      "step": 9,
-      "action": "implement_request_queueing",
-      "integration": "aws.sqs.SetQueueAttributes",
-      "condition": "${load_prediction.burst_expected}",
-      "parameters": {
-        "QueueUrl": "${inputs.service_name}-burst-queue",
-        "Attributes": {
-          "MessageRetentionPeriod": "300",
-          "VisibilityTimeout": "${optimal_capacity.processing_time_estimate}",
-          "ReddrivePolicy": {
-            "deadLetterTargetArn": "${inputs.service_name}-dlq",
-            "maxReceiveCount": 3
-          }
-        }
-      },
-      "output": "queue_configuration"
-    },
-    {
-      "step": 10,
-      "action": "update_caching_strategy",
-      "integration": "aws.elasticache.ModifyCacheCluster",
-      "parameters": {
-        "CacheClusterId": "${inputs.service_name}-cache",
-        "NumCacheNodes": "${optimal_capacity.cache_nodes}",
-        "CacheNodeType": "${optimal_capacity.cache_node_type}",
-        "ApplyImmediately": true
-      },
-      "output": "cache_update"
-    },
-    {
-      "step": 11,
-      "action": "adjust_database_connections",
-      "integration": "aws.rds.ModifyDBInstance",
-      "parameters": {
-        "DBInstanceIdentifier": "${inputs.service_name}-db",
-        "DBParameterGroupName": "${inputs.service_name}-params-${optimal_capacity.db_tier}",
-        "ApplyImmediately": false,
-        "PreferredMaintenanceWindow": "sun:05:00-sun:06:00"
-      },
-      "output": "db_configuration"
-    },
-    {
-      "step": 12,
-      "action": "deploy_performance_monitors",
-      "integration": "datadog.MonitorsApi.create_monitor",
-      "parameters": {
-        "body": {
-          "name": "Scaling Performance - ${inputs.service_name}",
-          "type": "metric alert",
-          "query": "avg(last_5m):avg:custom.scaling.efficiency{service:${inputs.service_name}} < 0.8",
-          "message": "Scaling efficiency dropped below 80% for ${inputs.service_name}",
-          "tags": ["service:${inputs.service_name}", "team:platform"],
-          "options": {
-            "thresholds": {"critical": 0.8, "warning": 0.85},
-            "notify_no_data": true
-          }
-        }
-      },
-      "output": "performance_monitor"
-    },
-    {
-      "step": 13,
-      "action": "validate_scaling_effectiveness",
-      "integration": "aws.cloudwatch.GetMetricData",
-      "parameters": {
-        "MetricDataQueries": [
-          {
-            "Id": "response_time_after_scaling",
-            "Expression": "AVG(m1)",
-            "Period": 300
-          },
-          {
-            "Id": "m1",
-            "MetricStat": {
-              "Metric": {
-                "Namespace": "AWS/ApplicationELB",
-                "MetricName": "TargetResponseTime"
-              },
-              "Period": 60,
-              "Stat": "Average"
-            }
-          }
-        ],
-        "StartTime": "${scaling_policy.timestamp}",
-        "EndTime": "${now()}"
-      },
-      "output": "scaling_validation"
-    },
-    {
-      "step": 14,
-      "action": "calculate_cost_impact",
-      "integration": "aws.ce.GetCostForecast",
-      "parameters": {
-        "TimePeriod": {
-          "Start": "${today()}",
-          "End": "${today() + 7}"
-        },
-        "Metric": "BLENDED_COST",
-        "Granularity": "DAILY",
-        "Filter": {
-          "Tags": {
-            "Key": "Service",
-            "Values": ["${inputs.service_name}"]
-          }
-        },
-        "PredictionIntervalLevel": 90
-      },
-      "output": "cost_forecast"
-    },
-    {
-      "step": 15,
-      "action": "update_scaling_intelligence",
-      "integration": "aws.dynamodb.UpdateItem",
-      "parameters": {
-        "TableName": "scaling-intelligence",
-        "Key": {
-          "service_name": "${inputs.service_name}",
-          "timestamp": "${now()}"
-        },
-        "UpdateExpression": "SET scaling_decision = :decision, predicted_vs_actual = :accuracy, cost_efficiency = :efficiency, learned_patterns = list_append(learned_patterns, :new_pattern)",
-        "ExpressionAttributeValues": {
-          ":decision": "${optimal_capacity}",
-          ":accuracy": "${scaling_validation.accuracy_percentage}",
-          ":efficiency": "${cost_forecast.efficiency_score}",
-          ":new_pattern": [{
-            "trigger": "${inputs.current_metrics}",
-            "action": "${scaling_policy}",
-            "outcome": "${scaling_validation}"
-          }]
-        }
-      },
-      "output": "intelligence_update"
+      "name": "Optimize scaling strategy",
+      "type": "prompt",
+      "prompt": "Analyze the traffic patterns, scaling predictions, and HPA behavior. Evaluate if the scaling thresholds are appropriate, recommend optimizations for the scaling policies, and suggest improvements for cost-efficiency while maintaining performance.",
+      "files": ["/tmp/traffic_patterns.json", "/tmp/traffic_percentiles.json", "/tmp/scaling_prediction.json", "/tmp/hpa_status.json"]
     }
-  ],
-  "error_handling": {
-    "strategy": "graceful_degradation",
-    "fallback_capacity": "maintain_current",
-    "alert_on_prediction_failure": true,
-    "manual_override": "enabled"
-  },
-  "outputs": {
-    "scaling_decision": "${optimal_capacity}",
-    "predicted_load": "${load_prediction}",
-    "cost_impact": "${cost_forecast}",
-    "performance_improvement": "${scaling_validation.improvement_percentage}"
-  }
+  ]
 }

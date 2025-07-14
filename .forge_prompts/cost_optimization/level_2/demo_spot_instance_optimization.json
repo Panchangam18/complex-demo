@@ -1,0 +1,103 @@
+{
+  "goal": "Optimize cloud costs using spot instances with fallback strategies",
+  "steps": [
+    {
+      "name": "Analyze spot price history",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('ec2').describe_spot_price_history",
+      "parameters": {
+        "StartTime": "${WEEK_AGO}",
+        "EndTime": "${NOW}",
+        "InstanceTypes": ["m5.large", "m5.xlarge", "m5a.large", "m5a.xlarge"],
+        "ProductDescriptions": ["Linux/UNIX"],
+        "MaxResults": 1000
+      },
+      "files": []
+    },
+    {
+      "name": "Calculate spot savings potential",
+      "type": "cli",
+      "command": "python3 << 'EOF'\nimport boto3\nimport json\nfrom datetime import datetime, timedelta\nimport statistics\n\nec2 = boto3.client('ec2')\n\n# Get on-demand prices\non_demand_prices = {\n    'm5.large': 0.096,\n    'm5.xlarge': 0.192,\n    'm5a.large': 0.086,\n    'm5a.xlarge': 0.172\n}\n\n# Get spot price history\nresponse = ec2.describe_spot_price_history(\n    StartTime=datetime.now() - timedelta(days=7),\n    EndTime=datetime.now(),\n    InstanceTypes=['m5.large', 'm5.xlarge', 'm5a.large', 'm5a.xlarge'],\n    ProductDescriptions=['Linux/UNIX']\n)\n\n# Calculate statistics\nspot_stats = {}\nfor instance_type in on_demand_prices:\n    prices = [float(p['SpotPrice']) for p in response['SpotPriceHistory'] if p['InstanceType'] == instance_type]\n    if prices:\n        spot_stats[instance_type] = {\n            'on_demand_price': on_demand_prices[instance_type],\n            'spot_avg': statistics.mean(prices),\n            'spot_min': min(prices),\n            'spot_max': max(prices),\n            'spot_p90': statistics.quantiles(prices, n=10)[8],\n            'avg_savings_percent': (1 - statistics.mean(prices) / on_demand_prices[instance_type]) * 100,\n            'interruption_rate_estimate': len([i for i in range(1, len(prices)) if abs(prices[i] - prices[i-1]) / prices[i-1] > 0.2]) / len(prices) * 100\n        }\n\nwith open('/tmp/spot_analysis.json', 'w') as f:\n    json.dump(spot_stats, f, indent=2)\nEOF",
+      "files": ["/tmp/spot_analysis.json"]
+    },
+    {
+      "name": "Configure spot fleet",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('ec2').request_spot_fleet",
+      "parameters": {
+        "SpotFleetRequestConfig": {
+          "IamFleetRole": "${FLEET_ROLE_ARN}",
+          "AllocationStrategy": "diversified",
+          "TargetCapacity": 10,
+          "SpotPrice": "0.10",
+          "LaunchTemplateConfigs": [
+            {
+              "LaunchTemplateSpecification": {
+                "LaunchTemplateId": "${TEMPLATE_ID}",
+                "Version": "$Latest"
+              },
+              "Overrides": [
+                {"InstanceType": "m5.large", "SubnetId": "${SUBNET_1}", "WeightedCapacity": 1.0},
+                {"InstanceType": "m5a.large", "SubnetId": "${SUBNET_1}", "WeightedCapacity": 1.0},
+                {"InstanceType": "m5.xlarge", "SubnetId": "${SUBNET_2}", "WeightedCapacity": 2.0},
+                {"InstanceType": "m5a.xlarge", "SubnetId": "${SUBNET_2}", "WeightedCapacity": 2.0}
+              ]
+            }
+          ],
+          "ReplaceUnhealthyInstances": true,
+          "InstanceInterruptionBehavior": "terminate",
+          "Type": "maintain"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Setup interruption handling",
+      "type": "cli",
+      "command": "cat > /tmp/spot_interruption_handler.yaml << 'EOF'\napiVersion: apps/v1\nkind: DaemonSet\nmetadata:\n  name: spot-interrupt-handler\n  namespace: kube-system\nspec:\n  selector:\n    matchLabels:\n      app: spot-interrupt-handler\n  template:\n    metadata:\n      labels:\n        app: spot-interrupt-handler\n    spec:\n      serviceAccountName: spot-interrupt-handler\n      hostNetwork: true\n      containers:\n      - name: spot-interrupt-handler\n        image: amazon/aws-node-termination-handler:v1.19.0\n        env:\n        - name: NODE_NAME\n          valueFrom:\n            fieldRef:\n              fieldPath: spec.nodeName\n        - name: POD_NAME\n          valueFrom:\n            fieldRef:\n              fieldPath: metadata.name\n        - name: ENABLE_SPOT_INTERRUPTION_DRAINING\n          value: \"true\"\n        - name: ENABLE_SCHEDULED_EVENT_DRAINING\n          value: \"true\"\n        - name: DRAIN_GRACE_PERIOD\n          value: \"120\"\n        - name: WEBHOOK_URL\n          value: \"${SLACK_WEBHOOK_URL}\"\n        resources:\n          requests:\n            cpu: 50m\n            memory: 64Mi\n      nodeSelector:\n        node.kubernetes.io/lifecycle: spot\nEOF\nkubectl apply -f /tmp/spot_interruption_handler.yaml",
+      "files": ["/tmp/spot_interruption_handler.yaml"]
+    },
+    {
+      "name": "Implement workload migration",
+      "type": "cli",
+      "command": "cat > /tmp/migrate_workloads.sh << 'EOF'\n#!/bin/bash\n\n# Get spot instance interruption notice\nINTERRUPTION=$(curl -s http://169.254.169.254/latest/meta-data/spot/instance-action)\n\nif [[ $INTERRUPTION == *\"terminate\"* ]]; then\n  INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)\n  NODE_NAME=$(kubectl get nodes -o json | jq -r \".items[] | select(.spec.providerID | contains(\\\"$INSTANCE_ID\\\")) | .metadata.name\")\n  \n  echo \"Spot interruption detected for node: $NODE_NAME\"\n  \n  # Cordon the node\n  kubectl cordon $NODE_NAME\n  \n  # Get pods on the node\n  PODS=$(kubectl get pods --all-namespaces --field-selector spec.nodeName=$NODE_NAME -o json)\n  \n  # Migrate stateful workloads first\n  echo \"$PODS\" | jq -r '.items[] | select(.spec.volumes[]?.persistentVolumeClaim) | .metadata.namespace + \"/\" + .metadata.name' | while read pod; do\n    kubectl delete pod $pod --grace-period=120\n  done\n  \n  # Then migrate stateless workloads\n  kubectl drain $NODE_NAME --ignore-daemonsets --delete-emptydir-data --force --grace-period=60\nfi\nEOF\nchmod +x /tmp/migrate_workloads.sh",
+      "files": ["/tmp/migrate_workloads.sh"]
+    },
+    {
+      "name": "Monitor spot instance usage",
+      "type": "integration",
+      "integration": "cloudwatch",
+      "method": "put_metric_data",
+      "parameters": {
+        "Namespace": "SpotOptimization",
+        "MetricData": [
+          {
+            "MetricName": "SpotInstancePercentage",
+            "Value": "${SPOT_PERCENTAGE}",
+            "Unit": "Percent"
+          },
+          {
+            "MetricName": "SpotCostSavings",
+            "Value": "${SAVINGS_AMOUNT}",
+            "Unit": "Count"
+          }
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Create cost optimization report",
+      "type": "cli",
+      "command": "python3 << 'EOF'\nimport json\nimport boto3\nfrom datetime import datetime, timedelta\n\n# Load spot analysis\nwith open('/tmp/spot_analysis.json', 'r') as f:\n    spot_stats = json.load(f)\n\n# Calculate monthly projections\ncost_report = {\n    'timestamp': datetime.now().isoformat(),\n    'current_monthly_cost': 0,\n    'projected_spot_cost': 0,\n    'projected_savings': 0,\n    'recommendations': []\n}\n\n# Assume 100 instances running 24/7\ninstance_hours_per_month = 100 * 730\n\nfor instance_type, stats in spot_stats.items():\n    on_demand_monthly = stats['on_demand_price'] * instance_hours_per_month\n    spot_monthly = stats['spot_avg'] * instance_hours_per_month\n    savings = on_demand_monthly - spot_monthly\n    \n    cost_report['current_monthly_cost'] += on_demand_monthly\n    cost_report['projected_spot_cost'] += spot_monthly\n    cost_report['projected_savings'] += savings\n    \n    if stats['avg_savings_percent'] > 50 and stats['interruption_rate_estimate'] < 5:\n        cost_report['recommendations'].append({\n            'instance_type': instance_type,\n            'action': 'migrate_to_spot',\n            'savings_percent': stats['avg_savings_percent'],\n            'monthly_savings': savings,\n            'risk': 'low' if stats['interruption_rate_estimate'] < 2 else 'medium'\n        })\n\ncost_report['total_savings_percent'] = (cost_report['projected_savings'] / cost_report['current_monthly_cost']) * 100\n\nwith open('/tmp/cost_optimization_report.json', 'w') as f:\n    json.dump(cost_report, f, indent=2)\nEOF",
+      "files": ["/tmp/cost_optimization_report.json"]
+    },
+    {
+      "name": "Analyze spot optimization",
+      "type": "prompt",
+      "prompt": "Review the spot price analysis, interruption rates, and cost optimization report. Recommend the optimal mix of spot and on-demand instances, identify workloads suitable for spot instances, and suggest strategies for handling interruptions.",
+      "files": ["/tmp/spot_analysis.json", "/tmp/spot_interruption_handler.yaml", "/tmp/migrate_workloads.sh", "/tmp/cost_optimization_report.json"]
+    }
+  ]
+}

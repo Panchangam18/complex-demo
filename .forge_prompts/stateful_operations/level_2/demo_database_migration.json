@@ -1,0 +1,72 @@
+{
+  "goal": "Execute zero-downtime database schema migration with rollback capability",
+  "steps": [
+    {
+      "name": "Create database snapshot",
+      "type": "integration",
+      "integration": "aws",
+      "method": "rds.create_db_snapshot",
+      "parameters": {
+        "DBSnapshotIdentifier": "pre-migration-${timestamp}",
+        "DBInstanceIdentifier": "${db_instance_id}",
+        "Tags": [
+          {
+            "Key": "Purpose",
+            "Value": "pre-migration-backup"
+          },
+          {
+            "Key": "Timestamp",
+            "Value": "${timestamp}"
+          }
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Check current schema version",
+      "type": "cli",
+      "command": "mysql -h ${db_host} -u ${db_user} -p${db_pass} -e 'SELECT version, checksum, applied_at FROM schema_migrations ORDER BY version DESC LIMIT 5;' > /tmp/current_schema.txt",
+      "files": ["/tmp/current_schema.txt"]
+    },
+    {
+      "name": "Run migration dry-run",
+      "type": "cli",
+      "command": "flyway -url=jdbc:mysql://${db_host}:3306/${db_name} -user=${db_user} -password=${db_pass} -schemas=${db_name} -target=${target_version} validate && flyway -url=jdbc:mysql://${db_host}:3306/${db_name} -user=${db_user} -password=${db_pass} -dryRunOutput=/tmp/migration_plan.sql migrate",
+      "files": ["/tmp/migration_plan.sql"]
+    },
+    {
+      "name": "Analyze migration impact",
+      "type": "prompt",
+      "prompt": "Review the migration plan in /tmp/migration_plan.sql and current schema in /tmp/current_schema.txt. Identify any potentially breaking changes, estimate migration duration based on table sizes, and verify that all changes are backward compatible for zero-downtime deployment.",
+      "files": ["/tmp/migration_plan.sql", "/tmp/current_schema.txt"]
+    },
+    {
+      "name": "Execute migration with monitoring",
+      "type": "cli",
+      "command": "flyway -url=jdbc:mysql://${db_host}:3306/${db_name} -user=${db_user} -password=${db_pass} -schemas=${db_name} -target=${target_version} -outOfOrder=true migrate 2>&1 | tee /tmp/migration_output.log",
+      "files": ["/tmp/migration_output.log"]
+    },
+    {
+      "name": "Verify data integrity",
+      "type": "cli",
+      "command": "mysql -h ${db_host} -u ${db_user} -p${db_pass} ${db_name} < /tmp/data_integrity_checks.sql > /tmp/integrity_results.txt",
+      "files": ["/tmp/integrity_results.txt"]
+    },
+    {
+      "name": "Update application feature flags",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "api.api_client.call_api",
+      "parameters": {
+        "resource_path": "/api/v1/feature_flags",
+        "method": "PUT",
+        "body": {
+          "flag_name": "use_new_schema",
+          "enabled": true,
+          "percentage": 10
+        }
+      },
+      "files": []
+    }
+  ]
+}

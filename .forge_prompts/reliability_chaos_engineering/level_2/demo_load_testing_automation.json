@@ -1,0 +1,53 @@
+{
+  "goal": "Automate load testing with progressive traffic patterns",
+  "steps": [
+    {
+      "name": "Deploy K6 operator",
+      "type": "cli",
+      "command": "kubectl apply -f https://github.com/grafana/k6-operator/releases/latest/download/bundle.yaml && kubectl wait --for=condition=available --timeout=300s deployment/k6-operator-controller-manager -n k6-operator-system",
+      "files": []
+    },
+    {
+      "name": "Create load test scenario",
+      "type": "cli",
+      "command": "cat > /tmp/load_test_scenario.js << 'EOF'\nimport http from 'k6/http';\nimport { check, sleep } from 'k6';\nimport { Rate } from 'k6/metrics';\n\nconst errorRate = new Rate('errors');\n\nexport const options = {\n  stages: [\n    { duration: '2m', target: 100 },   // Ramp up\n    { duration: '5m', target: 100 },   // Stay at 100 users\n    { duration: '2m', target: 500 },   // Spike to 500\n    { duration: '5m', target: 500 },   // Stay at 500\n    { duration: '2m', target: 1000 },  // Push to 1000\n    { duration: '5m', target: 1000 },  // Maximum load\n    { duration: '5m', target: 0 },     // Ramp down\n  ],\n  thresholds: {\n    http_req_duration: ['p(95)<500', 'p(99)<1000'],\n    errors: ['rate<0.1'],\n  },\n};\n\nexport default function () {\n  const responses = http.batch([\n    ['GET', 'http://api-service.production.svc.cluster.local/api/v1/products'],\n    ['GET', 'http://api-service.production.svc.cluster.local/api/v1/users/me'],\n    ['POST', 'http://api-service.production.svc.cluster.local/api/v1/orders', \n      JSON.stringify({ product_id: Math.floor(Math.random() * 1000), quantity: 1 }),\n      { headers: { 'Content-Type': 'application/json' } }\n    ],\n  ]);\n  \n  responses.forEach(response => {\n    check(response, {\n      'status is 200': (r) => r.status === 200,\n      'response time < 500ms': (r) => r.timings.duration < 500,\n    }) || errorRate.add(1);\n  });\n  \n  sleep(1);\n}\nEOF",
+      "files": ["/tmp/load_test_scenario.js"]
+    },
+    {
+      "name": "Run distributed load test",
+      "type": "cli",
+      "command": "kubectl apply -f - <<EOF\napiVersion: k6.io/v1alpha1\nkind: K6\nmetadata:\n  name: distributed-load-test\n  namespace: default\nspec:\n  parallelism: 5\n  script:\n    configMap:\n      name: load-test-script\n      file: load_test_scenario.js\n  arguments: --out influxdb=http://influxdb.monitoring:8086/k6\nEOF",
+      "files": []
+    },
+    {
+      "name": "Monitor application metrics",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "api.Metric.query",
+      "parameters": {
+        "from": "${TEST_START_TIME}",
+        "to": "${TEST_END_TIME}",
+        "query": "avg:kubernetes.cpu.usage{service:api} by {pod_name}"
+      },
+      "files": []
+    },
+    {
+      "name": "Capture performance profile",
+      "type": "cli",
+      "command": "kubectl exec -n production $(kubectl get pods -n production -l app=api -o jsonpath='{.items[0].metadata.name}') -- curl -s localhost:6060/debug/pprof/profile?seconds=30 > /tmp/cpu_profile.pprof && kubectl exec -n production $(kubectl get pods -n production -l app=api -o jsonpath='{.items[0].metadata.name}') -- curl -s localhost:6060/debug/pprof/heap > /tmp/heap_profile.pprof",
+      "files": ["/tmp/cpu_profile.pprof", "/tmp/heap_profile.pprof"]
+    },
+    {
+      "name": "Analyze database performance",
+      "type": "cli",
+      "command": "mysql -h production-db.region.rds.amazonaws.com -u admin -p${DB_PASSWORD} -e \"SELECT digest_text, count_star, avg_timer_wait/1000000000 as avg_ms, sum_timer_wait/1000000000 as total_ms FROM performance_schema.events_statements_summary_by_digest ORDER BY sum_timer_wait DESC LIMIT 20;\" > /tmp/slow_queries.txt",
+      "files": ["/tmp/slow_queries.txt"]
+    },
+    {
+      "name": "Generate load test report",
+      "type": "prompt",
+      "prompt": "Analyze the load test scenario results, performance profiles, and database metrics. Identify bottlenecks, determine the maximum sustainable load, and create recommendations for scaling and optimization.",
+      "files": ["/tmp/load_test_scenario.js", "/tmp/slow_queries.txt"]
+    }
+  ]
+}

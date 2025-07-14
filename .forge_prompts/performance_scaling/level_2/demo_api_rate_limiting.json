@@ -1,0 +1,78 @@
+{
+  "goal": "Implement intelligent API rate limiting with adaptive thresholds",
+  "steps": [
+    {
+      "name": "Deploy Redis for rate limiting",
+      "type": "cli",
+      "command": "helm install redis bitnami/redis --namespace rate-limiting --create-namespace --set auth.enabled=true --set auth.password=${REDIS_PASSWORD} --set cluster.enabled=true --set cluster.slaveCount=2 > /tmp/redis_install.log",
+      "files": ["/tmp/redis_install.log"]
+    },
+    {
+      "name": "Configure rate limiter",
+      "type": "cli",
+      "command": "cat > /tmp/rate_limiter_config.yaml << 'EOF'\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: rate-limiter-config\n  namespace: production\ndata:\n  limits.yaml: |\n    default:\n      requests_per_second: 10\n      burst: 20\n      window: 60\n    \n    by_tier:\n      free:\n        requests_per_second: 10\n        daily_limit: 1000\n      basic:\n        requests_per_second: 50\n        daily_limit: 10000\n      premium:\n        requests_per_second: 200\n        daily_limit: 100000\n      enterprise:\n        requests_per_second: 1000\n        daily_limit: unlimited\n    \n    by_endpoint:\n      /api/v1/search:\n        requests_per_second: 5\n        cost: 10\n      /api/v1/export:\n        requests_per_second: 1\n        cost: 100\n      /api/v1/webhook:\n        requests_per_second: 50\n        cost: 1\n    \n    adaptive:\n      cpu_threshold: 80\n      memory_threshold: 85\n      error_rate_threshold: 0.05\n      scale_down_factor: 0.8\nEOF",
+      "files": ["/tmp/rate_limiter_config.yaml"]
+    },
+    {
+      "name": "Implement sliding window algorithm",
+      "type": "cli",
+      "command": "cat > /tmp/sliding_window_limiter.py << 'EOF'\nimport redis\nimport time\nimport json\nfrom datetime import datetime, timedelta\n\nclass SlidingWindowRateLimiter:\n    def __init__(self, redis_client):\n        self.redis = redis_client\n        self.script = self.redis.register_script('''\n            local key = KEYS[1]\n            local now = tonumber(ARGV[1])\n            local window = tonumber(ARGV[2])\n            local limit = tonumber(ARGV[3])\n            \n            local clearBefore = now - window\n            \n            redis.call('zremrangebyscore', key, 0, clearBefore)\n            \n            local current = redis.call('zcard', key)\n            if current < limit then\n                redis.call('zadd', key, now, now)\n                redis.call('expire', key, window)\n                return 1\n            else\n                return 0\n            end\n        ''')\n    \n    def is_allowed(self, key, window_seconds, limit):\n        now = time.time()\n        return bool(self.script(keys=[key], args=[now, window_seconds, limit]))\n    \n    def get_usage(self, key, window_seconds):\n        now = time.time()\n        clear_before = now - window_seconds\n        self.redis.zremrangebyscore(key, 0, clear_before)\n        return self.redis.zcard(key)\n    \n    def get_reset_time(self, key, window_seconds):\n        oldest = self.redis.zrange(key, 0, 0, withscores=True)\n        if oldest:\n            return oldest[0][1] + window_seconds\n        return time.time()\n\n# Test the rate limiter\nif __name__ == '__main__':\n    r = redis.Redis(host='localhost', port=6379, decode_responses=True)\n    limiter = SlidingWindowRateLimiter(r)\n    \n    # Simulate requests\n    results = []\n    for i in range(15):\n        allowed = limiter.is_allowed('user:123:api', 60, 10)\n        usage = limiter.get_usage('user:123:api', 60)\n        reset = limiter.get_reset_time('user:123:api', 60)\n        \n        results.append({\n            'request': i + 1,\n            'allowed': allowed,\n            'usage': usage,\n            'reset_in': reset - time.time()\n        })\n        \n        time.sleep(0.1)\n    \n    with open('/tmp/rate_limit_test.json', 'w') as f:\n        json.dump(results, f, indent=2)\nEOF\npython3 /tmp/sliding_window_limiter.py",
+      "files": ["/tmp/sliding_window_limiter.py", "/tmp/rate_limit_test.json"]
+    },
+    {
+      "name": "Configure API Gateway rate limiting",
+      "type": "cli",
+      "command": "kubectl apply -f - <<EOF\napiVersion: networking.k8s.io/v1\nkind: Ingress\nmetadata:\n  name: api-gateway\n  namespace: production\n  annotations:\n    nginx.ingress.kubernetes.io/limit-rps: \"100\"\n    nginx.ingress.kubernetes.io/limit-burst-multiplier: \"2\"\n    nginx.ingress.kubernetes.io/limit-connections: \"20\"\n    nginx.ingress.kubernetes.io/configuration-snippet: |\n      limit_req_zone \\$binary_remote_addr zone=ip:10m rate=10r/s;\n      limit_req_zone \\$http_authorization zone=token:10m rate=100r/s;\n      limit_req_zone \\$uri zone=uri:10m rate=1000r/s;\nspec:\n  rules:\n  - host: api.example.com\n    http:\n      paths:\n      - path: /api/v1\n        pathType: Prefix\n        backend:\n          service:\n            name: api-service\n            port:\n              number: 8080\nEOF",
+      "files": []
+    },
+    {
+      "name": "Implement distributed rate limiting",
+      "type": "integration",
+      "integration": "envoy",
+      "method": "config.ratelimit.v3.RateLimitService",
+      "parameters": {
+        "domain": "production",
+        "descriptors": [
+          {
+            "key": "remote_address",
+            "rate_limit": {
+              "unit": "SECOND",
+              "requests_per_unit": 10
+            }
+          },
+          {
+            "key": "header_match",
+            "value": "api_key",
+            "rate_limit": {
+              "unit": "MINUTE",
+              "requests_per_unit": 1000
+            }
+          }
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Monitor rate limit metrics",
+      "type": "integration",
+      "integration": "prometheus",
+      "method": "query",
+      "parameters": {
+        "query": "sum(rate(nginx_ingress_controller_requests_total{status=~\"429\"}[5m])) by (ingress)"
+      },
+      "files": []
+    },
+    {
+      "name": "Test rate limiting behavior",
+      "type": "cli",
+      "command": "python3 << 'EOF'\nimport requests\nimport time\nimport json\nfrom concurrent.futures import ThreadPoolExecutor\nimport threading\n\nresults = {'429_responses': 0, '200_responses': 0, 'errors': 0}\nlock = threading.Lock()\n\ndef make_request(i):\n    headers = {\n        'Authorization': f'Bearer user-{i % 10}',\n        'X-API-Key': 'test-key'\n    }\n    \n    try:\n        response = requests.get(\n            'http://api.example.com/api/v1/test',\n            headers=headers,\n            timeout=5\n        )\n        \n        with lock:\n            if response.status_code == 429:\n                results['429_responses'] += 1\n            elif response.status_code == 200:\n                results['200_responses'] += 1\n            \n        return {\n            'request_id': i,\n            'status': response.status_code,\n            'rate_limit_remaining': response.headers.get('X-RateLimit-Remaining'),\n            'rate_limit_reset': response.headers.get('X-RateLimit-Reset')\n        }\n    except Exception as e:\n        with lock:\n            results['errors'] += 1\n        return {'request_id': i, 'error': str(e)}\n\n# Send burst of requests\nwith ThreadPoolExecutor(max_workers=50) as executor:\n    responses = list(executor.map(make_request, range(500)))\n\n# Calculate statistics\nrate_limited = [r for r in responses if r.get('status') == 429]\nsuccessful = [r for r in responses if r.get('status') == 200]\n\nstats = {\n    'total_requests': len(responses),\n    'successful': len(successful),\n    'rate_limited': len(rate_limited),\n    'errors': results['errors'],\n    'rate_limit_effectiveness': len(rate_limited) / len(responses) * 100\n}\n\nwith open('/tmp/rate_limit_load_test.json', 'w') as f:\n    json.dump({\n        'statistics': stats,\n        'sample_responses': responses[:10]\n    }, f, indent=2)\nEOF",
+      "files": ["/tmp/rate_limit_load_test.json"]
+    },
+    {
+      "name": "Analyze rate limiting effectiveness",
+      "type": "prompt",
+      "prompt": "Review the rate limiter configuration, test results, and load test statistics. Evaluate if the rate limits are appropriate for protecting the API while allowing legitimate traffic. Recommend adjustments to limits, burst settings, and adaptive thresholds.",
+      "files": ["/tmp/rate_limiter_config.yaml", "/tmp/sliding_window_limiter.py", "/tmp/rate_limit_test.json", "/tmp/rate_limit_load_test.json"]
+    }
+  ]
+}

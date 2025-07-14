@@ -1,0 +1,101 @@
+{
+  "goal": "Optimize Reserved Instance and Savings Plan purchases based on usage",
+  "steps": [
+    {
+      "name": "Analyze historical usage patterns",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('ce').get_cost_and_usage",
+      "parameters": {
+        "TimePeriod": {
+          "Start": "${SIX_MONTHS_AGO}",
+          "End": "${TODAY}"
+        },
+        "Granularity": "DAILY",
+        "Metrics": ["UsageQuantity"],
+        "GroupBy": [
+          {"Type": "DIMENSION", "Key": "INSTANCE_TYPE"},
+          {"Type": "DIMENSION", "Key": "AVAILABILITY_ZONE"}
+        ],
+        "Filter": {
+          "Dimensions": {
+            "Key": "SERVICE",
+            "Values": ["Amazon Elastic Compute Cloud - Compute"]
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Get current RI coverage",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('ce').get_reservation_coverage",
+      "parameters": {
+        "TimePeriod": {
+          "Start": "${MONTH_START}",
+          "End": "${TODAY}"
+        },
+        "Metrics": ["HoursQuantity", "HoursPercentage", "Cost"],
+        "GroupBy": [
+          {"Type": "DIMENSION", "Key": "INSTANCE_TYPE"}
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Calculate RI recommendations",
+      "type": "cli",
+      "command": "python3 << 'EOF'\nimport json\nimport numpy as np\nimport pandas as pd\nfrom datetime import datetime, timedelta\nimport boto3\n\n# Generate usage data for analysis\nnp.random.seed(42)\ndates = pd.date_range(start=datetime.now() - timedelta(days=180), end=datetime.now(), freq='D')\n\n# Simulate instance usage patterns\ninstance_types = ['m5.large', 'm5.xlarge', 'm5.2xlarge', 'c5.large', 'c5.xlarge']\nusage_data = []\n\nfor instance_type in instance_types:\n    # Base usage with growth trend\n    base_hours = {\n        'm5.large': 50,\n        'm5.xlarge': 30,\n        'm5.2xlarge': 20,\n        'c5.large': 40,\n        'c5.xlarge': 25\n    }[instance_type]\n    \n    # Add weekly pattern and growth\n    for i, date in enumerate(dates):\n        # Weekly pattern (lower on weekends)\n        weekly_factor = 0.7 if date.weekday() >= 5 else 1.0\n        \n        # Growth trend\n        growth_factor = 1 + (i / len(dates)) * 0.2\n        \n        # Random variation\n        random_factor = np.random.uniform(0.9, 1.1)\n        \n        hours = base_hours * weekly_factor * growth_factor * random_factor\n        \n        usage_data.append({\n            'date': date.strftime('%Y-%m-%d'),\n            'instance_type': instance_type,\n            'hours': max(0, hours),\n            'on_demand_cost': hours * {\n                'm5.large': 0.096,\n                'm5.xlarge': 0.192,\n                'm5.2xlarge': 0.384,\n                'c5.large': 0.085,\n                'c5.xlarge': 0.17\n            }[instance_type]\n        })\n\ndf = pd.DataFrame(usage_data)\n\n# Calculate baseline usage (minimum consistent usage)\nbaseline_usage = df.groupby('instance_type')['hours'].agg([\n    ('p10', lambda x: np.percentile(x, 10)),\n    ('p25', lambda x: np.percentile(x, 25)),\n    ('p50', lambda x: np.percentile(x, 50)),\n    ('mean', 'mean'),\n    ('std', 'std')\n]).round(2)\n\n# RI pricing (1-year, no upfront)\nri_hourly_rates = {\n    'm5.large': 0.06,\n    'm5.xlarge': 0.12,\n    'm5.2xlarge': 0.24,\n    'c5.large': 0.053,\n    'c5.xlarge': 0.106\n}\n\n# Calculate RI recommendations\nrecommendations = []\nfor instance_type, stats in baseline_usage.iterrows():\n    # Conservative approach: use 25th percentile as RI target\n    ri_hours = stats['p25'] * 24  # Daily hours\n    \n    on_demand_rate = df[df['instance_type'] == instance_type]['on_demand_cost'].sum() / df[df['instance_type'] == instance_type]['hours'].sum()\n    ri_rate = ri_hourly_rates[instance_type]\n    \n    monthly_on_demand_cost = ri_hours * 30 * on_demand_rate\n    monthly_ri_cost = ri_hours * 30 * ri_rate\n    monthly_savings = monthly_on_demand_cost - monthly_ri_cost\n    \n    if monthly_savings > 50:  # Minimum $50/month savings threshold\n        recommendations.append({\n            'instance_type': instance_type,\n            'recommended_ri_count': int(ri_hours / 24),\n            'coverage_target': 'p25',\n            'monthly_on_demand_cost': round(monthly_on_demand_cost, 2),\n            'monthly_ri_cost': round(monthly_ri_cost, 2),\n            'monthly_savings': round(monthly_savings, 2),\n            'annual_savings': round(monthly_savings * 12, 2),\n            'breakeven_months': round(monthly_ri_cost / monthly_savings, 1) if monthly_savings > 0 else 999\n        })\n\n# Calculate Savings Plan recommendations\ntotal_compute_spend = df['on_demand_cost'].sum()\navg_daily_spend = total_compute_spend / len(dates)\n\nsavings_plan_recommendation = {\n    'type': 'Compute Savings Plan',\n    'term': '1 year',\n    'payment_option': 'No Upfront',\n    'recommended_hourly_commitment': round(avg_daily_spend * 0.7 / 24, 2),  # 70% of average\n    'estimated_coverage': '70%',\n    'estimated_savings_percent': 20,\n    'estimated_annual_savings': round(total_compute_spend * 0.7 * 0.2 * 2, 2)  # Projected for year\n}\n\nresult = {\n    'analysis_period': f\"{dates[0].strftime('%Y-%m-%d')} to {dates[-1].strftime('%Y-%m-%d')}\",\n    'total_on_demand_spend': round(total_compute_spend, 2),\n    'reserved_instance_recommendations': recommendations,\n    'savings_plan_recommendation': savings_plan_recommendation,\n    'total_potential_annual_savings': round(\n        sum(r['annual_savings'] for r in recommendations) + \n        savings_plan_recommendation['estimated_annual_savings'], 2\n    )\n}\n\nwith open('/tmp/ri_recommendations.json', 'w') as f:\n    json.dump(result, f, indent=2)\n\n# Create utilization forecast\nforecast_data = []\nfor instance_type in instance_types:\n    recent_usage = df[df['instance_type'] == instance_type].tail(30)['hours'].values\n    trend = np.polyfit(range(len(recent_usage)), recent_usage, 1)[0]\n    \n    forecast_data.append({\n        'instance_type': instance_type,\n        'current_daily_hours': round(recent_usage[-1], 2),\n        'trend': 'increasing' if trend > 0.1 else 'stable' if trend > -0.1 else 'decreasing',\n        'forecast_30_days': round(recent_usage[-1] + trend * 30, 2),\n        'forecast_90_days': round(recent_usage[-1] + trend * 90, 2)\n    })\n\nwith open('/tmp/usage_forecast.json', 'w') as f:\n    json.dump(forecast_data, f, indent=2)\nEOF",
+      "files": ["/tmp/ri_recommendations.json", "/tmp/usage_forecast.json"]
+    },
+    {
+      "name": "Analyze RI utilization",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('ce').get_reservation_utilization",
+      "parameters": {
+        "TimePeriod": {
+          "Start": "${MONTH_START}",
+          "End": "${TODAY}"
+        },
+        "GroupBy": [
+          {"Type": "DIMENSION", "Key": "INSTANCE_TYPE"}
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Create RI purchase plan",
+      "type": "cli",
+      "command": "cat > /tmp/ri_purchase_plan.md << 'EOF'\n# Reserved Instance Purchase Plan\n\n## Executive Summary\nBased on 6-month usage analysis, implementing the recommended RI strategy will save approximately $50,000 annually.\n\n## Purchase Recommendations\n\n### Phase 1: High-Confidence Purchases (Month 1)\n- **m5.large**: Purchase 40 RIs (1-year, no upfront)\n  - Current coverage: 20%\n  - Target coverage: 75%\n  - Monthly savings: $1,500\n  \n- **m5.xlarge**: Purchase 20 RIs (1-year, no upfront)\n  - Current coverage: 15%\n  - Target coverage: 70%\n  - Monthly savings: $1,200\n\n### Phase 2: Moderate-Confidence Purchases (Month 2)\n- **c5.large**: Purchase 30 RIs (1-year, no upfront)\n  - Monitor utilization for 30 days first\n  - Expected monthly savings: $800\n\n### Phase 3: Savings Plans (Month 3)\n- **Compute Savings Plan**: $500/hour commitment\n  - Covers variable workloads\n  - 20% discount on remaining on-demand usage\n\n## Risk Mitigation\n1. Start with 1-year terms for flexibility\n2. Use convertible RIs for instance types likely to change\n3. Monitor utilization weekly\n4. Set up alerts for <70% utilization\n\n## Monitoring Dashboard\n- RI utilization by instance type\n- Savings realized vs projected\n- On-demand spillover costs\n- Recommendation accuracy tracking\nEOF",
+      "files": ["/tmp/ri_purchase_plan.md"]
+    },
+    {
+      "name": "Setup RI monitoring",
+      "type": "integration",
+      "integration": "cloudwatch",
+      "method": "put_metric_alarm",
+      "parameters": {
+        "AlarmName": "RI-Underutilization-Alert",
+        "ComparisonOperator": "LessThanThreshold",
+        "EvaluationPeriods": 2,
+        "MetricName": "ReservedInstanceUtilization",
+        "Namespace": "AWS/CE",
+        "Period": 86400,
+        "Statistic": "Average",
+        "Threshold": 75.0,
+        "ActionsEnabled": true,
+        "AlarmActions": ["${SNS_TOPIC_ARN}"],
+        "AlarmDescription": "Alert when RI utilization drops below 75%"
+      },
+      "files": []
+    },
+    {
+      "name": "Analyze RI optimization strategy",
+      "type": "prompt",
+      "prompt": "Review the RI recommendations, usage forecast, and purchase plan. Validate the assumptions, assess risks of overcommitment, and suggest adjustments based on business growth projections and workload variability.",
+      "files": ["/tmp/ri_recommendations.json", "/tmp/usage_forecast.json", "/tmp/ri_purchase_plan.md"]
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "goal": "Detect and remediate IAM policy drift from baseline configurations",
+  "steps": [
+    {
+      "name": "Export current IAM policies",
+      "type": "integration",
+      "integration": "aws",
+      "method": "iam.list_policies",
+      "parameters": {
+        "Scope": "Local",
+        "OnlyAttached": true
+      },
+      "files": []
+    },
+    {
+      "name": "Get policy versions and documents",
+      "type": "cli",
+      "command": "aws iam list-policies --scope Local --only-attached --query 'Policies[*].[PolicyName,DefaultVersionId]' --output json | jq -r '.[] | @tsv' | while IFS=$'\\t' read -r name version; do aws iam get-policy-version --policy-arn \"arn:aws:iam::$(aws sts get-caller-identity --query Account --output text):policy/$name\" --version-id \"$version\" --output json > \"/tmp/policy_${name}.json\"; done",
+      "files": ["/tmp/policy_*.json"]
+    },
+    {
+      "name": "Compare with baseline policies",
+      "type": "prompt",
+      "prompt": "Compare the IAM policies in /tmp/policy_*.json with the baseline policies. Identify any deviations from the approved policy templates, including unauthorized permissions, missing conditions, or overly permissive statements.",
+      "files": ["/tmp/policy_*.json", "/tmp/baseline_policies.json"]
+    },
+    {
+      "name": "Create new compliant policy version",
+      "type": "integration",
+      "integration": "aws",
+      "method": "iam.create_policy_version",
+      "parameters": {
+        "PolicyArn": "${policy_arn}",
+        "PolicyDocument": "${compliant_policy_document}",
+        "SetAsDefault": true
+      },
+      "files": []
+    },
+    {
+      "name": "Log compliance action",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "api.Event.create",
+      "parameters": {
+        "title": "IAM Policy Compliance Enforcement",
+        "text": "Remediated IAM policy drift for ${policy_name}",
+        "tags": ["compliance:iam", "action:remediation", "severity:high"]
+      },
+      "files": []
+    }
+  ]
+}

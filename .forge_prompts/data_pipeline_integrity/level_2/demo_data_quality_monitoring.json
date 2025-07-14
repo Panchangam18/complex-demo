@@ -1,0 +1,90 @@
+{
+  "goal": "Implement comprehensive data quality monitoring for pipelines",
+  "steps": [
+    {
+      "name": "Profile data sources",
+      "type": "cli",
+      "command": "python3 << 'EOF'\nimport pandas as pd\nimport numpy as np\nimport json\nfrom datetime import datetime, timedelta\n\n# Simulate data profiling for multiple tables\ntables = ['users', 'transactions', 'products', 'events']\nprofiling_results = {}\n\nfor table in tables:\n    # Generate sample data stats\n    np.random.seed(hash(table) % 100)\n    \n    profiling_results[table] = {\n        'row_count': np.random.randint(100000, 10000000),\n        'column_count': np.random.randint(10, 50),\n        'null_percentage': {\n            'email': np.random.uniform(0, 5),\n            'phone': np.random.uniform(10, 30),\n            'address': np.random.uniform(20, 40)\n        },\n        'cardinality': {\n            'user_id': 'high',\n            'country': 'medium',\n            'status': 'low'\n        },\n        'data_types': {\n            'id': 'bigint',\n            'created_at': 'timestamp',\n            'amount': 'decimal',\n            'description': 'text'\n        },\n        'anomalies': [\n            f'Duplicate values found in {table}_id column',\n            f'Future dates detected in created_at column',\n            f'Negative values in amount column'\n        ] if np.random.random() > 0.5 else []\n    }\n\nwith open('/tmp/data_profiling.json', 'w') as f:\n    json.dump(profiling_results, f, indent=2)\nEOF",
+      "files": ["/tmp/data_profiling.json"]
+    },
+    {
+      "name": "Setup data quality rules",
+      "type": "cli",
+      "command": "cat > /tmp/data_quality_rules.yaml << 'EOF'\nrules:\n  users:\n    - name: email_format\n      type: regex\n      column: email\n      pattern: '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$'\n      severity: critical\n    \n    - name: age_range\n      type: range\n      column: age\n      min: 0\n      max: 120\n      severity: warning\n    \n    - name: unique_user_id\n      type: uniqueness\n      column: user_id\n      severity: critical\n    \n    - name: created_date_valid\n      type: date_range\n      column: created_at\n      min: '2020-01-01'\n      max: 'today'\n      severity: error\n  \n  transactions:\n    - name: positive_amount\n      type: range\n      column: amount\n      min: 0\n      severity: critical\n    \n    - name: valid_currency\n      type: categorical\n      column: currency\n      values: ['USD', 'EUR', 'GBP', 'JPY']\n      severity: error\n    \n    - name: referential_integrity\n      type: foreign_key\n      column: user_id\n      reference_table: users\n      reference_column: user_id\n      severity: critical\n    \n    - name: transaction_completeness\n      type: not_null\n      columns: ['transaction_id', 'user_id', 'amount', 'created_at']\n      severity: critical\n  \n  products:\n    - name: price_consistency\n      type: custom_sql\n      query: |\n        SELECT COUNT(*) as violations\n        FROM products\n        WHERE sale_price > regular_price\n      threshold: 0\n      severity: warning\n    \n    - name: inventory_accuracy\n      type: custom_sql\n      query: |\n        SELECT COUNT(*) as violations\n        FROM products\n        WHERE quantity_on_hand < 0\n      threshold: 0\n      severity: error\nEOF",
+      "files": ["/tmp/data_quality_rules.yaml"]
+    },
+    {
+      "name": "Implement quality checks",
+      "type": "cli",
+      "command": "python3 << 'EOF'\nimport yaml\nimport json\nimport random\nfrom datetime import datetime\n\n# Load quality rules\nwith open('/tmp/data_quality_rules.yaml', 'r') as f:\n    rules_config = yaml.safe_load(f)\n\n# Simulate running quality checks\nquality_results = {\n    'scan_timestamp': datetime.now().isoformat(),\n    'tables_scanned': len(rules_config['rules']),\n    'total_rules': sum(len(rules) for rules in rules_config['rules'].values()),\n    'results': {}\n}\n\nfor table, rules in rules_config['rules'].items():\n    table_results = {\n        'total_rows': random.randint(100000, 1000000),\n        'rules_passed': 0,\n        'rules_failed': 0,\n        'violations': []\n    }\n    \n    for rule in rules:\n        # Simulate rule execution\n        passed = random.random() > 0.3  # 70% pass rate\n        \n        if passed:\n            table_results['rules_passed'] += 1\n        else:\n            table_results['rules_failed'] += 1\n            violation_count = random.randint(10, 1000)\n            \n            table_results['violations'].append({\n                'rule_name': rule['name'],\n                'rule_type': rule['type'],\n                'severity': rule['severity'],\n                'violation_count': violation_count,\n                'sample_violations': [\n                    {'row_id': i, 'value': f'invalid_value_{i}'}\n                    for i in range(min(5, violation_count))\n                ]\n            })\n    \n    quality_results['results'][table] = table_results\n\n# Calculate overall health score\ntotal_passed = sum(r['rules_passed'] for r in quality_results['results'].values())\ntotal_rules = quality_results['total_rules']\nquality_results['overall_health_score'] = round((total_passed / total_rules) * 100, 2)\n\nwith open('/tmp/quality_check_results.json', 'w') as f:\n    json.dump(quality_results, f, indent=2)\nEOF",
+      "files": ["/tmp/quality_check_results.json"]
+    },
+    {
+      "name": "Setup anomaly detection",
+      "type": "cli",
+      "command": "python3 << 'EOF'\nimport json\nimport numpy as np\nfrom datetime import datetime, timedelta\n\n# Simulate time series data for anomaly detection\nmetrics = {\n    'daily_record_count': {\n        'expected_range': [90000, 110000],\n        'seasonality': 'weekly',\n        'trend': 'increasing'\n    },\n    'null_rate': {\n        'expected_range': [0.01, 0.05],\n        'seasonality': 'none',\n        'trend': 'stable'\n    },\n    'duplicate_rate': {\n        'expected_range': [0.0, 0.001],\n        'seasonality': 'none',\n        'trend': 'stable'\n    },\n    'schema_changes': {\n        'expected_range': [0, 2],\n        'seasonality': 'none',\n        'trend': 'stable'\n    }\n}\n\n# Generate historical data with anomalies\nhistorical_data = []\nfor i in range(30):  # 30 days of history\n    date = (datetime.now() - timedelta(days=30-i)).strftime('%Y-%m-%d')\n    \n    day_metrics = {'date': date}\n    \n    for metric, config in metrics.items():\n        # Normal value within expected range\n        min_val, max_val = config['expected_range']\n        base_value = np.random.uniform(min_val, max_val)\n        \n        # Add seasonality\n        if config['seasonality'] == 'weekly' and i % 7 in [0, 6]:  # weekends\n            base_value *= 0.7\n        \n        # Add trend\n        if config['trend'] == 'increasing':\n            base_value *= (1 + i * 0.01)\n        \n        # Inject anomalies\n        if i in [10, 20, 25] and metric == 'daily_record_count':\n            base_value *= 0.5  # 50% drop\n        elif i == 15 and metric == 'duplicate_rate':\n            base_value *= 10  # 10x increase\n        \n        day_metrics[metric] = round(base_value, 4)\n    \n    historical_data.append(day_metrics)\n\n# Detect anomalies using statistical methods\nanomalies_detected = []\n\nfor metric in metrics:\n    values = [d[metric] for d in historical_data]\n    mean = np.mean(values)\n    std = np.std(values)\n    \n    for i, value in enumerate(values):\n        z_score = abs((value - mean) / std) if std > 0 else 0\n        \n        if z_score > 2:  # 2 standard deviations\n            anomalies_detected.append({\n                'date': historical_data[i]['date'],\n                'metric': metric,\n                'value': value,\n                'expected_range': [mean - 2*std, mean + 2*std],\n                'z_score': round(z_score, 2),\n                'severity': 'critical' if z_score > 3 else 'warning'\n            })\n\nanomalies_report = {\n    'scan_date': datetime.now().isoformat(),\n    'metrics_monitored': len(metrics),\n    'days_analyzed': len(historical_data),\n    'anomalies_found': len(anomalies_detected),\n    'anomalies': anomalies_detected,\n    'time_series_data': historical_data\n}\n\nwith open('/tmp/anomaly_detection.json', 'w') as f:\n    json.dump(anomalies_report, f, indent=2)\nEOF",
+      "files": ["/tmp/anomaly_detection.json"]
+    },
+    {
+      "name": "Create quality dashboard",
+      "type": "integration",
+      "integration": "grafana",
+      "method": "api.Dashboard.create",
+      "parameters": {
+        "dashboard": {
+          "title": "Data Quality Monitoring",
+          "panels": [
+            {
+              "title": "Overall Data Health Score",
+              "type": "stat",
+              "targets": [
+                {"expr": "data_quality_score"}
+              ],
+              "thresholds": {
+                "steps": [
+                  {"value": 0, "color": "red"},
+                  {"value": 80, "color": "yellow"},
+                  {"value": 95, "color": "green"}
+                ]
+              }
+            },
+            {
+              "title": "Quality Rule Violations",
+              "type": "graph",
+              "targets": [
+                {"expr": "sum(data_quality_violations) by (table, rule)"}
+              ]
+            },
+            {
+              "title": "Anomaly Detection",
+              "type": "table",
+              "targets": [
+                {"expr": "data_quality_anomalies{severity=\"critical\"}"}
+              ]
+            },
+            {
+              "title": "Data Freshness",
+              "type": "heatmap",
+              "targets": [
+                {"expr": "data_pipeline_lag_seconds"}
+              ]
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Setup alerting",
+      "type": "cli",
+      "command": "cat > /tmp/quality_alerts.yaml << 'EOF'\nalerts:\n  - name: critical_quality_violation\n    condition: |\n      SELECT COUNT(*) as violations\n      FROM quality_results\n      WHERE severity = 'critical'\n      AND timestamp > NOW() - INTERVAL '1 hour'\n    threshold: 0\n    notification:\n      - type: pagerduty\n        integration_key: ${PAGERDUTY_KEY}\n      - type: slack\n        webhook: ${SLACK_WEBHOOK}\n        channel: '#data-quality-alerts'\n  \n  - name: data_freshness_sla\n    condition: |\n      SELECT MAX(processing_lag_minutes) as max_lag\n      FROM pipeline_metrics\n      WHERE pipeline_name IN ('critical_dashboard', 'revenue_reporting')\n    threshold: 30\n    notification:\n      - type: email\n        recipients: ['data-team@company.com']\n  \n  - name: anomaly_detection\n    condition: |\n      SELECT COUNT(*) as anomalies\n      FROM anomaly_detection\n      WHERE z_score > 3\n      AND detected_at > NOW() - INTERVAL '15 minutes'\n    threshold: 2\n    notification:\n      - type: webhook\n        url: ${INCIDENT_MANAGEMENT_WEBHOOK}\n        payload:\n          title: 'Data Quality Anomaly Detected'\n          severity: 'high'\n          runbook: 'https://wiki.company.com/data-quality-runbook'\nEOF",
+      "files": ["/tmp/quality_alerts.yaml"]
+    },
+    {
+      "name": "Generate quality report",
+      "type": "prompt",
+      "prompt": "Analyze the data profiling results, quality check violations, and detected anomalies. Identify the most critical data quality issues, their potential business impact, and recommend remediation strategies. Create a prioritized action plan for improving data quality.",
+      "files": ["/tmp/data_profiling.json", "/tmp/data_quality_rules.yaml", "/tmp/quality_check_results.json", "/tmp/anomaly_detection.json", "/tmp/quality_alerts.yaml"]
+    }
+  ]
+}

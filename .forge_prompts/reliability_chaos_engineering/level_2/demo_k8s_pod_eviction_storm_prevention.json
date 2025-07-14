@@ -1,0 +1,153 @@
+{
+  "goal": "Automatically prevent cascading pod evictions that could cause service outages during planned node maintenance",
+  "steps": [
+    {
+      "name": "List pods on target node",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "CoreV1Api.list_pod_for_all_namespaces",
+      "parameters": {
+        "field_selector": "spec.nodeName=${NODE_NAME}"
+      },
+      "files": []
+    },
+    {
+      "name": "Check PodDisruptionBudgets",
+      "type": "cli",
+      "command": "kubectl get pdb --all-namespaces -o json | jq -r '.items[] | select(.spec.selector.matchLabels | to_entries[] | .value as $v | \"${POD_LABELS}\" | contains($v))'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Analyze node capacity",
+      "type": "prompt",
+      "prompt": "Calculate if remaining nodes have sufficient CPU/memory capacity to handle pods from the node being drained.",
+      "parameters": {
+        "node_to_drain": "${NODE_NAME}",
+        "resources": ["cpu", "memory"]
+      },
+      "files": ["maintenance/capacity-check.json"]
+    },
+    {
+      "name": "Identify critical services",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "CoreV1Api.list_service_for_all_namespaces",
+      "parameters": {
+        "label_selector": "tier=critical"
+      },
+      "files": []
+    },
+    {
+      "name": "Scale critical deployments",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "AppsV1Api.patch_namespaced_deployment_scale",
+      "parameters": {
+        "name": "${DEPLOYMENT_NAME}",
+        "namespace": "${NAMESPACE}",
+        "body": {
+          "spec": {
+            "replicas": "${NEW_REPLICA_COUNT}"
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Wait for pods to be ready",
+      "type": "cli",
+      "command": "kubectl wait --for=condition=ready pod -l app=${APP_NAME} -n ${NAMESPACE} --timeout=300s",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Cordon the node",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "CoreV1Api.patch_node",
+      "parameters": {
+        "name": "${NODE_NAME}",
+        "body": {
+          "spec": {
+            "unschedulable": true
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Monitor service error rates",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "MetricsApi.query_timeseries_data",
+      "parameters": {
+        "body": {
+          "data": {
+            "type": "timeseries_request",
+            "attributes": {
+              "formulas": [{"formula": "query1"}],
+              "queries": [{
+                "name": "query1",
+                "data_source": "metrics",
+                "query": "sum:service.errors{*} by {service}.as_rate()"
+              }],
+              "from": "now-5m",
+              "to": "now"
+            }
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Drain node carefully",
+      "type": "cli",
+      "command": "kubectl drain ${NODE_NAME} --ignore-daemonsets --delete-emptydir-data --grace-period=300",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Check for error spike",
+      "type": "prompt",
+      "prompt": "If service error rates increase by >10%, pause drain and alert on-call.",
+      "parameters": {
+        "error_threshold": 0.1,
+        "pause_on_breach": true
+      },
+      "files": ["maintenance/error-analysis.json"]
+    },
+    {
+      "name": "Uncordon node after maintenance",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "CoreV1Api.patch_node",
+      "parameters": {
+        "name": "${NODE_NAME}",
+        "body": {
+          "spec": {
+            "unschedulable": false
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Scale deployments back",
+      "type": "cli",
+      "command": "kubectl scale deployment ${DEPLOYMENT_NAME} -n ${NAMESPACE} --replicas=${ORIGINAL_REPLICAS}",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify no stuck pods",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "CoreV1Api.list_pod_for_all_namespaces",
+      "parameters": {
+        "field_selector": "status.phase=Pending"
+      },
+      "files": []
+    }
+  ]
+}

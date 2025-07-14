@@ -1,0 +1,85 @@
+{
+  "goal": "Enforce SLA deadlines for asynchronous processing queues",
+  "steps": [
+    {
+      "name": "Get queue metrics",
+      "type": "integration",
+      "integration": "aws",
+      "method": "sqs.get_queue_attributes",
+      "parameters": {
+        "QueueUrl": "${queue_url}",
+        "AttributeNames": [
+          "ApproximateNumberOfMessages",
+          "ApproximateNumberOfMessagesNotVisible",
+          "ApproximateAgeOfOldestMessage"
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Query message processing times",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "api.Metric.query",
+      "parameters": {
+        "from": "now - 1h",
+        "to": "now",
+        "query": "avg:sqs.message.processing_time{queue:${queue_name}} by {message_type}, max:sqs.message.age{queue:${queue_name}}"
+      },
+      "files": []
+    },
+    {
+      "name": "Export queue state",
+      "type": "cli",
+      "command": "aws sqs receive-message --queue-url ${queue_url} --max-number-of-messages 10 --visibility-timeout 0 --attribute-names All --message-attribute-names All --output json > /tmp/sample_messages.json",
+      "files": ["/tmp/sample_messages.json"]
+    },
+    {
+      "name": "Analyze SLA compliance",
+      "type": "prompt",
+      "prompt": "Review queue messages in /tmp/sample_messages.json. Identify messages approaching their SLA deadlines based on SentTimestamp and message attributes. Critical messages must be processed within 5 minutes, standard within 30 minutes. Calculate current SLA breach risk.",
+      "files": ["/tmp/sample_messages.json"]
+    },
+    {
+      "name": "Scale up workers for deadline enforcement",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ecs.update_service",
+      "parameters": {
+        "cluster": "processing-cluster",
+        "service": "queue-workers",
+        "desiredCount": "${scaled_worker_count}",
+        "forceNewDeployment": false
+      },
+      "files": []
+    },
+    {
+      "name": "Implement priority processing",
+      "type": "cli",
+      "command": "aws lambda invoke --function-name priority-queue-processor --payload '{\"action\": \"process_critical\", \"queue_url\": \"${queue_url}\", \"max_age_seconds\": 240}' /tmp/priority_processing_result.json",
+      "files": ["/tmp/priority_processing_result.json"]
+    },
+    {
+      "name": "Create SLA breach prevention monitor",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "api.Monitor.create",
+      "parameters": {
+        "type": "metric alert",
+        "query": "avg(last_5m):max:sqs.message.age{queue:${queue_name}} > 240",
+        "name": "SQS Message Age SLA Warning",
+        "message": "Messages in {{queue.name}} approaching SLA deadline. Oldest message age: {{value}} seconds\n\nScaling workers and activating priority processing.\n@slack-ops-critical",
+        "tags": ["sla:messaging", "queue:${queue_name}", "deadline:critical"],
+        "options": {
+          "thresholds": {
+            "critical": 240,
+            "warning": 180
+          },
+          "notify_no_data": true,
+          "no_data_timeframe": 10
+        }
+      },
+      "files": []
+    }
+  ]
+}

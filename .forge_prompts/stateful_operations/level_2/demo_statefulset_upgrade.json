@@ -1,0 +1,77 @@
+{
+  "goal": "Perform rolling upgrade of Kafka StatefulSet with data persistence validation",
+  "steps": [
+    {
+      "name": "Get current StatefulSet state",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "AppsV1Api.read_namespaced_stateful_set",
+      "parameters": {
+        "name": "kafka",
+        "namespace": "streaming"
+      },
+      "files": []
+    },
+    {
+      "name": "Check Kafka cluster health",
+      "type": "cli",
+      "command": "kubectl exec -n streaming kafka-0 -- kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /tmp/kafka_health.txt && kubectl exec -n streaming kafka-0 -- kafka-topics.sh --list --bootstrap-server localhost:9092 > /tmp/kafka_topics.txt",
+      "files": ["/tmp/kafka_health.txt", "/tmp/kafka_topics.txt"]
+    },
+    {
+      "name": "Get consumer group status",
+      "type": "cli",
+      "command": "kubectl exec -n streaming kafka-0 -- kafka-consumer-groups.sh --bootstrap-server localhost:9092 --all-groups --describe > /tmp/consumer_groups.txt",
+      "files": ["/tmp/consumer_groups.txt"]
+    },
+    {
+      "name": "Analyze upgrade readiness",
+      "type": "prompt",
+      "prompt": "Review Kafka health in /tmp/kafka_health.txt, topics in /tmp/kafka_topics.txt, and consumer groups in /tmp/consumer_groups.txt. Verify all partitions have in-sync replicas, no under-replicated partitions exist, and consumer lag is acceptable for upgrade.",
+      "files": ["/tmp/kafka_health.txt", "/tmp/kafka_topics.txt", "/tmp/consumer_groups.txt"]
+    },
+    {
+      "name": "Update StatefulSet with partition strategy",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "AppsV1Api.patch_namespaced_stateful_set",
+      "parameters": {
+        "name": "kafka",
+        "namespace": "streaming",
+        "body": {
+          "spec": {
+            "updateStrategy": {
+              "type": "RollingUpdate",
+              "rollingUpdate": {
+                "partition": 2
+              }
+            },
+            "template": {
+              "spec": {
+                "containers": [
+                  {
+                    "name": "kafka",
+                    "image": "confluentinc/cp-kafka:7.4.0"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Monitor rolling update progress",
+      "type": "cli",
+      "command": "kubectl rollout status statefulset/kafka -n streaming --watch=false > /tmp/rollout_status.txt && kubectl get pods -n streaming -l app=kafka -o wide > /tmp/pod_status.txt",
+      "files": ["/tmp/rollout_status.txt", "/tmp/pod_status.txt"]
+    },
+    {
+      "name": "Validate data persistence",
+      "type": "cli",
+      "command": "kubectl exec -n streaming kafka-0 -- kafka-log-dirs.sh --describe --bootstrap-server localhost:9092 > /tmp/log_dirs.txt && kubectl exec -n streaming kafka-0 -- kafka-run-class.sh kafka.tools.GetOffsetShell --broker-list localhost:9092 --topic test-topic --time -1 > /tmp/topic_offsets.txt",
+      "files": ["/tmp/log_dirs.txt", "/tmp/topic_offsets.txt"]
+    }
+  ]
+}

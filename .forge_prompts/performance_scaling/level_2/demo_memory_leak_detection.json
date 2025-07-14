@@ -1,0 +1,59 @@
+{
+  "goal": "Detect and diagnose memory leaks in production services",
+  "steps": [
+    {
+      "name": "Enable memory profiling",
+      "type": "cli",
+      "command": "kubectl set env deployment/api-service ENABLE_PROFILING=true PROFILING_PORT=6060 -n production && kubectl rollout status deployment/api-service -n production",
+      "files": []
+    },
+    {
+      "name": "Capture baseline memory usage",
+      "type": "cli",
+      "command": "kubectl exec -n production $(kubectl get pods -n production -l app=api -o jsonpath='{.items[0].metadata.name}') -- curl -s localhost:6060/debug/pprof/heap > /tmp/heap_baseline.pprof && go tool pprof -text /tmp/heap_baseline.pprof > /tmp/heap_baseline.txt",
+      "files": ["/tmp/heap_baseline.txt"]
+    },
+    {
+      "name": "Monitor memory growth",
+      "type": "cli",
+      "command": "for i in {1..10}; do kubectl top pod -n production -l app=api --no-headers | awk '{print strftime(\"%Y-%m-%d %H:%M:%S\"), $1, $3}' >> /tmp/memory_growth.log; sleep 60; done",
+      "files": ["/tmp/memory_growth.log"]
+    },
+    {
+      "name": "Analyze heap allocations",
+      "type": "cli",
+      "command": "kubectl exec -n production $(kubectl get pods -n production -l app=api -o jsonpath='{.items[0].metadata.name}') -- curl -s localhost:6060/debug/pprof/allocs > /tmp/allocs.pprof && go tool pprof -top /tmp/allocs.pprof | head -20 > /tmp/top_allocations.txt",
+      "files": ["/tmp/top_allocations.txt"]
+    },
+    {
+      "name": "Capture goroutine profile",
+      "type": "cli",
+      "command": "kubectl exec -n production $(kubectl get pods -n production -l app=api -o jsonpath='{.items[0].metadata.name}') -- curl -s localhost:6060/debug/pprof/goroutine > /tmp/goroutine.pprof && go tool pprof -text /tmp/goroutine.pprof > /tmp/goroutine_dump.txt",
+      "files": ["/tmp/goroutine_dump.txt"]
+    },
+    {
+      "name": "Compare heap snapshots",
+      "type": "cli",
+      "command": "sleep 300 && kubectl exec -n production $(kubectl get pods -n production -l app=api -o jsonpath='{.items[0].metadata.name}') -- curl -s localhost:6060/debug/pprof/heap > /tmp/heap_after.pprof && go tool pprof -base /tmp/heap_baseline.pprof /tmp/heap_after.pprof -text > /tmp/heap_diff.txt",
+      "files": ["/tmp/heap_diff.txt"]
+    },
+    {
+      "name": "Check for common leak patterns",
+      "type": "cli",
+      "command": "python3 << 'EOF'\nimport re\nimport json\n\n# Analyze memory growth\nwith open('/tmp/memory_growth.log', 'r') as f:\n    lines = f.readlines()\n\nmemory_data = []\nfor line in lines:\n    parts = line.strip().split()\n    if len(parts) >= 4:\n        timestamp = f\"{parts[0]} {parts[1]}\"\n        pod = parts[2]\n        memory = parts[3]\n        \n        # Convert memory to MB\n        if memory.endswith('Mi'):\n            mb = float(memory[:-2])\n        elif memory.endswith('Gi'):\n            mb = float(memory[:-2]) * 1024\n        else:\n            mb = 0\n        \n        memory_data.append({\n            'timestamp': timestamp,\n            'pod': pod,\n            'memory_mb': mb\n        })\n\n# Calculate growth rate\nif len(memory_data) > 1:\n    start_mem = memory_data[0]['memory_mb']\n    end_mem = memory_data[-1]['memory_mb']\n    growth_mb = end_mem - start_mem\n    growth_percent = (growth_mb / start_mem) * 100 if start_mem > 0 else 0\n    \n    leak_indicators = {\n        'continuous_growth': growth_percent > 20,\n        'total_growth_mb': growth_mb,\n        'growth_percent': growth_percent,\n        'samples': len(memory_data),\n        'potential_leak': growth_percent > 20 and growth_mb > 100\n    }\nelse:\n    leak_indicators = {'error': 'Insufficient data'}\n\n# Check for goroutine leaks\nwith open('/tmp/goroutine_dump.txt', 'r') as f:\n    goroutine_text = f.read()\n\ngoroutine_count = len(re.findall(r'goroutine \\d+', goroutine_text))\nleak_indicators['goroutine_count'] = goroutine_count\nleak_indicators['potential_goroutine_leak'] = goroutine_count > 1000\n\nwith open('/tmp/leak_analysis.json', 'w') as f:\n    json.dump(leak_indicators, f, indent=2)\nEOF",
+      "files": ["/tmp/leak_analysis.json"]
+    },
+    {
+      "name": "Generate memory flame graph",
+      "type": "cli",
+      "command": "kubectl exec -n production $(kubectl get pods -n production -l app=api -o jsonpath='{.items[0].metadata.name}') -- curl -s localhost:6060/debug/pprof/heap > /tmp/heap_flame.pprof && go tool pprof -raw /tmp/heap_flame.pprof | flamegraph.pl > /tmp/memory_flamegraph.svg",
+      "files": []
+    },
+    {
+      "name": "Diagnose memory leaks",
+      "type": "prompt",
+      "prompt": "Analyze the heap profiles, allocation data, and memory growth patterns. Identify potential memory leaks based on the diff between snapshots, goroutine counts, and allocation hot spots. Provide specific code locations and recommendations for fixing the leaks.",
+      "files": ["/tmp/heap_baseline.txt", "/tmp/memory_growth.log", "/tmp/top_allocations.txt", "/tmp/goroutine_dump.txt", "/tmp/heap_diff.txt", "/tmp/leak_analysis.json"]
+    }
+  ]
+}

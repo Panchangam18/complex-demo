@@ -1,0 +1,88 @@
+{
+  "goal": "Automate disaster recovery procedures with validation",
+  "steps": [
+    {
+      "name": "Backup critical data",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('backup').start_backup_job",
+      "parameters": {
+        "BackupVaultName": "disaster-recovery-vault",
+        "ResourceArn": "arn:aws:rds:us-east-1:123456789012:db:production-db",
+        "IamRoleArn": "arn:aws:iam::123456789012:role/BackupRole",
+        "IdempotencyToken": "${BACKUP_TOKEN}",
+        "Lifecycle": {
+          "MoveToColdStorageAfterDays": 30,
+          "DeleteAfterDays": 365
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Create EBS snapshots",
+      "type": "cli",
+      "command": "aws ec2 describe-volumes --filters Name=tag:Environment,Values=production --query 'Volumes[*].VolumeId' --output text | xargs -I {} aws ec2 create-snapshot --volume-id {} --description \"DR snapshot $(date +%Y%m%d-%H%M%S)\" --tag-specifications 'ResourceType=snapshot,Tags=[{Key=DR,Value=true},{Key=Timestamp,Value='$(date +%s)'}]' > /tmp/snapshot_ids.txt",
+      "files": ["/tmp/snapshot_ids.txt"]
+    },
+    {
+      "name": "Replicate to DR region",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('s3').put_bucket_replication",
+      "parameters": {
+        "Bucket": "production-data-bucket",
+        "ReplicationConfiguration": {
+          "Role": "arn:aws:iam::123456789012:role/ReplicationRole",
+          "Rules": [
+            {
+              "ID": "DisasterRecoveryReplication",
+              "Status": "Enabled",
+              "Priority": 1,
+              "Filter": {},
+              "Destination": {
+                "Bucket": "arn:aws:s3:::dr-data-bucket-us-west-2",
+                "ReplicationTime": {
+                  "Status": "Enabled",
+                  "Time": {
+                    "Minutes": 15
+                  }
+                },
+                "Metrics": {
+                  "Status": "Enabled",
+                  "EventThreshold": {
+                    "Minutes": 15
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Test DR failover",
+      "type": "cli",
+      "command": "python3 << 'EOF'\nimport boto3\nimport json\nimport time\n\n# Simulate failover to DR region\ndr_client = boto3.client('rds', region_name='us-west-2')\nprimary_client = boto3.client('rds', region_name='us-east-1')\n\n# Create read replica promotion test\nreplica_status = dr_client.describe_db_instances(\n    DBInstanceIdentifier='production-db-replica-dr'\n)['DBInstances'][0]\n\nresult = {\n    'timestamp': time.time(),\n    'replica_status': replica_status['DBInstanceStatus'],\n    'replica_lag': replica_status.get('ReadReplicaSourceDBInstanceIdentifier'),\n    'promotion_eligible': replica_status['DBInstanceStatus'] == 'available'\n}\n\nwith open('/tmp/dr_test_results.json', 'w') as f:\n    json.dump(result, f, indent=2, default=str)\nEOF",
+      "files": ["/tmp/dr_test_results.json"]
+    },
+    {
+      "name": "Validate backup integrity",
+      "type": "cli",
+      "command": "aws backup describe-backup-job --backup-job-id ${BACKUP_JOB_ID} > /tmp/backup_status.json && aws rds describe-db-snapshots --db-snapshot-identifier ${LATEST_SNAPSHOT_ID} > /tmp/snapshot_details.json",
+      "files": ["/tmp/backup_status.json", "/tmp/snapshot_details.json"]
+    },
+    {
+      "name": "Create DR runbook",
+      "type": "cli",
+      "command": "cat > /tmp/dr_runbook.md << 'EOF'\n# Disaster Recovery Runbook\n\n## RTO: 4 hours | RPO: 1 hour\n\n### Phase 1: Detection (0-15 minutes)\n1. Confirm primary region failure\n2. Notify incident response team\n3. Initiate DR protocol\n\n### Phase 2: Failover Preparation (15-45 minutes)\n1. Stop writes to primary database\n2. Ensure replication lag < 60 seconds\n3. Update DNS preparation\n\n### Phase 3: Failover Execution (45-90 minutes)\n1. Promote DR database replica\n2. Update application configurations\n3. Switch DNS to DR endpoints\n4. Scale DR infrastructure\n\n### Phase 4: Validation (90-120 minutes)\n1. Verify application functionality\n2. Run smoke tests\n3. Monitor error rates\n4. Confirm data integrity\n\n### Phase 5: Communication (120-240 minutes)\n1. Update status page\n2. Notify customers\n3. Document timeline\nEOF",
+      "files": ["/tmp/dr_runbook.md"]
+    },
+    {
+      "name": "Orchestrate DR test",
+      "type": "prompt",
+      "prompt": "Analyze the backup status, snapshot details, and DR test results. Validate that all critical data is being replicated with acceptable lag. Create an automated DR testing schedule and identify any gaps in the current DR strategy.",
+      "files": ["/tmp/snapshot_ids.txt", "/tmp/dr_test_results.json", "/tmp/backup_status.json", "/tmp/snapshot_details.json", "/tmp/dr_runbook.md"]
+    }
+  ]
+}

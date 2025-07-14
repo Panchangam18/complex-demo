@@ -1,0 +1,86 @@
+{
+  "goal": "Setup automated multi-region failover for critical services",
+  "steps": [
+    {
+      "name": "Check regional health endpoints",
+      "type": "cli",
+      "command": "for region in us-east-1 us-west-2 eu-west-1; do curl -s -o /tmp/health_${region}.json https://${region}.api.example.com/health; done",
+      "files": ["/tmp/health_us-east-1.json", "/tmp/health_us-west-2.json", "/tmp/health_eu-west-1.json"]
+    },
+    {
+      "name": "Get Route53 health checks",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('route53').list_health_checks",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create regional health monitors",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "api.Monitor.create",
+      "parameters": {
+        "type": "service check",
+        "query": "\"http.can_connect\".over(\"url:https://us-east-1.api.example.com/health\").by(\"region\").last(3).count_by_status()",
+        "name": "Regional API Health Check",
+        "message": "Region {{region.name}} is unhealthy. Initiating failover. @ops-team",
+        "tags": ["region:us-east-1", "service:api", "failover:enabled"]
+      },
+      "files": []
+    },
+    {
+      "name": "Configure weighted routing",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('route53').change_resource_record_sets",
+      "parameters": {
+        "HostedZoneId": "${HOSTED_ZONE_ID}",
+        "ChangeBatch": {
+          "Changes": [
+            {
+              "Action": "UPSERT",
+              "ResourceRecordSet": {
+                "Name": "api.example.com",
+                "Type": "A",
+                "SetIdentifier": "US-EAST-1",
+                "Weight": 100,
+                "AliasTarget": {
+                  "HostedZoneId": "${US_EAST_1_ALB_ZONE}",
+                  "DNSName": "${US_EAST_1_ALB_DNS}",
+                  "EvaluateTargetHealth": true
+                }
+              }
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Setup DynamoDB global tables",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('dynamodb').create_global_table",
+      "parameters": {
+        "GlobalTableName": "user-sessions",
+        "Replicas": [
+          {"RegionName": "us-east-1"},
+          {"RegionName": "us-west-2"},
+          {"RegionName": "eu-west-1"}
+        ],
+        "StreamSpecification": {
+          "StreamEnabled": true,
+          "StreamViewType": "NEW_AND_OLD_IMAGES"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Create failover automation",
+      "type": "prompt",
+      "prompt": "Analyze the regional health data and create an automated failover system that adjusts Route53 weights based on region health, ensures database consistency across regions, and handles session migration during failover.",
+      "files": ["/tmp/health_us-east-1.json", "/tmp/health_us-west-2.json", "/tmp/health_eu-west-1.json"]
+    }
+  ]
+}

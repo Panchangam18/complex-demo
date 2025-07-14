@@ -1,0 +1,79 @@
+{
+  "goal": "Right-size cloud resources based on actual usage patterns",
+  "steps": [
+    {
+      "name": "Collect resource utilization metrics",
+      "type": "integration", 
+      "integration": "cloudwatch",
+      "method": "get_metric_statistics",
+      "parameters": {
+        "Namespace": "AWS/EC2",
+        "MetricName": "CPUUtilization",
+        "Dimensions": [{"Name": "InstanceId", "Value": "${INSTANCE_ID}"}],
+        "StartTime": "${WEEK_AGO}",
+        "EndTime": "${NOW}",
+        "Period": 3600,
+        "Statistics": ["Average", "Maximum"]
+      },
+      "files": []
+    },
+    {
+      "name": "Analyze memory usage patterns",
+      "type": "cli",
+      "command": "for instance in $(aws ec2 describe-instances --filters Name=tag:Environment,Values=production --query 'Reservations[*].Instances[*].InstanceId' --output text); do echo \"Instance: $instance\" >> /tmp/memory_usage.txt; aws cloudwatch get-metric-statistics --namespace CWAgent --metric-name mem_used_percent --dimensions Name=InstanceId,Value=$instance --start-time $(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%S) --end-time $(date -u +%Y-%m-%dT%H:%M:%S) --period 3600 --statistics Average Maximum --query 'Datapoints[*].[Timestamp,Average,Maximum]' --output text >> /tmp/memory_usage.txt; done",
+      "files": ["/tmp/memory_usage.txt"]
+    },
+    {
+      "name": "Get current instance details",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('ec2').describe_instances",
+      "parameters": {
+        "Filters": [
+          {"Name": "instance-state-name", "Values": ["running"]},
+          {"Name": "tag:Environment", "Values": ["production"]}
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Calculate rightsizing recommendations",
+      "type": "cli",
+      "command": "python3 << 'EOF'\nimport json\nimport boto3\nfrom datetime import datetime, timedelta\n\nec2 = boto3.client('ec2')\ncloudwatch = boto3.client('cloudwatch')\n\n# Instance type specifications\ninstance_specs = {\n    't3.micro': {'vcpu': 2, 'memory': 1, 'price': 0.0104},\n    't3.small': {'vcpu': 2, 'memory': 2, 'price': 0.0208},\n    't3.medium': {'vcpu': 2, 'memory': 4, 'price': 0.0416},\n    't3.large': {'vcpu': 2, 'memory': 8, 'price': 0.0832},\n    'm5.large': {'vcpu': 2, 'memory': 8, 'price': 0.096},\n    'm5.xlarge': {'vcpu': 4, 'memory': 16, 'price': 0.192},\n    'm5.2xlarge': {'vcpu': 8, 'memory': 32, 'price': 0.384}\n}\n\nrecommendations = []\n\n# Get all running instances\nresponse = ec2.describe_instances(\n    Filters=[\n        {'Name': 'instance-state-name', 'Values': ['running']},\n        {'Name': 'tag:Environment', 'Values': ['production']}\n    ]\n)\n\nfor reservation in response['Reservations']:\n    for instance in reservation['Instances']:\n        instance_id = instance['InstanceId']\n        current_type = instance['InstanceType']\n        \n        # Get CPU metrics\n        cpu_response = cloudwatch.get_metric_statistics(\n            Namespace='AWS/EC2',\n            MetricName='CPUUtilization',\n            Dimensions=[{'Name': 'InstanceId', 'Value': instance_id}],\n            StartTime=datetime.now() - timedelta(days=7),\n            EndTime=datetime.now(),\n            Period=3600,\n            Statistics=['Average', 'Maximum']\n        )\n        \n        if cpu_response['Datapoints']:\n            avg_cpu = sum(d['Average'] for d in cpu_response['Datapoints']) / len(cpu_response['Datapoints'])\n            max_cpu = max(d['Maximum'] for d in cpu_response['Datapoints'])\n            \n            # Determine if oversized\n            if avg_cpu < 20 and max_cpu < 40:\n                # Find smaller instance type\n                current_spec = instance_specs.get(current_type, {})\n                for new_type, spec in sorted(instance_specs.items(), key=lambda x: x[1]['price']):\n                    if spec['price'] < current_spec.get('price', 999):\n                        if spec['vcpu'] >= current_spec.get('vcpu', 0) * 0.5:\n                            monthly_savings = (current_spec.get('price', 0) - spec['price']) * 730\n                            \n                            recommendations.append({\n                                'instance_id': instance_id,\n                                'current_type': current_type,\n                                'recommended_type': new_type,\n                                'avg_cpu': round(avg_cpu, 2),\n                                'max_cpu': round(max_cpu, 2),\n                                'monthly_savings': round(monthly_savings, 2),\n                                'annual_savings': round(monthly_savings * 12, 2)\n                            })\n                            break\n\ntotal_monthly_savings = sum(r['monthly_savings'] for r in recommendations)\n\nresult = {\n    'analysis_date': datetime.now().isoformat(),\n    'total_instances_analyzed': len(response['Reservations']),\n    'rightsizing_opportunities': len(recommendations),\n    'total_monthly_savings': round(total_monthly_savings, 2),\n    'total_annual_savings': round(total_monthly_savings * 12, 2),\n    'recommendations': recommendations\n}\n\nwith open('/tmp/rightsizing_recommendations.json', 'w') as f:\n    json.dump(result, f, indent=2)\nEOF",
+      "files": ["/tmp/rightsizing_recommendations.json"]
+    },
+    {
+      "name": "Analyze storage optimization",
+      "type": "cli",
+      "command": "aws ec2 describe-volumes --filters Name=attachment.status,Values=attached --query 'Volumes[*].[VolumeId,Size,VolumeType,Attachments[0].InstanceId]' --output json > /tmp/volume_inventory.json && for vol in $(aws ec2 describe-volumes --filters Name=attachment.status,Values=attached --query 'Volumes[*].VolumeId' --output text); do echo \"Volume: $vol\" >> /tmp/volume_metrics.txt; aws cloudwatch get-metric-statistics --namespace AWS/EBS --metric-name VolumeReadBytes --dimensions Name=VolumeId,Value=$vol --start-time $(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%S) --end-time $(date -u +%Y-%m-%dT%H:%M:%S) --period 86400 --statistics Sum --output text >> /tmp/volume_metrics.txt; done",
+      "files": ["/tmp/volume_inventory.json", "/tmp/volume_metrics.txt"]
+    },
+    {
+      "name": "Check Reserved Instance coverage",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('ce').get_reservation_coverage",
+      "parameters": {
+        "TimePeriod": {
+          "Start": "${MONTH_START}",
+          "End": "${TODAY}"
+        },
+        "Metrics": ["HoursQuantity", "HoursPercentage", "Cost"],
+        "Granularity": "DAILY"
+      },
+      "files": []
+    },
+    {
+      "name": "Generate optimization script",
+      "type": "cli",
+      "command": "cat > /tmp/apply_rightsizing.sh << 'EOF'\n#!/bin/bash\n\n# Load recommendations\nRECOMMENDATIONS=$(cat /tmp/rightsizing_recommendations.json)\n\n# Process each recommendation\necho \"$RECOMMENDATIONS\" | jq -r '.recommendations[] | @base64' | while read -r rec; do\n  _jq() {\n    echo ${rec} | base64 --decode | jq -r ${1}\n  }\n  \n  INSTANCE_ID=$(_jq '.instance_id')\n  NEW_TYPE=$(_jq '.recommended_type')\n  SAVINGS=$(_jq '.monthly_savings')\n  \n  echo \"Processing $INSTANCE_ID: Change to $NEW_TYPE (Save \\$$SAVINGS/month)\"\n  \n  # Create AMI backup\n  AMI_ID=$(aws ec2 create-image --instance-id $INSTANCE_ID --name \"backup-before-resize-$(date +%Y%m%d-%H%M%S)\" --no-reboot --query 'ImageId' --output text)\n  \n  echo \"Created backup AMI: $AMI_ID\"\n  \n  # Stop instance\n  aws ec2 stop-instances --instance-ids $INSTANCE_ID\n  aws ec2 wait instance-stopped --instance-ids $INSTANCE_ID\n  \n  # Change instance type\n  aws ec2 modify-instance-attribute --instance-id $INSTANCE_ID --instance-type $NEW_TYPE\n  \n  # Start instance\n  aws ec2 start-instances --instance-ids $INSTANCE_ID\n  aws ec2 wait instance-running --instance-ids $INSTANCE_ID\n  \n  echo \"Rightsizing complete for $INSTANCE_ID\"\ndone\nEOF\nchmod +x /tmp/apply_rightsizing.sh",
+      "files": ["/tmp/apply_rightsizing.sh"]
+    },
+    {
+      "name": "Analyze rightsizing opportunities",
+      "type": "prompt",
+      "prompt": "Review the utilization metrics and rightsizing recommendations. Prioritize the instances with highest savings potential while considering performance requirements. Create an implementation plan that minimizes downtime and includes rollback procedures.",
+      "files": ["/tmp/memory_usage.txt", "/tmp/rightsizing_recommendations.json", "/tmp/volume_inventory.json", "/tmp/apply_rightsizing.sh"]
+    }
+  ]
+}

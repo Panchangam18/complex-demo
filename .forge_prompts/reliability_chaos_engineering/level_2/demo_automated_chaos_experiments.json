@@ -1,0 +1,54 @@
+{
+  "goal": "Run automated chaos experiments to test system resilience",
+  "steps": [
+    {
+      "name": "Deploy Chaos Mesh",
+      "type": "cli",
+      "command": "helm install chaos-mesh chaos-mesh/chaos-mesh --namespace chaos-testing --create-namespace --set dashboard.enabled=true > /tmp/chaos_mesh_install.log",
+      "files": ["/tmp/chaos_mesh_install.log"]
+    },
+    {
+      "name": "Create network chaos experiment",
+      "type": "cli",
+      "command": "kubectl apply -f - <<EOF\napiVersion: chaos-mesh.org/v1alpha1\nkind: NetworkChaos\nmetadata:\n  name: network-delay-test\n  namespace: production\nspec:\n  action: delay\n  mode: all\n  selector:\n    namespaces:\n      - production\n    labelSelectors:\n      app: api\n  delay:\n    latency: \"100ms\"\n    correlation: \"25\"\n    jitter: \"50ms\"\n  duration: \"5m\"\n  scheduler:\n    cron: \"@every 2h\"\nEOF",
+      "files": []
+    },
+    {
+      "name": "Inject pod failures",
+      "type": "cli",
+      "command": "kubectl apply -f - <<EOF\napiVersion: chaos-mesh.org/v1alpha1\nkind: PodChaos\nmetadata:\n  name: pod-failure-test\n  namespace: production\nspec:\n  action: pod-kill\n  mode: fixed\n  value: \"1\"\n  selector:\n    namespaces:\n      - production\n    labelSelectors:\n      app: worker\n  duration: \"30s\"\n  scheduler:\n    cron: \"0 */4 * * *\"\nEOF",
+      "files": []
+    },
+    {
+      "name": "Monitor system metrics during chaos",
+      "type": "integration",
+      "integration": "prometheus",
+      "method": "query_range",
+      "parameters": {
+        "query": "rate(http_requests_total{job=\"api\"}[5m])",
+        "start": "${EXPERIMENT_START}",
+        "end": "${EXPERIMENT_END}",
+        "step": "15s"
+      },
+      "files": []
+    },
+    {
+      "name": "Create stress test",
+      "type": "cli",
+      "command": "kubectl apply -f - <<EOF\napiVersion: chaos-mesh.org/v1alpha1\nkind: StressChaos\nmetadata:\n  name: cpu-stress-test\n  namespace: production\nspec:\n  mode: all\n  selector:\n    namespaces:\n      - production\n    labelSelectors:\n      app: api\n  stressors:\n    cpu:\n      workers: 2\n      load: 80\n    memory:\n      workers: 1\n      size: \"1GB\"\n  duration: \"2m\"\nEOF",
+      "files": []
+    },
+    {
+      "name": "Collect experiment results",
+      "type": "cli",
+      "command": "kubectl get events --namespace production --field-selector reason=ChaosInjected -o json > /tmp/chaos_events.json && kubectl logs -n chaos-testing -l app.kubernetes.io/component=controller-manager --tail=1000 > /tmp/chaos_controller_logs.txt",
+      "files": ["/tmp/chaos_events.json", "/tmp/chaos_controller_logs.txt"]
+    },
+    {
+      "name": "Analyze resilience",
+      "type": "prompt",
+      "prompt": "Analyze the chaos experiment results, including system behavior during network delays, pod failures, and resource stress. Identify any service degradations, failed health checks, or cascading failures. Create a resilience improvement plan.",
+      "files": ["/tmp/chaos_mesh_install.log", "/tmp/chaos_events.json", "/tmp/chaos_controller_logs.txt"]
+    }
+  ]
+}

@@ -1,0 +1,111 @@
+{
+  "goal": "Detect and alert on cloud cost anomalies in real-time",
+  "steps": [
+    {
+      "name": "Get recent cost data",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('ce').get_cost_and_usage",
+      "parameters": {
+        "TimePeriod": {
+          "Start": "${THIRTY_DAYS_AGO}",
+          "End": "${TODAY}"
+        },
+        "Granularity": "DAILY",
+        "Metrics": ["UnblendedCost", "UsageQuantity"],
+        "GroupBy": [
+          {"Type": "DIMENSION", "Key": "SERVICE"},
+          {"Type": "DIMENSION", "Key": "USAGE_TYPE"}
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Build anomaly detection model",
+      "type": "cli",
+      "command": "python3 << 'EOF'\nimport json\nimport numpy as np\nimport pandas as pd\nfrom datetime import datetime, timedelta\nfrom sklearn.ensemble import IsolationForest\nimport warnings\nwarnings.filterwarnings('ignore')\n\n# Generate synthetic cost data for demo\nnp.random.seed(42)\ndays = pd.date_range(start=datetime.now() - timedelta(days=30), end=datetime.now(), freq='D')\n\n# Normal daily costs with weekly pattern\nbase_costs = {\n    'EC2': 500 + 100 * np.sin(np.arange(len(days)) * 2 * np.pi / 7),\n    'RDS': 300 + 50 * np.sin(np.arange(len(days)) * 2 * np.pi / 7),\n    'S3': 150 + 20 * np.random.randn(len(days)),\n    'Lambda': 50 + 30 * np.sin(np.arange(len(days)) * 2 * np.pi / 7),\n    'CloudFront': 100 + 15 * np.random.randn(len(days))\n}\n\n# Add some anomalies\nanomalies = {\n    'EC2': [15, 22],  # Days with anomalies\n    'RDS': [20],\n    'S3': [25, 26]\n}\n\ncost_data = []\nfor service, costs in base_costs.items():\n    for i, (day, cost) in enumerate(zip(days, costs)):\n        # Add anomalies\n        if service in anomalies and i in anomalies[service]:\n            cost *= np.random.uniform(2, 5)  # 2-5x normal cost\n        \n        cost_data.append({\n            'date': day.strftime('%Y-%m-%d'),\n            'service': service,\n            'cost': max(0, cost + np.random.normal(0, cost * 0.1)),\n            'is_anomaly': service in anomalies and i in anomalies[service]\n        })\n\n# Train anomaly detection model\ndf = pd.DataFrame(cost_data)\ndf['cost_normalized'] = df.groupby('service')['cost'].transform(lambda x: (x - x.mean()) / x.std())\n\n# Isolation Forest for anomaly detection\nmodel = IsolationForest(contamination=0.1, random_state=42)\ndf['anomaly_score'] = model.fit_predict(df[['cost_normalized']])\ndf['anomaly_probability'] = model.score_samples(df[['cost_normalized']])\n\n# Identify anomalies\nanomalies_detected = df[df['anomaly_score'] == -1]\n\n# Calculate statistics\nstats = {\n    'total_days': len(df['date'].unique()),\n    'total_services': len(df['service'].unique()),\n    'anomalies_detected': len(anomalies_detected),\n    'services_with_anomalies': anomalies_detected['service'].unique().tolist(),\n    'highest_anomaly_cost': anomalies_detected.nlargest(5, 'cost')[['date', 'service', 'cost']].to_dict('records')\n}\n\n# Save results\nwith open('/tmp/cost_anomalies.json', 'w') as f:\n    json.dump({\n        'statistics': stats,\n        'anomalies': anomalies_detected[['date', 'service', 'cost', 'anomaly_probability']].to_dict('records'),\n        'daily_costs': df.groupby('date')['cost'].sum().to_dict()\n    }, f, indent=2)\n\n# Save model thresholds\nthresholds = df.groupby('service')['cost'].agg(['mean', 'std', lambda x: x.quantile(0.95)]).to_dict('index')\nwith open('/tmp/cost_thresholds.json', 'w') as f:\n    json.dump(thresholds, f, indent=2)\nEOF",
+      "files": ["/tmp/cost_anomalies.json", "/tmp/cost_thresholds.json"]
+    },
+    {
+      "name": "Configure cost anomaly alerts",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('ce').create_anomaly_monitor",
+      "parameters": {
+        "AnomalyMonitor": {
+          "MonitorName": "ProductionCostMonitor",
+          "MonitorType": "DIMENSIONAL",
+          "MonitorDimension": "SERVICE",
+          "MonitorSpecification": {
+            "Dimensions": {
+              "Key": "LINKED_ACCOUNT",
+              "Values": ["${PRODUCTION_ACCOUNT_ID}"]
+            }
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Create alerting rules",
+      "type": "cli",
+      "command": "cat > /tmp/cost_alert_rules.yaml << 'EOF'\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cost-anomaly-rules\n  namespace: monitoring\ndata:\n  rules.yaml: |\n    groups:\n    - name: cost_anomalies\n      interval: 1h\n      rules:\n      - alert: DailyCostSpike\n        expr: |\n          (aws_billing_estimated_charges{service=\"total\"} - avg_over_time(aws_billing_estimated_charges{service=\"total\"}[7d]))\n          / avg_over_time(aws_billing_estimated_charges{service=\"total\"}[7d]) > 0.5\n        for: 2h\n        labels:\n          severity: warning\n          team: platform\n        annotations:\n          summary: \"Daily AWS costs increased by {{ $value | humanizePercentage }}\"\n          description: \"Current daily cost is significantly higher than 7-day average\"\n      \n      - alert: ServiceCostAnomaly\n        expr: |\n          (aws_billing_service_cost - avg_over_time(aws_billing_service_cost[24h])) \n          / stddev_over_time(aws_billing_service_cost[24h]) > 3\n        for: 1h\n        labels:\n          severity: critical\n          team: platform\n        annotations:\n          summary: \"Anomalous cost detected for {{ $labels.service }}\"\n          description: \"Cost is {{ $value }} standard deviations above normal\"\n      \n      - alert: UnusualResourceCreation\n        expr: |\n          increase(aws_resource_count{resource_type=~\"ec2_instance|rds_instance|nat_gateway\"}[1h]) > 10\n        for: 30m\n        labels:\n          severity: critical\n          team: security\n        annotations:\n          summary: \"Unusual number of {{ $labels.resource_type }} created\"\n          description: \"{{ $value }} new resources created in the last hour\"\nEOF\nkubectl apply -f /tmp/cost_alert_rules.yaml",
+      "files": ["/tmp/cost_alert_rules.yaml"]
+    },
+    {
+      "name": "Implement cost tracking tags",
+      "type": "cli",
+      "command": "python3 << 'EOF'\nimport boto3\nimport json\n\nec2 = boto3.client('ec2')\nrds = boto3.client('rds')\n\n# Define required tags\nrequired_tags = {\n    'Environment': ['production', 'staging', 'development'],\n    'Team': ['platform', 'api', 'frontend', 'data'],\n    'CostCenter': ['engineering', 'operations', 'product'],\n    'Project': None  # Any value allowed\n}\n\n# Check EC2 instances\nuntagged_resources = {'ec2': [], 'rds': []}\n\nresponse = ec2.describe_instances()\nfor reservation in response['Reservations']:\n    for instance in reservation['Instances']:\n        if instance['State']['Name'] == 'running':\n            tags = {tag['Key']: tag['Value'] for tag in instance.get('Tags', [])}\n            missing_tags = []\n            \n            for tag_key, allowed_values in required_tags.items():\n                if tag_key not in tags:\n                    missing_tags.append(tag_key)\n                elif allowed_values and tags[tag_key] not in allowed_values:\n                    missing_tags.append(f\"{tag_key}={tags[tag_key]} (invalid)\")\n            \n            if missing_tags:\n                untagged_resources['ec2'].append({\n                    'resource_id': instance['InstanceId'],\n                    'resource_type': 'EC2 Instance',\n                    'missing_tags': missing_tags,\n                    'current_tags': tags\n                })\n\n# Check RDS instances\nresponse = rds.describe_db_instances()\nfor db in response['DBInstances']:\n    tags_response = rds.list_tags_for_resource(\n        ResourceName=db['DBInstanceArn']\n    )\n    tags = {tag['Key']: tag['Value'] for tag in tags_response.get('TagList', [])}\n    missing_tags = []\n    \n    for tag_key, allowed_values in required_tags.items():\n        if tag_key not in tags:\n            missing_tags.append(tag_key)\n    \n    if missing_tags:\n        untagged_resources['rds'].append({\n            'resource_id': db['DBInstanceIdentifier'],\n            'resource_type': 'RDS Instance',\n            'missing_tags': missing_tags,\n            'current_tags': tags\n        })\n\n# Calculate unallocated costs\ntotal_untagged = len(untagged_resources['ec2']) + len(untagged_resources['rds'])\n\nreport = {\n    'scan_date': boto3.Session().region_name,\n    'total_untagged_resources': total_untagged,\n    'estimated_unallocated_cost_percentage': (total_untagged / 100) * 100,  # Rough estimate\n    'untagged_resources': untagged_resources,\n    'tagging_compliance': {\n        'ec2': 100 - (len(untagged_resources['ec2']) / max(1, len(response['Reservations']))) * 100,\n        'rds': 100 - (len(untagged_resources['rds']) / max(1, len(response['DBInstances']))) * 100\n    }\n}\n\nwith open('/tmp/tagging_compliance.json', 'w') as f:\n    json.dump(report, f, indent=2)\nEOF",
+      "files": ["/tmp/tagging_compliance.json"]
+    },
+    {
+      "name": "Create cost optimization dashboard",
+      "type": "integration",
+      "integration": "grafana",
+      "method": "api.Dashboard.create",
+      "parameters": {
+        "dashboard": {
+          "title": "Cost Anomaly Detection",
+          "panels": [
+            {
+              "title": "Daily Cost Trend",
+              "targets": [
+                {"expr": "aws_billing_estimated_charges{service=\"total\"}"}
+              ],
+              "alert": {
+                "conditions": [
+                  {
+                    "evaluator": {"type": "gt", "params": [1000]},
+                    "operator": {"type": "and"},
+                    "query": {"params": ["A", "5m", "now"]},
+                    "reducer": {"type": "avg"},
+                    "type": "query"
+                  }
+                ]
+              }
+            },
+            {
+              "title": "Service Cost Breakdown",
+              "targets": [
+                {"expr": "aws_billing_service_cost"}
+              ]
+            },
+            {
+              "title": "Cost Anomaly Score",
+              "targets": [
+                {"expr": "cost_anomaly_score"}
+              ]
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Analyze cost anomalies",
+      "type": "prompt",
+      "prompt": "Review the detected cost anomalies, untagged resources, and alerting rules. Identify the root causes of cost spikes, recommend immediate actions to prevent unexpected charges, and suggest long-term cost governance improvements.",
+      "files": ["/tmp/cost_anomalies.json", "/tmp/cost_thresholds.json", "/tmp/cost_alert_rules.yaml", "/tmp/tagging_compliance.json"]
+    }
+  ]
+}

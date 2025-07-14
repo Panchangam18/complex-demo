@@ -1,0 +1,59 @@
+{
+  "goal": "Test system behavior under resource exhaustion conditions",
+  "steps": [
+    {
+      "name": "Baseline resource usage",
+      "type": "cli",
+      "command": "kubectl top nodes > /tmp/baseline_nodes.txt && kubectl top pods -A --sort-by=memory > /tmp/baseline_pods_memory.txt && kubectl top pods -A --sort-by=cpu > /tmp/baseline_pods_cpu.txt",
+      "files": ["/tmp/baseline_nodes.txt", "/tmp/baseline_pods_memory.txt", "/tmp/baseline_pods_cpu.txt"]
+    },
+    {
+      "name": "Create memory pressure",
+      "type": "cli",
+      "command": "kubectl apply -f - <<EOF\napiVersion: batch/v1\nkind: Job\nmetadata:\n  name: memory-stress\n  namespace: chaos\nspec:\n  parallelism: 3\n  template:\n    spec:\n      containers:\n      - name: stress\n        image: progrium/stress\n        args: [\"--vm\", \"2\", \"--vm-bytes\", \"1G\", \"--vm-hang\", \"30\", \"--timeout\", \"300s\"]\n        resources:\n          requests:\n            memory: \"2Gi\"\n      restartPolicy: Never\nEOF",
+      "files": []
+    },
+    {
+      "name": "Monitor OOM events",
+      "type": "cli",
+      "command": "kubectl get events -A --field-selector reason=OOMKilling -w > /tmp/oom_events.log &\nOOM_PID=$!\nsleep 120\nkill $OOM_PID 2>/dev/null || true",
+      "files": ["/tmp/oom_events.log"]
+    },
+    {
+      "name": "Test disk space exhaustion",
+      "type": "cli",
+      "command": "kubectl apply -f - <<EOF\napiVersion: v1\nkind: Pod\nmetadata:\n  name: disk-fill\n  namespace: chaos\nspec:\n  containers:\n  - name: disk-fill\n    image: busybox\n    command: [\"sh\", \"-c\"]\n    args:\n    - |\n      echo \"Starting disk fill test\"\n      dd if=/dev/zero of=/data/largefile bs=1M count=10000\n      df -h /data\n    volumeMounts:\n    - name: data\n      mountPath: /data\n  volumes:\n  - name: data\n    emptyDir:\n      sizeLimit: 10Gi\nEOF",
+      "files": []
+    },
+    {
+      "name": "Create CPU saturation",
+      "type": "cli",
+      "command": "kubectl run cpu-stress --image=progrium/stress --rm -it --restart=Never -- --cpu 8 --timeout 180s > /tmp/cpu_stress.log 2>&1 &",
+      "files": ["/tmp/cpu_stress.log"]
+    },
+    {
+      "name": "Monitor pod evictions",
+      "type": "cli",
+      "command": "kubectl get events -A --field-selector reason=Evicted -o json > /tmp/eviction_events.json && kubectl get pods -A --field-selector status.phase=Failed -o json > /tmp/failed_pods.json",
+      "files": ["/tmp/eviction_events.json", "/tmp/failed_pods.json"]
+    },
+    {
+      "name": "Test connection pool exhaustion",
+      "type": "cli",
+      "command": "python3 << 'EOF'\nimport concurrent.futures\nimport requests\nimport time\nimport json\n\ndef make_request(i):\n    try:\n        start = time.time()\n        response = requests.get('http://api-service.production.svc.cluster.local/api/v1/heavy', timeout=30)\n        return {\n            'request_id': i,\n            'status': response.status_code,\n            'duration': time.time() - start,\n            'error': None\n        }\n    except Exception as e:\n        return {\n            'request_id': i,\n            'status': None,\n            'duration': time.time() - start,\n            'error': str(e)\n        }\n\n# Attempt to exhaust connection pool\nwith concurrent.futures.ThreadPoolExecutor(max_workers=200) as executor:\n    futures = [executor.submit(make_request, i) for i in range(1000)]\n    results = [f.result() for f in concurrent.futures.as_completed(futures)]\n\n# Analyze results\nstats = {\n    'total_requests': len(results),\n    'successful': len([r for r in results if r['status'] == 200]),\n    'connection_errors': len([r for r in results if r['error'] and 'connection' in r['error'].lower()]),\n    'timeouts': len([r for r in results if r['error'] and 'timeout' in r['error'].lower()]),\n    'avg_response_time': sum(r['duration'] for r in results if r['status'] == 200) / max(1, len([r for r in results if r['status'] == 200]))\n}\n\nwith open('/tmp/connection_exhaustion.json', 'w') as f:\n    json.dump(stats, f, indent=2)\nEOF",
+      "files": ["/tmp/connection_exhaustion.json"]
+    },
+    {
+      "name": "Check resource limits",
+      "type": "cli",
+      "command": "kubectl describe resourcequotas -A > /tmp/resource_quotas.txt && kubectl describe limitranges -A > /tmp/limit_ranges.txt",
+      "files": ["/tmp/resource_quotas.txt", "/tmp/limit_ranges.txt"]
+    },
+    {
+      "name": "Analyze resource exhaustion impact",
+      "type": "prompt",
+      "prompt": "Analyze the resource exhaustion test results including OOM events, pod evictions, and connection pool exhaustion. Identify which resource limits were hit first, evaluate the system's degradation pattern, and recommend resource allocation improvements and circuit breaker configurations.",
+      "files": ["/tmp/baseline_nodes.txt", "/tmp/oom_events.log", "/tmp/eviction_events.json", "/tmp/failed_pods.json", "/tmp/connection_exhaustion.json", "/tmp/resource_quotas.txt"]
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "goal": "Implement network segmentation with microsegmentation policies",
+  "steps": [
+    {
+      "name": "Map current network topology",
+      "type": "cli",
+      "command": "kubectl get pods,services,endpoints --all-namespaces -o wide > /tmp/network_topology.txt && kubectl get networkpolicies --all-namespaces -o yaml > /tmp/existing_policies.yaml",
+      "files": ["/tmp/network_topology.txt", "/tmp/existing_policies.yaml"]
+    },
+    {
+      "name": "Create security zones",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('ec2').create_security_group",
+      "parameters": {
+        "GroupName": "dmz-zone",
+        "Description": "DMZ security zone for public-facing services",
+        "VpcId": "${VPC_ID}",
+        "TagSpecifications": [
+          {
+            "ResourceType": "security-group",
+            "Tags": [
+              {"Key": "Zone", "Value": "dmz"},
+              {"Key": "SecurityLevel", "Value": "public"}
+            ]
+          }
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Implement Calico policies",
+      "type": "cli",
+      "command": "kubectl apply -f - <<EOF\napiVersion: projectcalico.org/v3\nkind: GlobalNetworkPolicy\nmetadata:\n  name: zone-isolation\nspec:\n  selector: zone == 'trusted'\n  types:\n  - Ingress\n  - Egress\n  ingress:\n  - action: Allow\n    source:\n      selector: zone == 'trusted'\n    destination:\n      ports:\n      - 443\n      - 80\n  - action: Deny\n    source:\n      selector: zone == 'dmz'\n  egress:\n  - action: Allow\n    destination:\n      selector: zone == 'trusted'\n  - action: Allow\n    destination:\n      nets:\n      - 10.0.0.0/8\n    ports:\n    - 53  # DNS\n  - action: Deny\n    destination:\n      selector: zone == 'public'\nEOF",
+      "files": []
+    },
+    {
+      "name": "Configure AWS Network Firewall",
+      "type": "integration",
+      "integration": "aws",
+      "method": "client('network-firewall').create_firewall",
+      "parameters": {
+        "FirewallName": "production-firewall",
+        "FirewallPolicyArn": "${FIREWALL_POLICY_ARN}",
+        "VpcId": "${VPC_ID}",
+        "SubnetMappings": [
+          {"SubnetId": "${FIREWALL_SUBNET_ID}"}
+        ],
+        "Tags": [
+          {"Key": "Environment", "Value": "production"},
+          {"Key": "Purpose", "Value": "segmentation"}
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Setup VPC flow logs analysis",
+      "type": "cli",
+      "command": "aws ec2 describe-flow-logs --filter Name=resource-id,Values=${VPC_ID} > /tmp/flow_logs_config.json && aws logs filter-log-events --log-group-name /aws/vpc/flowlogs --start-time $(date -u -d '1 hour ago' +%s)000 --filter-pattern '[version, account, eni, source, destination, srcport, destport, protocol, packets, bytes, windowstart, windowend, action, flowlogstatus]' --max-items 1000 > /tmp/recent_flows.json",
+      "files": ["/tmp/flow_logs_config.json", "/tmp/recent_flows.json"]
+    },
+    {
+      "name": "Create microsegmentation rules",
+      "type": "cli",
+      "command": "cat > /tmp/microsegmentation_policy.yaml << 'EOF'\napiVersion: cilium.io/v2\nkind: CiliumNetworkPolicy\nmetadata:\n  name: api-microsegmentation\n  namespace: production\nspec:\n  endpointSelector:\n    matchLabels:\n      app: api\n  ingress:\n  - fromEndpoints:\n    - matchLabels:\n        app: frontend\n    toPorts:\n    - ports:\n      - port: \"8080\"\n        protocol: TCP\n      rules:\n        http:\n        - method: \"GET\"\n          path: \"/api/v1/public/.*\"\n  - fromEndpoints:\n    - matchLabels:\n        app: admin\n    toPorts:\n    - ports:\n      - port: \"8080\"\n        protocol: TCP\n      rules:\n        http:\n        - method: \"GET\"\n          path: \"/api/v1/admin/.*\"\n        - method: \"POST\"\n          path: \"/api/v1/admin/.*\"\n          headers:\n          - 'Authorization: Bearer .*'\n  egress:\n  - toEndpoints:\n    - matchLabels:\n        app: database\n    toPorts:\n    - ports:\n      - port: \"5432\"\n        protocol: TCP\n  - toFQDNs:\n    - matchPattern: \"*.amazonaws.com\"\n    toPorts:\n    - ports:\n      - port: \"443\"\n        protocol: TCP\nEOF\nkubectl apply -f /tmp/microsegmentation_policy.yaml",
+      "files": ["/tmp/microsegmentation_policy.yaml"]
+    },
+    {
+      "name": "Analyze and optimize segmentation",
+      "type": "prompt",
+      "prompt": "Analyze the network topology, flow logs, and segmentation policies. Identify any overly permissive rules, detect unusual traffic patterns, and create a network segmentation diagram with recommendations for improvement.",
+      "files": ["/tmp/network_topology.txt", "/tmp/existing_policies.yaml", "/tmp/recent_flows.json", "/tmp/microsegmentation_policy.yaml"]
+    }
+  ]
+}
