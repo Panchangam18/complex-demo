@@ -1,0 +1,32 @@
+{
+  "goal": "Configure Consul client for Kubernetes",
+  "steps": [
+    {
+      "name": "Review Consul K8s client variables",
+      "type": "prompt",
+      "prompt": "Check the configuration options for Consul Kubernetes client.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/consul/k8s-client/variables.tf"
+      ]
+    },
+    {
+      "name": "Configure Consul values",
+      "type": "prompt",
+      "prompt": "Review and update the Consul Helm values template for your environment.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/consul/k8s-client/templates/consul-values.yaml.tpl"
+      ]
+    },
+    {
+      "name": "Update client outputs",
+      "type": "prompt",
+      "prompt": "Add outputs to expose Consul client connection information.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/consul/k8s-client/outputs.tf"
+      ]
+    }
+  ]
+}

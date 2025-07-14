@@ -1,0 +1,32 @@
+{
+  "goal": "Update deployment guide documentation",
+  "steps": [
+    {
+      "name": "Review deployment guide",
+      "type": "prompt",
+      "prompt": "Check the deployment guide for completeness.",
+      "parameters": {},
+      "files": [
+        "docs/DEPLOYMENT_GUIDE.md"
+      ]
+    },
+    {
+      "name": "Update prerequisites",
+      "type": "prompt",
+      "prompt": "Update the prerequisites section with current tool versions.",
+      "parameters": {},
+      "files": [
+        "docs/DEPLOYMENT_GUIDE.md"
+      ]
+    },
+    {
+      "name": "Add rollback procedures",
+      "type": "prompt",
+      "prompt": "Add a section about rollback procedures for failed deployments.",
+      "parameters": {},
+      "files": [
+        "docs/DEPLOYMENT_GUIDE.md"
+      ]
+    }
+  ]
+}

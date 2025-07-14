@@ -1,0 +1,30 @@
+{
+  "goal": "Set up Elasticsearch integration with Puppet",
+  "steps": [
+    {
+      "name": "Review Elasticsearch playbook",
+      "type": "prompt",
+      "prompt": "Check the Puppet-Elasticsearch integration playbook.",
+      "parameters": {},
+      "files": [
+        "ansible/playbooks/puppet-elasticsearch-integration.yml"
+      ]
+    },
+    {
+      "name": "Configure Elasticsearch endpoint",
+      "type": "prompt",
+      "prompt": "Update the playbook with your Elasticsearch cluster endpoint.",
+      "parameters": {},
+      "files": [
+        "ansible/playbooks/puppet-elasticsearch-integration.yml"
+      ]
+    },
+    {
+      "name": "Test playbook syntax",
+      "type": "cli",
+      "command": "ansible-playbook --syntax-check ansible/playbooks/puppet-elasticsearch-integration.yml",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

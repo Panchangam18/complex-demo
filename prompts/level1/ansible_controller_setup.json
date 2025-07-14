@@ -1,0 +1,32 @@
+{
+  "goal": "Configure Ansible Controller for Azure deployment",
+  "steps": [
+    {
+      "name": "Review Ansible Controller variables",
+      "type": "prompt",
+      "prompt": "Check the available configuration options for the Ansible Controller module.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/azure/ansible-controller/variables.tf"
+      ]
+    },
+    {
+      "name": "Configure controller VM size",
+      "type": "prompt",
+      "prompt": "Update the Ansible Controller configuration to use a Standard_D4s_v3 VM size.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/azure/ansible-controller/main.tf"
+      ]
+    },
+    {
+      "name": "Add SSH key output",
+      "type": "prompt",
+      "prompt": "Add an output to expose the Ansible Controller's SSH connection string.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/azure/ansible-controller/outputs.tf"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "goal": "Perform final AWS VPC cleanup",
+  "steps": [
+    {
+      "name": "Review final cleanup",
+      "type": "prompt",
+      "prompt": "Check the final VPC cleanup script for completeness.",
+      "parameters": {},
+      "files": [
+        "terraform/scripts/aws-vpc-final-cleanup.sh"
+      ]
+    },
+    {
+      "name": "Add dependency checks",
+      "type": "prompt",
+      "prompt": "Add checks for dependent resources before VPC deletion.",
+      "parameters": {},
+      "files": [
+        "terraform/scripts/aws-vpc-final-cleanup.sh"
+      ]
+    },
+    {
+      "name": "Validate cleanup",
+      "type": "cli",
+      "command": "bash -n terraform/scripts/aws-vpc-final-cleanup.sh",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

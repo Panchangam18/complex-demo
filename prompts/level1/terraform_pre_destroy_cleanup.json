@@ -1,0 +1,30 @@
+{
+  "goal": "Configure pre-destroy cleanup process",
+  "steps": [
+    {
+      "name": "Review cleanup script",
+      "type": "prompt",
+      "prompt": "Examine the pre-destroy cleanup script functionality.",
+      "parameters": {},
+      "files": [
+        "terraform/scripts/pre-destroy-cleanup.sh"
+      ]
+    },
+    {
+      "name": "Add resource checks",
+      "type": "prompt",
+      "prompt": "Add checks for running instances before cleanup.",
+      "parameters": {},
+      "files": [
+        "terraform/scripts/pre-destroy-cleanup.sh"
+      ]
+    },
+    {
+      "name": "Test cleanup script",
+      "type": "cli",
+      "command": "bash -n terraform/scripts/pre-destroy-cleanup.sh",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

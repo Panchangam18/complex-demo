@@ -1,0 +1,32 @@
+{
+  "goal": "Configure CircleCI Nexus integration",
+  "steps": [
+    {
+      "name": "Review CircleCI config",
+      "type": "prompt",
+      "prompt": "Examine the CircleCI configuration for Nexus integration.",
+      "parameters": {},
+      "files": [
+        "ci-cd/circleci/circleci-nexus-integration.yml"
+      ]
+    },
+    {
+      "name": "Update Nexus URL",
+      "type": "prompt",
+      "prompt": "Configure the Nexus repository URL in the CircleCI config.",
+      "parameters": {},
+      "files": [
+        "ci-cd/circleci/circleci-nexus-integration.yml"
+      ]
+    },
+    {
+      "name": "Add artifact upload step",
+      "type": "prompt",
+      "prompt": "Add a step to upload build artifacts to Nexus repository.",
+      "parameters": {},
+      "files": [
+        "ci-cd/circleci/circleci-nexus-integration.yml"
+      ]
+    }
+  ]
+}

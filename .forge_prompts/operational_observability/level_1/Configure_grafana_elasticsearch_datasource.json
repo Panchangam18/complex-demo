@@ -1,0 +1,48 @@
+{
+  "goal": "Configure Grafana datasource for Elasticsearch log visualization",
+  "steps": [
+    {
+      "name": "Review datasource configuration",
+      "type": "prompt",
+      "prompt": "Examine the Grafana Elasticsearch datasource YAML to understand the connection setup.",
+      "parameters": {},
+      "files": [
+        "monitoring/grafana-elasticsearch-datasource.yaml"
+      ]
+    },
+    {
+      "name": "Update Elasticsearch URL",
+      "type": "prompt",
+      "prompt": "Configure the datasource with the correct Elasticsearch endpoint URL and port.",
+      "parameters": {},
+      "files": [
+        "monitoring/grafana-elasticsearch-datasource.yaml"
+      ]
+    },
+    {
+      "name": "Configure authentication",
+      "type": "prompt",
+      "prompt": "Setup authentication credentials for Grafana to access Elasticsearch securely.",
+      "parameters": {},
+      "files": [
+        "monitoring/grafana-elasticsearch-datasource.yaml"
+      ]
+    },
+    {
+      "name": "Set index patterns",
+      "type": "prompt",
+      "prompt": "Configure appropriate index patterns for log data (e.g., fluent-bit-* or logstash-*).",
+      "parameters": {},
+      "files": [
+        "monitoring/grafana-elasticsearch-datasource.yaml"
+      ]
+    },
+    {
+      "name": "Apply datasource",
+      "type": "cli",
+      "command": "kubectl apply -f monitoring/grafana-elasticsearch-datasource.yaml",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

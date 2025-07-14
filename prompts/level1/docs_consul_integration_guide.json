@@ -1,0 +1,32 @@
+{
+  "goal": "Review Consul integration documentation",
+  "steps": [
+    {
+      "name": "Read Consul docs",
+      "type": "prompt",
+      "prompt": "Review the Consul integration summary documentation.",
+      "parameters": {},
+      "files": [
+        "docs/CONSUL_INTEGRATION_SUMMARY.md"
+      ]
+    },
+    {
+      "name": "Update endpoints",
+      "type": "prompt",
+      "prompt": "Update the Consul endpoint URLs in the documentation.",
+      "parameters": {},
+      "files": [
+        "docs/CONSUL_INTEGRATION_SUMMARY.md"
+      ]
+    },
+    {
+      "name": "Add ACL section",
+      "type": "prompt",
+      "prompt": "Add a section about Consul ACL configuration.",
+      "parameters": {},
+      "files": [
+        "docs/CONSUL_INTEGRATION_SUMMARY.md"
+      ]
+    }
+  ]
+}

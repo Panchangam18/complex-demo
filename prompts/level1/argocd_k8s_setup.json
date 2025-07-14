@@ -1,0 +1,32 @@
+{
+  "goal": "Set up ArgoCD on Kubernetes",
+  "steps": [
+    {
+      "name": "Review ArgoCD variables",
+      "type": "prompt",
+      "prompt": "Check the configuration options for ArgoCD deployment.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/k8s/argocd/variables.tf"
+      ]
+    },
+    {
+      "name": "Configure ArgoCD namespace",
+      "type": "prompt",
+      "prompt": "Update the ArgoCD configuration to deploy in the 'argocd' namespace.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/k8s/argocd/main.tf"
+      ]
+    },
+    {
+      "name": "Add ArgoCD URL output",
+      "type": "prompt",
+      "prompt": "Configure outputs to expose the ArgoCD server URL.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/k8s/argocd/outputs.tf"
+      ]
+    }
+  ]
+}

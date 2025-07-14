@@ -1,0 +1,48 @@
+{
+  "goal": "Setup Artillery stress test for frontend client application",
+  "steps": [
+    {
+      "name": "Review stress test configuration",
+      "type": "prompt",
+      "prompt": "Examine the client stress test YAML to understand the load testing scenarios.",
+      "parameters": {},
+      "files": [
+        "Code/client/src/tests/stresstests/stress_client.yml"
+      ]
+    },
+    {
+      "name": "Configure target URL",
+      "type": "prompt",
+      "prompt": "Update the target URL in stress_client.yml to point to your frontend service endpoint.",
+      "parameters": {},
+      "files": [
+        "Code/client/src/tests/stresstests/stress_client.yml"
+      ]
+    },
+    {
+      "name": "Adjust load parameters",
+      "type": "prompt",
+      "prompt": "Configure arrival rate and duration based on expected production traffic patterns.",
+      "parameters": {},
+      "files": [
+        "Code/client/src/tests/stresstests/stress_client.yml"
+      ]
+    },
+    {
+      "name": "Setup user data CSV",
+      "type": "prompt",
+      "prompt": "Review and update the user-data.csv file with test user credentials if needed.",
+      "parameters": {},
+      "files": [
+        "Code/client/src/tests/stresstests/user-data.csv"
+      ]
+    },
+    {
+      "name": "Run stress test",
+      "type": "cli",
+      "command": "cd Code/client/src/tests/stresstests && npm install -g artillery && artillery run stress_client.yml",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

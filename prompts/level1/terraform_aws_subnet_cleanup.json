@@ -1,0 +1,30 @@
+{
+  "goal": "Clean up AWS subnet resources",
+  "steps": [
+    {
+      "name": "Review subnet cleanup",
+      "type": "prompt",
+      "prompt": "Check the AWS subnet cleanup script functionality.",
+      "parameters": {},
+      "files": [
+        "terraform/scripts/aws-subnet-cleanup.sh"
+      ]
+    },
+    {
+      "name": "Add subnet filters",
+      "type": "prompt",
+      "prompt": "Update the script to filter subnets by tag before cleanup.",
+      "parameters": {},
+      "files": [
+        "terraform/scripts/aws-subnet-cleanup.sh"
+      ]
+    },
+    {
+      "name": "Validate script",
+      "type": "cli",
+      "command": "bash -n terraform/scripts/aws-subnet-cleanup.sh",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

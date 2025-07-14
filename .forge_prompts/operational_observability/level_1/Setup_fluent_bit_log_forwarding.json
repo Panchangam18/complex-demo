@@ -1,0 +1,46 @@
+{
+  "goal": "Setup Fluent Bit for centralized log forwarding to Elasticsearch",
+  "steps": [
+    {
+      "name": "Review Fluent Bit ConfigMap",
+      "type": "prompt",
+      "prompt": "Examine the Fluent Bit configuration to understand input sources and output destinations.",
+      "parameters": {},
+      "files": [
+        "k8s/envs/dev/logging/fluent-bit-configmap.yaml"
+      ]
+    },
+    {
+      "name": "Configure Elasticsearch output",
+      "type": "prompt",
+      "prompt": "Update the Fluent Bit ConfigMap to properly configure the Elasticsearch output plugin with correct index patterns.",
+      "parameters": {},
+      "files": [
+        "k8s/envs/dev/logging/fluent-bit-configmap.yaml"
+      ]
+    },
+    {
+      "name": "Add log parsing rules",
+      "type": "prompt",
+      "prompt": "Add parsing rules for backend and frontend application logs to extract structured data.",
+      "parameters": {},
+      "files": [
+        "k8s/envs/dev/logging/fluent-bit-configmap.yaml"
+      ]
+    },
+    {
+      "name": "Apply ConfigMap",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/envs/dev/logging/fluent-bit-configmap.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Restart Fluent Bit pods",
+      "type": "cli",
+      "command": "kubectl rollout restart daemonset/fluent-bit -n logging",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

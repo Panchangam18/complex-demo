@@ -1,0 +1,32 @@
+{
+  "goal": "Configure pipeline activation documentation",
+  "steps": [
+    {
+      "name": "Review pipeline docs",
+      "type": "prompt",
+      "prompt": "Check the pipeline activation documentation.",
+      "parameters": {},
+      "files": [
+        "docs/PIPELINE_ACTIVATION.md"
+      ]
+    },
+    {
+      "name": "Add activation steps",
+      "type": "prompt",
+      "prompt": "Add detailed steps for activating CI/CD pipelines.",
+      "parameters": {},
+      "files": [
+        "docs/PIPELINE_ACTIVATION.md"
+      ]
+    },
+    {
+      "name": "Include troubleshooting",
+      "type": "prompt",
+      "prompt": "Add a troubleshooting section for common pipeline issues.",
+      "parameters": {},
+      "files": [
+        "docs/PIPELINE_ACTIVATION.md"
+      ]
+    }
+  ]
+}

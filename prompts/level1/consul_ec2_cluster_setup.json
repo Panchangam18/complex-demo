@@ -1,0 +1,32 @@
+{
+  "goal": "Configure Consul cluster on EC2 instances",
+  "steps": [
+    {
+      "name": "Review Consul EC2 variables",
+      "type": "prompt",
+      "prompt": "Examine the variables for deploying Consul on EC2 instances.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/consul/ec2-cluster/variables.tf"
+      ]
+    },
+    {
+      "name": "Configure Consul cluster size",
+      "type": "prompt",
+      "prompt": "Update the Consul EC2 configuration to deploy a 3-node cluster.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/consul/ec2-cluster/main.tf"
+      ]
+    },
+    {
+      "name": "Review user data script",
+      "type": "prompt",
+      "prompt": "Check the user data script template used for Consul initialization.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/consul/ec2-cluster/templates/user-data.sh.tpl"
+      ]
+    }
+  ]
+}

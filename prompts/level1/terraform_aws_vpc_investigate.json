@@ -1,0 +1,30 @@
+{
+  "goal": "Investigate AWS VPC issues",
+  "steps": [
+    {
+      "name": "Review investigation script",
+      "type": "prompt",
+      "prompt": "Check the AWS VPC investigation script functionality.",
+      "parameters": {},
+      "files": [
+        "terraform/scripts/aws-vpc-investigate.sh"
+      ]
+    },
+    {
+      "name": "Add security group checks",
+      "type": "prompt",
+      "prompt": "Add commands to investigate security group configurations.",
+      "parameters": {},
+      "files": [
+        "terraform/scripts/aws-vpc-investigate.sh"
+      ]
+    },
+    {
+      "name": "Test investigation",
+      "type": "cli",
+      "command": "bash -n terraform/scripts/aws-vpc-investigate.sh",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

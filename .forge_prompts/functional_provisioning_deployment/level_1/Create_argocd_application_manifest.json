@@ -1,0 +1,39 @@
+{
+  "goal": "Create ArgoCD application manifest for GitOps deployment",
+  "steps": [
+    {
+      "name": "Review ArgoCD applications template",
+      "type": "prompt",
+      "prompt": "Examine the existing applications.yaml to understand ArgoCD application structure.",
+      "parameters": {},
+      "files": [
+        "k8s/envs/dev/applications.yaml"
+      ]
+    },
+    {
+      "name": "Add backend application",
+      "type": "prompt",
+      "prompt": "Create an ArgoCD Application resource for the backend service with appropriate sync policies.",
+      "parameters": {},
+      "files": [
+        "k8s/envs/dev/applications.yaml"
+      ]
+    },
+    {
+      "name": "Add frontend application",
+      "type": "prompt",
+      "prompt": "Create an ArgoCD Application resource for the frontend service with automated sync enabled.",
+      "parameters": {},
+      "files": [
+        "k8s/envs/dev/applications.yaml"
+      ]
+    },
+    {
+      "name": "Validate application manifest",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/envs/dev/applications.yaml --dry-run=client",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

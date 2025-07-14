@@ -1,0 +1,32 @@
+{
+  "goal": "Configure Datadog integration documentation",
+  "steps": [
+    {
+      "name": "Review Datadog docs",
+      "type": "prompt",
+      "prompt": "Check the Datadog integration documentation.",
+      "parameters": {},
+      "files": [
+        "docs/DATADOG_INTEGRATION_COMPLETE.md"
+      ]
+    },
+    {
+      "name": "Update API key section",
+      "type": "prompt",
+      "prompt": "Update the API key configuration section with best practices.",
+      "parameters": {},
+      "files": [
+        "docs/DATADOG_INTEGRATION_COMPLETE.md"
+      ]
+    },
+    {
+      "name": "Add dashboard examples",
+      "type": "prompt",
+      "prompt": "Add examples of custom Datadog dashboards.",
+      "parameters": {},
+      "files": [
+        "docs/DATADOG_INTEGRATION_COMPLETE.md"
+      ]
+    }
+  ]
+}

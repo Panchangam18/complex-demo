@@ -1,0 +1,48 @@
+{
+  "goal": "Setup Consul configuration using Ansible templates",
+  "steps": [
+    {
+      "name": "Review Consul JSON template",
+      "type": "prompt",
+      "prompt": "Examine the Consul JSON Jinja2 template to understand the configuration structure.",
+      "parameters": {},
+      "files": [
+        "ansible/templates/consul.json.j2"
+      ]
+    },
+    {
+      "name": "Configure datacenter settings",
+      "type": "prompt",
+      "prompt": "Update the Consul template with appropriate datacenter name and bootstrap expect values.",
+      "parameters": {},
+      "files": [
+        "ansible/templates/consul.json.j2"
+      ]
+    },
+    {
+      "name": "Setup encryption",
+      "type": "prompt",
+      "prompt": "Generate and configure encryption keys for Consul gossip protocol in the template.",
+      "parameters": {},
+      "files": [
+        "ansible/templates/consul.json.j2"
+      ]
+    },
+    {
+      "name": "Configure service template",
+      "type": "prompt",
+      "prompt": "Review and update the Consul service systemd template for proper service management.",
+      "parameters": {},
+      "files": [
+        "ansible/templates/consul.service.j2"
+      ]
+    },
+    {
+      "name": "Test template rendering",
+      "type": "cli",
+      "command": "ansible -m template -a 'src=ansible/templates/consul.json.j2 dest=/tmp/consul-test.json' localhost",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "goal": "Configure realistic load testing scenario for production validation",
+  "steps": [
+    {
+      "name": "Review realistic test config",
+      "type": "prompt",
+      "prompt": "Examine stress_client_realistic.yml to understand the production-like testing scenarios.",
+      "parameters": {},
+      "files": [
+        "Code/client/src/tests/stresstests/stress_client_realistic.yml"
+      ]
+    },
+    {
+      "name": "Configure user behavior",
+      "type": "prompt",
+      "prompt": "Update the realistic load test to simulate actual user behavior patterns including think time and session duration.",
+      "parameters": {},
+      "files": [
+        "Code/client/src/tests/stresstests/stress_client_realistic.yml"
+      ]
+    },
+    {
+      "name": "Add custom scenarios",
+      "type": "prompt",
+      "prompt": "Add scenarios that reflect your application's critical user journeys (login, browse, purchase, etc.).",
+      "parameters": {},
+      "files": [
+        "Code/client/src/tests/stresstests/stress_client_realistic.yml"
+      ]
+    },
+    {
+      "name": "Validate test configuration",
+      "type": "cli",
+      "command": "cd Code/client/src/tests/stresstests && artillery run --quiet stress_client_realistic.yml",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

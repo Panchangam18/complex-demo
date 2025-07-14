@@ -1,0 +1,37 @@
+{
+  "goal": "Configure ArgoCD installation for GitOps workflow",
+  "steps": [
+    {
+      "name": "Review ArgoCD install manifest",
+      "type": "prompt",
+      "prompt": "Examine the ArgoCD installation YAML to understand the components being deployed.",
+      "parameters": {},
+      "files": [
+        "k8s/argocd/install.yaml"
+      ]
+    },
+    {
+      "name": "Customize ArgoCD namespace",
+      "type": "prompt",
+      "prompt": "Ensure ArgoCD is configured to deploy in the 'argocd' namespace with proper RBAC settings.",
+      "parameters": {},
+      "files": [
+        "k8s/argocd/install.yaml"
+      ]
+    },
+    {
+      "name": "Install ArgoCD",
+      "type": "cli",
+      "command": "kubectl create namespace argocd && kubectl apply -n argocd -f k8s/argocd/install.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Wait for ArgoCD pods",
+      "type": "cli",
+      "command": "kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server -n argocd --timeout=300s",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

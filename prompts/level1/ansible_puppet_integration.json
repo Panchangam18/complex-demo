@@ -1,0 +1,30 @@
+{
+  "goal": "Configure Puppet integration playbook",
+  "steps": [
+    {
+      "name": "Review Puppet integration playbook",
+      "type": "prompt",
+      "prompt": "Examine the Ansible playbook for Puppet integration.",
+      "parameters": {},
+      "files": [
+        "ansible/playbooks/puppet-integration.yml"
+      ]
+    },
+    {
+      "name": "Update Puppet server URL",
+      "type": "prompt",
+      "prompt": "Modify the playbook to use your Puppet server URL.",
+      "parameters": {},
+      "files": [
+        "ansible/playbooks/puppet-integration.yml"
+      ]
+    },
+    {
+      "name": "Validate playbook",
+      "type": "cli",
+      "command": "ansible-playbook --syntax-check ansible/playbooks/puppet-integration.yml",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

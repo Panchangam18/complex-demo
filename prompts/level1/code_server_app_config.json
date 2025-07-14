@@ -1,0 +1,32 @@
+{
+  "goal": "Configure server application settings",
+  "steps": [
+    {
+      "name": "Review app.js",
+      "type": "prompt",
+      "prompt": "Examine the main server application file.",
+      "parameters": {},
+      "files": [
+        "Code/server/src/app.js"
+      ]
+    },
+    {
+      "name": "Add CORS configuration",
+      "type": "prompt",
+      "prompt": "Configure CORS settings to allow specific origins.",
+      "parameters": {},
+      "files": [
+        "Code/server/src/app.js"
+      ]
+    },
+    {
+      "name": "Add request logging",
+      "type": "prompt",
+      "prompt": "Add Morgan middleware for HTTP request logging.",
+      "parameters": {},
+      "files": [
+        "Code/server/src/app.js"
+      ]
+    }
+  ]
+}

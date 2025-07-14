@@ -1,0 +1,32 @@
+{
+  "goal": "Update Nexus deployment documentation",
+  "steps": [
+    {
+      "name": "Review Nexus guide",
+      "type": "prompt",
+      "prompt": "Check the Nexus deployment guide documentation.",
+      "parameters": {},
+      "files": [
+        "docs/nexus-deployment-guide.md"
+      ]
+    },
+    {
+      "name": "Update storage config",
+      "type": "prompt",
+      "prompt": "Update the persistent storage configuration section.",
+      "parameters": {},
+      "files": [
+        "docs/nexus-deployment-guide.md"
+      ]
+    },
+    {
+      "name": "Add backup procedures",
+      "type": "prompt",
+      "prompt": "Add a section about Nexus backup and restore procedures.",
+      "parameters": {},
+      "files": [
+        "docs/nexus-deployment-guide.md"
+      ]
+    }
+  ]
+}

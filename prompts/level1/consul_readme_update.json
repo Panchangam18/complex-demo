@@ -1,0 +1,32 @@
+{
+  "goal": "Update Consul module documentation",
+  "steps": [
+    {
+      "name": "Review Consul README",
+      "type": "prompt",
+      "prompt": "Check the Consul module README file.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/consul/README.md"
+      ]
+    },
+    {
+      "name": "Add usage examples",
+      "type": "prompt",
+      "prompt": "Add practical usage examples for both EC2 and K8s deployments.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/consul/README.md"
+      ]
+    },
+    {
+      "name": "Update requirements",
+      "type": "prompt",
+      "prompt": "Update the requirements section with current Consul version.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/consul/README.md"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "goal": "Set up client application Dockerfile",
+  "steps": [
+    {
+      "name": "Review client Dockerfile",
+      "type": "prompt",
+      "prompt": "Check the client application Dockerfile configuration.",
+      "parameters": {},
+      "files": [
+        "Code/client/Dockerfile"
+      ]
+    },
+    {
+      "name": "Configure nginx",
+      "type": "prompt",
+      "prompt": "Update the Dockerfile to use nginx:alpine for serving the built application.",
+      "parameters": {},
+      "files": [
+        "Code/client/Dockerfile"
+      ]
+    },
+    {
+      "name": "Add build args",
+      "type": "prompt",
+      "prompt": "Add build arguments for API endpoint configuration.",
+      "parameters": {},
+      "files": [
+        "Code/client/Dockerfile"
+      ]
+    }
+  ]
+}

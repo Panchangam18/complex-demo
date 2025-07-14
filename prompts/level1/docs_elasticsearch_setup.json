@@ -1,0 +1,32 @@
+{
+  "goal": "Configure Elasticsearch documentation",
+  "steps": [
+    {
+      "name": "Review Elasticsearch docs",
+      "type": "prompt",
+      "prompt": "Check the Elasticsearch integration documentation.",
+      "parameters": {},
+      "files": [
+        "docs/ELASTICSEARCH_INTEGRATION_COMPLETE.md"
+      ]
+    },
+    {
+      "name": "Update cluster settings",
+      "type": "prompt",
+      "prompt": "Update the Elasticsearch cluster configuration examples.",
+      "parameters": {},
+      "files": [
+        "docs/ELASTICSEARCH_INTEGRATION_COMPLETE.md"
+      ]
+    },
+    {
+      "name": "Add index templates",
+      "type": "prompt",
+      "prompt": "Add examples of index templates for log data.",
+      "parameters": {},
+      "files": [
+        "docs/ELASTICSEARCH_INTEGRATION_COMPLETE.md"
+      ]
+    }
+  ]
+}

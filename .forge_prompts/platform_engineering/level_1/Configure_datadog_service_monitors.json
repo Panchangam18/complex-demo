@@ -1,0 +1,46 @@
+{
+  "goal": "Configure Datadog service monitors for application metrics collection",
+  "steps": [
+    {
+      "name": "Review service monitor configuration",
+      "type": "prompt",
+      "prompt": "Examine the Datadog service monitor YAML to understand metric collection setup.",
+      "parameters": {},
+      "files": [
+        "monitoring/datadog-servicemonitor.yaml"
+      ]
+    },
+    {
+      "name": "Configure service selectors",
+      "type": "prompt",
+      "prompt": "Update service selectors to match your application services (backend, frontend) labels.",
+      "parameters": {},
+      "files": [
+        "monitoring/datadog-servicemonitor.yaml"
+      ]
+    },
+    {
+      "name": "Add metric endpoints",
+      "type": "prompt",
+      "prompt": "Configure the metrics endpoints path (e.g., /metrics) and port for each service.",
+      "parameters": {},
+      "files": [
+        "monitoring/datadog-servicemonitor.yaml"
+      ]
+    },
+    {
+      "name": "Apply service monitors",
+      "type": "cli",
+      "command": "kubectl apply -f monitoring/datadog-servicemonitor.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify metric collection",
+      "type": "cli",
+      "command": "kubectl logs -l app=datadog -n monitoring | grep -i 'service.*monitor'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

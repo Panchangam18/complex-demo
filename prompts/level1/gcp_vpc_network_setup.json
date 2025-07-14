@@ -1,0 +1,32 @@
+{
+  "goal": "Set up GCP VPC network with subnets",
+  "steps": [
+    {
+      "name": "Review VPC variables",
+      "type": "prompt",
+      "prompt": "Check the available configuration options for GCP VPC networks.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/gcp/vpc/variables.tf"
+      ]
+    },
+    {
+      "name": "Configure VPC subnets",
+      "type": "prompt",
+      "prompt": "Update the VPC configuration to create subnets in us-central1 and us-east1 regions.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/gcp/vpc/main.tf"
+      ]
+    },
+    {
+      "name": "Add network outputs",
+      "type": "prompt",
+      "prompt": "Configure outputs to expose VPC and subnet information.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/gcp/vpc/outputs.tf"
+      ]
+    }
+  ]
+}

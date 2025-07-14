@@ -1,0 +1,39 @@
+{
+  "goal": "Configure security findings integration with logging pipeline",
+  "steps": [
+    {
+      "name": "Review security integration config",
+      "type": "prompt",
+      "prompt": "Examine the security findings integration YAML to understand how security events are collected.",
+      "parameters": {},
+      "files": [
+        "k8s/envs/dev/logging/security-findings-integration.yaml"
+      ]
+    },
+    {
+      "name": "Configure security scanners",
+      "type": "prompt",
+      "prompt": "Setup integration with security scanning tools (Falco, OPA, etc.) for runtime security monitoring.",
+      "parameters": {},
+      "files": [
+        "k8s/envs/dev/logging/security-findings-integration.yaml"
+      ]
+    },
+    {
+      "name": "Setup alert rules",
+      "type": "prompt",
+      "prompt": "Configure alerting rules for critical security findings with appropriate severity thresholds.",
+      "parameters": {},
+      "files": [
+        "k8s/envs/dev/logging/security-findings-integration.yaml"
+      ]
+    },
+    {
+      "name": "Apply security integration",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/envs/dev/logging/security-findings-integration.yaml",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

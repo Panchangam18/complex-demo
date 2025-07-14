@@ -1,0 +1,41 @@
+{
+  "goal": "Configure Nexus repository manager Helm values",
+  "steps": [
+    {
+      "name": "Review Nexus Helm template",
+      "type": "prompt",
+      "prompt": "Examine the Nexus Helm values template to understand configuration options.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/k8s/nexus/templates/nexus-values.yaml.tpl"
+      ]
+    },
+    {
+      "name": "Configure persistence",
+      "type": "prompt",
+      "prompt": "Setup persistent volume configuration for Nexus data storage with appropriate size and storage class.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/k8s/nexus/templates/nexus-values.yaml.tpl"
+      ]
+    },
+    {
+      "name": "Setup resource limits",
+      "type": "prompt",
+      "prompt": "Configure CPU and memory resources for Nexus based on expected artifact storage needs.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/k8s/nexus/templates/nexus-values.yaml.tpl"
+      ]
+    },
+    {
+      "name": "Configure ingress",
+      "type": "prompt",
+      "prompt": "Setup ingress configuration for Nexus with appropriate hostname and TLS settings.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/k8s/nexus/templates/nexus-values.yaml.tpl"
+      ]
+    }
+  ]
+}

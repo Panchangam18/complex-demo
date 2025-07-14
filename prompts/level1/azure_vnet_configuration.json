@@ -1,0 +1,32 @@
+{
+  "goal": "Set up Azure Virtual Network with custom subnets",
+  "steps": [
+    {
+      "name": "Review VNet variables",
+      "type": "prompt",
+      "prompt": "Examine the available variables for configuring Azure Virtual Networks.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/azure/vnet/variables.tf"
+      ]
+    },
+    {
+      "name": "Configure VNet CIDR blocks",
+      "type": "prompt",
+      "prompt": "Update the VNet main configuration to use a 10.0.0.0/16 address space with two subnets.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/azure/vnet/main.tf"
+      ]
+    },
+    {
+      "name": "Add subnet outputs",
+      "type": "prompt",
+      "prompt": "Add outputs to expose the subnet IDs for use by other modules.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/azure/vnet/outputs.tf"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "goal": "Configure lightweight Prometheus deployment for cost-effective monitoring",
+  "steps": [
+    {
+      "name": "Review Prometheus Lite configuration",
+      "type": "prompt",
+      "prompt": "Examine prometheus-lite.yaml to understand the resource-constrained configuration.",
+      "parameters": {},
+      "files": [
+        "k8s/envs/dev/aws/observability/prometheus-lite.yaml"
+      ]
+    },
+    {
+      "name": "Optimize retention settings",
+      "type": "prompt",
+      "prompt": "Configure Prometheus retention settings to balance storage costs with monitoring needs (e.g., 7 days retention).",
+      "parameters": {},
+      "files": [
+        "k8s/envs/dev/aws/observability/prometheus-lite.yaml"
+      ]
+    },
+    {
+      "name": "Add essential scrape targets",
+      "type": "prompt",
+      "prompt": "Configure only essential scrape targets to minimize resource usage while maintaining visibility.",
+      "parameters": {},
+      "files": [
+        "k8s/envs/dev/aws/observability/prometheus-lite.yaml"
+      ]
+    },
+    {
+      "name": "Apply Prometheus Lite",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/envs/dev/aws/observability/prometheus-lite.yaml",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

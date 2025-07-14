@@ -1,0 +1,32 @@
+{
+  "goal": "Configure server application Dockerfile",
+  "steps": [
+    {
+      "name": "Review server Dockerfile",
+      "type": "prompt",
+      "prompt": "Examine the Node.js server application Dockerfile.",
+      "parameters": {},
+      "files": [
+        "Code/server/Dockerfile"
+      ]
+    },
+    {
+      "name": "Update Node version",
+      "type": "prompt",
+      "prompt": "Update the Dockerfile to use Node.js version 18 Alpine image.",
+      "parameters": {},
+      "files": [
+        "Code/server/Dockerfile"
+      ]
+    },
+    {
+      "name": "Add health check",
+      "type": "prompt",
+      "prompt": "Add a HEALTHCHECK instruction to the Dockerfile.",
+      "parameters": {},
+      "files": [
+        "Code/server/Dockerfile"
+      ]
+    }
+  ]
+}

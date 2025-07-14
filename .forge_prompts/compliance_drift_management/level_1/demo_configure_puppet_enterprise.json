@@ -1,0 +1,48 @@
+{
+  "goal": "Configure Puppet Enterprise using Ansible automation",
+  "steps": [
+    {
+      "name": "Review Puppet configuration template",
+      "type": "prompt",
+      "prompt": "Examine puppet.conf.j2 template to understand Puppet agent configuration.",
+      "parameters": {},
+      "files": [
+        "ansible/templates/puppet.conf.j2"
+      ]
+    },
+    {
+      "name": "Setup Hiera configuration",
+      "type": "prompt",
+      "prompt": "Configure Hiera data hierarchy in the hiera.yaml.j2 template for environment-specific configurations.",
+      "parameters": {},
+      "files": [
+        "ansible/templates/hiera.yaml.j2"
+      ]
+    },
+    {
+      "name": "Configure node classification",
+      "type": "prompt",
+      "prompt": "Setup node classification rules in the template for different server roles.",
+      "parameters": {},
+      "files": [
+        "ansible/templates/node-classification.yaml.j2"
+      ]
+    },
+    {
+      "name": "Setup Puppet node classifier",
+      "type": "prompt",
+      "prompt": "Configure the Puppet node classifier script template for dynamic node assignment.",
+      "parameters": {},
+      "files": [
+        "ansible/templates/puppet-node-classifier.j2"
+      ]
+    },
+    {
+      "name": "Run Puppet integration playbook",
+      "type": "cli",
+      "command": "cd ansible && ansible-playbook -i inventory/terraform-inventory.py playbooks/puppet-integration.yml --check",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

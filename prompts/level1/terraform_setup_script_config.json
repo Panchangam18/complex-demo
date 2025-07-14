@@ -1,0 +1,30 @@
+{
+  "goal": "Configure Terraform setup script",
+  "steps": [
+    {
+      "name": "Review setup script",
+      "type": "prompt",
+      "prompt": "Examine the main Terraform setup script.",
+      "parameters": {},
+      "files": [
+        "terraform/scripts/setup.sh"
+      ]
+    },
+    {
+      "name": "Add version check",
+      "type": "prompt",
+      "prompt": "Add Terraform version verification to the setup script.",
+      "parameters": {},
+      "files": [
+        "terraform/scripts/setup.sh"
+      ]
+    },
+    {
+      "name": "Test setup",
+      "type": "cli",
+      "command": "bash -n terraform/scripts/setup.sh",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

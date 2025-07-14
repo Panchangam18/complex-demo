@@ -1,0 +1,30 @@
+{
+  "goal": "Check Consul cluster status",
+  "steps": [
+    {
+      "name": "Review Consul status script",
+      "type": "prompt",
+      "prompt": "Examine the Consul status checking script.",
+      "parameters": {},
+      "files": [
+        "terraform/scripts/consul-status.sh"
+      ]
+    },
+    {
+      "name": "Add health check",
+      "type": "prompt",
+      "prompt": "Update the script to include service health checks.",
+      "parameters": {},
+      "files": [
+        "terraform/scripts/consul-status.sh"
+      ]
+    },
+    {
+      "name": "Test status script",
+      "type": "cli",
+      "command": "bash -n terraform/scripts/consul-status.sh",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

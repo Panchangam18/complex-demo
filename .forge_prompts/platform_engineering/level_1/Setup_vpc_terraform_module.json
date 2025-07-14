@@ -1,0 +1,48 @@
+{
+  "goal": "Setup VPC configuration using Terraform module",
+  "steps": [
+    {
+      "name": "Review VPC module structure",
+      "type": "prompt",
+      "prompt": "Examine the VPC module main.tf to understand network architecture.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/aws/vpc/main.tf"
+      ]
+    },
+    {
+      "name": "Configure CIDR blocks",
+      "type": "prompt",
+      "prompt": "Set appropriate CIDR blocks for VPC and subnets based on network requirements.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/aws/vpc/variables.tf"
+      ]
+    },
+    {
+      "name": "Setup availability zones",
+      "type": "prompt",
+      "prompt": "Configure subnets across multiple availability zones for high availability.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/aws/vpc/main.tf"
+      ]
+    },
+    {
+      "name": "Configure NAT gateways",
+      "type": "prompt",
+      "prompt": "Setup NAT gateways for private subnet internet access with appropriate redundancy.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/aws/vpc/main.tf"
+      ]
+    },
+    {
+      "name": "Plan VPC creation",
+      "type": "cli",
+      "command": "cd terraform/modules/aws/vpc && terraform plan",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

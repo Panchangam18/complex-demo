@@ -1,0 +1,48 @@
+{
+  "goal": "Configure EKS cluster using Terraform module",
+  "steps": [
+    {
+      "name": "Review EKS module variables",
+      "type": "prompt",
+      "prompt": "Examine the EKS module variables to understand required configurations.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/aws/eks/variables.tf"
+      ]
+    },
+    {
+      "name": "Configure cluster settings",
+      "type": "prompt",
+      "prompt": "Set appropriate cluster name, Kubernetes version, and node group configurations in main.tf.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/aws/eks/main.tf"
+      ]
+    },
+    {
+      "name": "Setup IRSA configuration",
+      "type": "prompt",
+      "prompt": "Configure IAM Roles for Service Accounts (IRSA) for pod-level AWS permissions.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/aws/eks/irsa.tf"
+      ]
+    },
+    {
+      "name": "Configure data sources",
+      "type": "prompt",
+      "prompt": "Review and configure data sources for AMI lookups and availability zones.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/aws/eks/data.tf"
+      ]
+    },
+    {
+      "name": "Validate module",
+      "type": "cli",
+      "command": "cd terraform/modules/aws/eks && terraform init && terraform validate",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

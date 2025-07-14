@@ -1,0 +1,39 @@
+{
+  "goal": "Setup and configure nginx for the frontend application",
+  "steps": [
+    {
+      "name": "Review nginx configuration",
+      "type": "prompt", 
+      "prompt": "Examine the nginx.conf file to understand the current proxy and routing setup.",
+      "parameters": {},
+      "files": [
+        "Code/client/nginx.conf"
+      ]
+    },
+    {
+      "name": "Update proxy settings",
+      "type": "prompt",
+      "prompt": "Configure nginx to properly proxy API requests to the backend service using Kubernetes service discovery.",
+      "parameters": {},
+      "files": [
+        "Code/client/nginx.conf"
+      ]
+    },
+    {
+      "name": "Add caching headers",
+      "type": "prompt",
+      "prompt": "Add appropriate caching headers for static assets to improve frontend performance.",
+      "parameters": {},
+      "files": [
+        "Code/client/nginx.conf"
+      ]
+    },
+    {
+      "name": "Test nginx configuration",
+      "type": "cli",
+      "command": "docker run --rm -v $(pwd)/Code/client/nginx.conf:/etc/nginx/nginx.conf:ro nginx nginx -t",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

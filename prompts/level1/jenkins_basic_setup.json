@@ -1,0 +1,30 @@
+{
+  "goal": "Configure Jenkins with initialization script",
+  "steps": [
+    {
+      "name": "Review Jenkins user data",
+      "type": "prompt",
+      "prompt": "Examine the Jenkins initialization script for EC2 instances.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/jenkins/user_data.sh"
+      ]
+    },
+    {
+      "name": "Update Jenkins configuration",
+      "type": "prompt",
+      "prompt": "Modify the user data script to install additional Jenkins plugins on startup.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/jenkins/user_data.sh"
+      ]
+    },
+    {
+      "name": "Test script syntax",
+      "type": "cli",
+      "command": "bash -n terraform/modules/jenkins/user_data.sh",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

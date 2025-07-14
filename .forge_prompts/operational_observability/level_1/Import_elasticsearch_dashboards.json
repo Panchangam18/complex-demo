@@ -1,0 +1,39 @@
+{
+  "goal": "Import Elasticsearch log analysis dashboards into monitoring system",
+  "steps": [
+    {
+      "name": "Review dashboard JSON",
+      "type": "prompt",
+      "prompt": "Examine the Elasticsearch log dashboards JSON to understand available visualizations.",
+      "parameters": {},
+      "files": [
+        "monitoring/elasticsearch-log-dashboards.json"
+      ]
+    },
+    {
+      "name": "Customize dashboard queries",
+      "type": "prompt",
+      "prompt": "Update dashboard queries to match your application's log structure and fields.",
+      "parameters": {},
+      "files": [
+        "monitoring/elasticsearch-log-dashboards.json"
+      ]
+    },
+    {
+      "name": "Configure time ranges",
+      "type": "prompt",
+      "prompt": "Set appropriate default time ranges for log analysis dashboards based on retention policies.",
+      "parameters": {},
+      "files": [
+        "monitoring/elasticsearch-log-dashboards.json"
+      ]
+    },
+    {
+      "name": "Create ConfigMap",
+      "type": "cli",
+      "command": "kubectl create configmap elasticsearch-dashboards --from-file=monitoring/elasticsearch-log-dashboards.json -n monitoring",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "goal": "Configure Day 0 provisioning playbook",
+  "steps": [
+    {
+      "name": "Review Day 0 playbook",
+      "type": "prompt",
+      "prompt": "Examine the Day 0 provisioning playbook structure.",
+      "parameters": {},
+      "files": [
+        "ansible/playbooks/day0-provisioning.yml"
+      ]
+    },
+    {
+      "name": "Update provisioning tasks",
+      "type": "prompt",
+      "prompt": "Add a task to install essential packages during Day 0 provisioning.",
+      "parameters": {},
+      "files": [
+        "ansible/playbooks/day0-provisioning.yml"
+      ]
+    },
+    {
+      "name": "Validate playbook",
+      "type": "cli",
+      "command": "ansible-playbook --syntax-check ansible/playbooks/day0-provisioning.yml",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

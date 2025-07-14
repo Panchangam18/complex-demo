@@ -1,0 +1,39 @@
+{
+  "goal": "Configure Fluent Bit DaemonSet for comprehensive log collection",
+  "steps": [
+    {
+      "name": "Review Fluent Bit DaemonSet",
+      "type": "prompt",
+      "prompt": "Examine the Fluent Bit DaemonSet configuration to understand how it collects logs from all nodes.",
+      "parameters": {},
+      "files": [
+        "k8s/envs/dev/logging/fluent-bit-daemonset.yaml"
+      ]
+    },
+    {
+      "name": "Configure resource limits",
+      "type": "prompt",
+      "prompt": "Add appropriate CPU and memory limits to the Fluent Bit containers to prevent resource exhaustion.",
+      "parameters": {},
+      "files": [
+        "k8s/envs/dev/logging/fluent-bit-daemonset.yaml"
+      ]
+    },
+    {
+      "name": "Add node selectors",
+      "type": "prompt",
+      "prompt": "Configure node selectors or tolerations to ensure Fluent Bit runs on all nodes including master nodes.",
+      "parameters": {},
+      "files": [
+        "k8s/envs/dev/logging/fluent-bit-daemonset.yaml"
+      ]
+    },
+    {
+      "name": "Deploy DaemonSet",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/envs/dev/logging/fluent-bit-daemonset.yaml",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "goal": "Configure backend deployment with appropriate resource limits and requests",
+  "steps": [
+    {
+      "name": "Review backend deployment",
+      "type": "prompt",
+      "prompt": "Examine the backend deployment file to understand current resource configuration.",
+      "parameters": {},
+      "files": [
+        "k8s/envs/dev/backend/deployment.yaml"
+      ]
+    },
+    {
+      "name": "Add resource limits",
+      "type": "prompt",
+      "prompt": "Add appropriate CPU and memory limits and requests to the backend container spec based on expected load.",
+      "parameters": {},
+      "files": [
+        "k8s/envs/dev/backend/deployment.yaml"
+      ]
+    },
+    {
+      "name": "Validate deployment syntax",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/envs/dev/backend/deployment.yaml --dry-run=client",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

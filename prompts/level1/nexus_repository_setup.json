@@ -1,0 +1,32 @@
+{
+  "goal": "Configure Nexus Repository Manager",
+  "steps": [
+    {
+      "name": "Review Nexus variables",
+      "type": "prompt",
+      "prompt": "Examine the Nexus Repository Manager configuration options.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/k8s/nexus/variables.tf"
+      ]
+    },
+    {
+      "name": "Configure Nexus deployment",
+      "type": "prompt",
+      "prompt": "Update the Nexus configuration to set appropriate resource limits.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/k8s/nexus/main.tf"
+      ]
+    },
+    {
+      "name": "Check version requirements",
+      "type": "prompt",
+      "prompt": "Review the Terraform version requirements for the Nexus module.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/k8s/nexus/versions.tf"
+      ]
+    }
+  ]
+}

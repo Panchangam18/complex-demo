@@ -1,0 +1,32 @@
+{
+  "goal": "Configure basic GKE cluster settings",
+  "steps": [
+    {
+      "name": "Review GKE module structure",
+      "type": "prompt",
+      "prompt": "Examine the GKE module variables to understand available configuration options.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/gcp/gke/variables.tf"
+      ]
+    },
+    {
+      "name": "Configure GKE node pools",
+      "type": "prompt",
+      "prompt": "Update the GKE main configuration to set up a node pool with 2 nodes minimum.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/gcp/gke/main.tf"
+      ]
+    },
+    {
+      "name": "Enable workload identity",
+      "type": "prompt",
+      "prompt": "Review and configure workload identity settings for the GKE cluster.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/gcp/gke/workload-identity.tf"
+      ]
+    }
+  ]
+}

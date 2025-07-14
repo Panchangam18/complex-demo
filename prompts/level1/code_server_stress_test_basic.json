@@ -1,0 +1,32 @@
+{
+  "goal": "Configure basic server stress tests",
+  "steps": [
+    {
+      "name": "Review stress test config",
+      "type": "prompt",
+      "prompt": "Check the basic stress test configuration for the server.",
+      "parameters": {},
+      "files": [
+        "Code/server/src/tests/stresstests/stress_server.yml"
+      ]
+    },
+    {
+      "name": "Update test duration",
+      "type": "prompt",
+      "prompt": "Modify the stress test to run for 5 minutes with 50 concurrent users.",
+      "parameters": {},
+      "files": [
+        "Code/server/src/tests/stresstests/stress_server.yml"
+      ]
+    },
+    {
+      "name": "Add response validation",
+      "type": "prompt",
+      "prompt": "Add response time validation to the stress test configuration.",
+      "parameters": {},
+      "files": [
+        "Code/server/src/tests/stresstests/stress_server.yml"
+      ]
+    }
+  ]
+}

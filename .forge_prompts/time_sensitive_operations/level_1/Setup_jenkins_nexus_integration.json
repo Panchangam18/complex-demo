@@ -1,0 +1,44 @@
+{
+  "goal": "Setup Jenkins integration with Nexus for artifact management",
+  "steps": [
+    {
+      "name": "Review Jenkins pipeline",
+      "type": "prompt",
+      "prompt": "Examine the Jenkins Nexus integration pipeline to understand artifact publishing flow.",
+      "parameters": {},
+      "files": [
+        "ci-cd/jenkins/pipelines/jenkins-nexus-integration.groovy"
+      ]
+    },
+    {
+      "name": "Configure Nexus credentials",
+      "type": "prompt",
+      "prompt": "Add Nexus repository credentials to Jenkins credential store for artifact uploads.",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Update repository URLs",
+      "type": "prompt",
+      "prompt": "Update the Jenkins pipeline with correct Nexus repository URLs for releases and snapshots.",
+      "parameters": {},
+      "files": [
+        "ci-cd/jenkins/pipelines/jenkins-nexus-integration.groovy"
+      ]
+    },
+    {
+      "name": "Configure Maven settings",
+      "type": "prompt",
+      "prompt": "Setup Maven settings in Jenkins to use Nexus as mirror for dependency resolution.",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test integration",
+      "type": "cli",
+      "command": "cd ci-cd/jenkins/scripts && ./jenkins-nexus-demo.sh",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

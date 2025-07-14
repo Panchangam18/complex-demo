@@ -1,0 +1,39 @@
+{
+  "goal": "Setup Terraform backend configuration for state management",
+  "steps": [
+    {
+      "name": "Review backend configuration",
+      "type": "prompt",
+      "prompt": "Examine the Terraform backend configuration to understand S3 state storage setup.",
+      "parameters": {},
+      "files": [
+        "terraform/bootstrap/generated/backend-aws.tf"
+      ]
+    },
+    {
+      "name": "Configure S3 backend",
+      "type": "prompt",
+      "prompt": "Update backend configuration with appropriate S3 bucket, key, and region for state storage.",
+      "parameters": {},
+      "files": [
+        "terraform/envs/dev/us-east-2/backend.tf"
+      ]
+    },
+    {
+      "name": "Setup state locking",
+      "type": "prompt",
+      "prompt": "Ensure DynamoDB table is configured for Terraform state locking to prevent concurrent modifications.",
+      "parameters": {},
+      "files": [
+        "terraform/envs/dev/us-east-2/backend.tf"
+      ]
+    },
+    {
+      "name": "Initialize backend",
+      "type": "cli",
+      "command": "cd terraform/envs/dev/us-east-2 && terraform init -backend-config=backend.tf",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

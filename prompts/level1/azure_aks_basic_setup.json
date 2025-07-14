@@ -1,0 +1,32 @@
+{
+  "goal": "Configure basic AKS cluster parameters",
+  "steps": [
+    {
+      "name": "Review AKS module variables",
+      "type": "prompt",
+      "prompt": "Review the variables available for configuring the Azure Kubernetes Service cluster.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/azure/aks/variables.tf"
+      ]
+    },
+    {
+      "name": "Update AKS node configuration",
+      "type": "prompt",
+      "prompt": "Modify the AKS main configuration to adjust the default node pool size to 3 nodes.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/azure/aks/main.tf"
+      ]
+    },
+    {
+      "name": "Configure AKS outputs",
+      "type": "prompt",
+      "prompt": "Add a new output to expose the AKS cluster's kubeconfig.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/azure/aks/outputs.tf"
+      ]
+    }
+  ]
+}

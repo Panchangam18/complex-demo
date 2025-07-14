@@ -1,0 +1,30 @@
+{
+  "goal": "Update server package dependencies",
+  "steps": [
+    {
+      "name": "Review package.json",
+      "type": "prompt",
+      "prompt": "Check the server application dependencies.",
+      "parameters": {},
+      "files": [
+        "Code/server/package.json"
+      ]
+    },
+    {
+      "name": "Add monitoring package",
+      "type": "prompt",
+      "prompt": "Add the 'prom-client' package for Prometheus metrics support.",
+      "parameters": {},
+      "files": [
+        "Code/server/package.json"
+      ]
+    },
+    {
+      "name": "Install dependencies",
+      "type": "cli",
+      "command": "cd Code/server && npm install",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

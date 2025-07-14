@@ -1,0 +1,32 @@
+{
+  "goal": "Configure Swagger API documentation",
+  "steps": [
+    {
+      "name": "Review Swagger configuration",
+      "type": "prompt",
+      "prompt": "Examine the Swagger configuration for the API documentation.",
+      "parameters": {},
+      "files": [
+        "Code/server/src/swagger/swagger.js"
+      ]
+    },
+    {
+      "name": "Update API title",
+      "type": "prompt",
+      "prompt": "Update the Swagger configuration to set a custom API title and version.",
+      "parameters": {},
+      "files": [
+        "Code/server/src/swagger/swagger.js"
+      ]
+    },
+    {
+      "name": "Add security definitions",
+      "type": "prompt",
+      "prompt": "Add JWT security definitions to the Swagger configuration.",
+      "parameters": {},
+      "files": [
+        "Code/server/src/swagger/swagger.js"
+      ]
+    }
+  ]
+}

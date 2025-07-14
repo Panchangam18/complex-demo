@@ -1,0 +1,32 @@
+{
+  "goal": "Set up intensive server stress testing",
+  "steps": [
+    {
+      "name": "Review intensive test",
+      "type": "prompt",
+      "prompt": "Check the intensive stress test configuration.",
+      "parameters": {},
+      "files": [
+        "Code/server/src/tests/stresstests/stress_server_intensive.yml"
+      ]
+    },
+    {
+      "name": "Configure load pattern",
+      "type": "prompt",
+      "prompt": "Update the test to use a gradual ramp-up pattern over 10 minutes.",
+      "parameters": {},
+      "files": [
+        "Code/server/src/tests/stresstests/stress_server_intensive.yml"
+      ]
+    },
+    {
+      "name": "Add CPU monitoring",
+      "type": "prompt",
+      "prompt": "Add CPU and memory monitoring to the intensive test.",
+      "parameters": {},
+      "files": [
+        "Code/server/src/tests/stresstests/stress_server_intensive.yml"
+      ]
+    }
+  ]
+}

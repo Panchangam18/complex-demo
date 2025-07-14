@@ -1,0 +1,32 @@
+{
+  "goal": "Set up JFrog integration documentation",
+  "steps": [
+    {
+      "name": "Review JFrog docs",
+      "type": "prompt",
+      "prompt": "Check the JFrog Artifactory integration documentation.",
+      "parameters": {},
+      "files": [
+        "docs/JFROG_INTEGRATION.md"
+      ]
+    },
+    {
+      "name": "Update repository URLs",
+      "type": "prompt",
+      "prompt": "Update the JFrog repository URLs and access credentials section.",
+      "parameters": {},
+      "files": [
+        "docs/JFROG_INTEGRATION.md"
+      ]
+    },
+    {
+      "name": "Add Docker registry",
+      "type": "prompt",
+      "prompt": "Add configuration for JFrog Docker registry integration.",
+      "parameters": {},
+      "files": [
+        "docs/JFROG_INTEGRATION.md"
+      ]
+    }
+  ]
+}

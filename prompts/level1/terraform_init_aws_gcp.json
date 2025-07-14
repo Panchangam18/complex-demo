@@ -1,0 +1,30 @@
+{
+  "goal": "Initialize AWS and GCP Terraform environments",
+  "steps": [
+    {
+      "name": "Review init script",
+      "type": "prompt",
+      "prompt": "Check the AWS-GCP initialization script.",
+      "parameters": {},
+      "files": [
+        "terraform/scripts/init-aws-gcp.sh"
+      ]
+    },
+    {
+      "name": "Configure credentials",
+      "type": "prompt",
+      "prompt": "Update the script to check for AWS and GCP credentials.",
+      "parameters": {},
+      "files": [
+        "terraform/scripts/init-aws-gcp.sh"
+      ]
+    },
+    {
+      "name": "Run initialization",
+      "type": "cli",
+      "command": "bash terraform/scripts/init-aws-gcp.sh",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "goal": "Configure client application index.html",
+  "steps": [
+    {
+      "name": "Review index.html",
+      "type": "prompt",
+      "prompt": "Check the client application entry point HTML file.",
+      "parameters": {},
+      "files": [
+        "Code/client/public/index.html"
+      ]
+    },
+    {
+      "name": "Update page title",
+      "type": "prompt",
+      "prompt": "Change the page title to reflect your application name.",
+      "parameters": {},
+      "files": [
+        "Code/client/public/index.html"
+      ]
+    },
+    {
+      "name": "Add meta tags",
+      "type": "prompt",
+      "prompt": "Add viewport and description meta tags for better SEO.",
+      "parameters": {},
+      "files": [
+        "Code/client/public/index.html"
+      ]
+    }
+  ]
+}

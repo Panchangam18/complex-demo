@@ -1,0 +1,32 @@
+{
+  "goal": "Configure Puppet Enterprise module settings",
+  "steps": [
+    {
+      "name": "Review Puppet Enterprise variables",
+      "type": "prompt",
+      "prompt": "Check the available configuration options for Puppet Enterprise deployment.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/puppet-enterprise/variables.tf"
+      ]
+    },
+    {
+      "name": "Configure Puppet Enterprise",
+      "type": "prompt",
+      "prompt": "Update the Puppet Enterprise main configuration with appropriate instance sizes.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/puppet-enterprise/main.tf"
+      ]
+    },
+    {
+      "name": "Add connection outputs",
+      "type": "prompt",
+      "prompt": "Configure outputs to expose Puppet Enterprise console URL and credentials.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/puppet-enterprise/outputs.tf"
+      ]
+    }
+  ]
+}

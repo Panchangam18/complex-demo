@@ -1,0 +1,32 @@
+{
+  "goal": "Review CircleCI setup documentation",
+  "steps": [
+    {
+      "name": "Read CircleCI docs",
+      "type": "prompt",
+      "prompt": "Review the CircleCI setup documentation for best practices.",
+      "parameters": {},
+      "files": [
+        "docs/circleci-setup.md"
+      ]
+    },
+    {
+      "name": "Update prerequisites",
+      "type": "prompt",
+      "prompt": "Update the prerequisites section with current requirements.",
+      "parameters": {},
+      "files": [
+        "docs/circleci-setup.md"
+      ]
+    },
+    {
+      "name": "Add troubleshooting",
+      "type": "prompt",
+      "prompt": "Add a troubleshooting section for common CircleCI issues.",
+      "parameters": {},
+      "files": [
+        "docs/circleci-setup.md"
+      ]
+    }
+  ]
+}

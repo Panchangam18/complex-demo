@@ -1,0 +1,30 @@
+{
+  "goal": "Validate Terraform modules",
+  "steps": [
+    {
+      "name": "Review validation script",
+      "type": "prompt",
+      "prompt": "Check the Terraform module validation script.",
+      "parameters": {},
+      "files": [
+        "terraform/scripts/validate-modules.sh"
+      ]
+    },
+    {
+      "name": "Add module path",
+      "type": "prompt",
+      "prompt": "Update the script to include additional module paths for validation.",
+      "parameters": {},
+      "files": [
+        "terraform/scripts/validate-modules.sh"
+      ]
+    },
+    {
+      "name": "Run validation",
+      "type": "cli",
+      "command": "bash terraform/scripts/validate-modules.sh",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "goal": "Install Node Exporter using Ansible",
+  "steps": [
+    {
+      "name": "Review Node Exporter task",
+      "type": "prompt",
+      "prompt": "Examine the Ansible task for installing Node Exporter.",
+      "parameters": {},
+      "files": [
+        "ansible/tasks/install-node-exporter.yml"
+      ]
+    },
+    {
+      "name": "Update Node Exporter version",
+      "type": "prompt",
+      "prompt": "Modify the task to install Node Exporter version 1.6.0.",
+      "parameters": {},
+      "files": [
+        "ansible/tasks/install-node-exporter.yml"
+      ]
+    },
+    {
+      "name": "Run Ansible syntax check",
+      "type": "cli",
+      "command": "ansible-playbook --syntax-check ansible/tasks/install-node-exporter.yml",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

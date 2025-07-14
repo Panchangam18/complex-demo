@@ -1,0 +1,32 @@
+{
+  "goal": "Update configuration management documentation",
+  "steps": [
+    {
+      "name": "Review config management docs",
+      "type": "prompt",
+      "prompt": "Check the configuration management setup documentation.",
+      "parameters": {},
+      "files": [
+        "docs/CONFIG_MANAGEMENT_SETUP.md"
+      ]
+    },
+    {
+      "name": "Update tool versions",
+      "type": "prompt",
+      "prompt": "Update the documentation with current versions of Ansible and Puppet.",
+      "parameters": {},
+      "files": [
+        "docs/CONFIG_MANAGEMENT_SETUP.md"
+      ]
+    },
+    {
+      "name": "Add integration examples",
+      "type": "prompt",
+      "prompt": "Add practical examples for Ansible-Puppet integration.",
+      "parameters": {},
+      "files": [
+        "docs/CONFIG_MANAGEMENT_SETUP.md"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "goal": "Create runbook for handling multi-cloud service outages",
+  "steps": [
+    {
+      "name": "Review existing runbook",
+      "type": "prompt",
+      "prompt": "Examine the multi-cloud service outage runbook to understand the current incident response procedures.",
+      "parameters": {},
+      "files": [
+        "runbooks/multi-cloud-service-outage.yaml"
+      ]
+    },
+    {
+      "name": "Add AWS failover steps",
+      "type": "prompt",
+      "prompt": "Add detailed steps for failing over from AWS primary to secondary region including Route53 updates.",
+      "parameters": {},
+      "files": [
+        "runbooks/multi-cloud-service-outage.yaml"
+      ]
+    },
+    {
+      "name": "Add Azure failover steps",
+      "type": "prompt",
+      "prompt": "Add procedures for failing over AKS workloads to backup region with Traffic Manager updates.",
+      "parameters": {},
+      "files": [
+        "runbooks/multi-cloud-service-outage.yaml"
+      ]
+    },
+    {
+      "name": "Add GCP failover steps",
+      "type": "prompt",
+      "prompt": "Add steps for GKE failover including Cloud Load Balancer reconfiguration.",
+      "parameters": {},
+      "files": [
+        "runbooks/multi-cloud-service-outage.yaml"
+      ]
+    },
+    {
+      "name": "Validate runbook syntax",
+      "type": "cli",
+      "command": "kubectl apply -f runbooks/multi-cloud-service-outage.yaml --dry-run=client",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

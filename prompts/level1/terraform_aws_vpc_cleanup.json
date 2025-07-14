@@ -1,0 +1,30 @@
+{
+  "goal": "Clean up AWS VPC resources",
+  "steps": [
+    {
+      "name": "Review VPC cleanup script",
+      "type": "prompt",
+      "prompt": "Examine the AWS VPC cleanup script to understand what resources it removes.",
+      "parameters": {},
+      "files": [
+        "terraform/scripts/aws-vpc-cleanup.sh"
+      ]
+    },
+    {
+      "name": "Update cleanup regions",
+      "type": "prompt",
+      "prompt": "Modify the script to include additional AWS regions for cleanup.",
+      "parameters": {},
+      "files": [
+        "terraform/scripts/aws-vpc-cleanup.sh"
+      ]
+    },
+    {
+      "name": "Run cleanup dry-run",
+      "type": "cli",
+      "command": "bash terraform/scripts/aws-vpc-cleanup.sh --dry-run",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

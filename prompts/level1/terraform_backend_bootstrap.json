@@ -1,0 +1,30 @@
+{
+  "goal": "Bootstrap Terraform backend storage",
+  "steps": [
+    {
+      "name": "Review bootstrap script",
+      "type": "prompt",
+      "prompt": "Check the Terraform backend bootstrap script functionality.",
+      "parameters": {},
+      "files": [
+        "terraform/scripts/bootstrap-backend.sh"
+      ]
+    },
+    {
+      "name": "Configure S3 bucket name",
+      "type": "prompt",
+      "prompt": "Update the script to use a custom S3 bucket name for Terraform state.",
+      "parameters": {},
+      "files": [
+        "terraform/scripts/bootstrap-backend.sh"
+      ]
+    },
+    {
+      "name": "Test script",
+      "type": "cli",
+      "command": "bash -n terraform/scripts/bootstrap-backend.sh",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}
