@@ -1,0 +1,57 @@
+goal: Warm Redis cache after deployment to maintain performance
+steps:
+- name: Get Redis cluster status
+  type: cli
+  command: kubectl exec -n caching redis-master-0 -- redis-cli INFO replication >
+    /tmp/redis_replication.txt && kubectl exec -n caching redis-master-0 -- redis-cli
+    INFO memory > /tmp/redis_memory.txt
+- name: Export frequently accessed keys
+  type: cli
+  command: kubectl exec -n caching redis-master-0 -- redis-cli --hotkeys > /tmp/hot_keys.txt
+    && kubectl exec -n caching redis-master-0 -- redis-cli MEMORY USAGE user:* | head
+    -100 > /tmp/key_memory_usage.txt
+- name: Query database for cacheable data
+  type: cli
+  command: mysql -h ${db_host} -u ${db_user} -p${db_pass} ${db_name} -e 'SELECT user_id,
+    username, email, preferences FROM users WHERE last_login > DATE_SUB(NOW(), INTERVAL
+    7 DAY);' > /tmp/active_users.csv
+- name: Analyze cache warming strategy
+  type: prompt
+  prompt: Based on hot keys in /tmp/hot_keys.txt, memory usage in /tmp/key_memory_usage.txt,
+    and active users in /tmp/active_users.csv, determine optimal cache warming strategy.
+    Prioritize frequently accessed data while staying within memory limits shown in
+    /tmp/redis_memory.txt.
+- name: Execute cache warming script
+  type: cli
+  command: "kubectl exec -n caching redis-master-0 -- sh -c 'cat > /tmp/warm_cache.sh\
+    \ << EOF\n#!/bin/bash\nwhile IFS=, read -r user_id username email preferences;\
+    \ do\n  redis-cli SET \"user:\\$user_id\" \"{\\\"username\\\":\\\"\\$username\\\
+    \",\\\"email\\\":\\\"\\$email\\\",\\\"preferences\\\":\\\"\\$preferences\\\"}\"\
+    \ EX 3600\ndone < /tmp/active_users.csv\nEOF\nchmod +x /tmp/warm_cache.sh && /tmp/warm_cache.sh'"
+- name: Monitor cache performance
+  type: integration
+  integration: datadog
+  method: api.Metric.query
+  parameters:
+    from: now - 10m
+    to: now
+    query: avg:redis.net.instantaneous_ops_per_sec{service:redis-cache}, avg:redis.mem.used{service:redis-cache},
+      avg:redis.stats.keyspace_hits{service:redis-cache}
+- name: Create cache efficiency dashboard
+  type: integration
+  integration: datadog
+  method: api.Dashboard.create
+  parameters:
+    title: Redis Cache Warming Metrics
+    widgets:
+    - definition:
+        type: timeseries
+        requests:
+        - q: avg:redis.stats.keyspace_hit_ratio{service:redis-cache}
+          display_type: line
+        title: Cache Hit Ratio
+    tags:
+    - cache-warming
+    - redis
+    - performance
+

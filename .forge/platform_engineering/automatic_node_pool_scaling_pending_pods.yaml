@@ -121,8 +121,4 @@ steps:
       - Name: NodesAdded
         Value: ${NODES_ADDED}
       Timestamp: ${TIMESTAMP}
-- name: Send scaling notification
-  type: prompt
-  prompt: Send notification about the scaling event including number of nodes added,
-    reason, and any remaining issues that need manual intervention.
 

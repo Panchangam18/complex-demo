@@ -1,0 +1,20 @@
+goal: Configure Puppet Enterprise using Ansible automation
+steps:
+- name: Review Puppet configuration template
+  type: prompt
+  prompt: Examine puppet.conf.j2 template to understand Puppet agent configuration.
+- name: Setup Hiera configuration
+  type: prompt
+  prompt: Configure Hiera data hierarchy in the hiera.yaml.j2 template for environment-specific
+    configurations.
+- name: Configure node classification
+  type: prompt
+  prompt: Setup node classification rules in the template for different server roles.
+- name: Setup Puppet node classifier
+  type: prompt
+  prompt: Configure the Puppet node classifier script template for dynamic node assignment.
+- name: Run Puppet integration playbook
+  type: cli
+  command: cd ansible && ansible-playbook -i inventory/terraform-inventory.py playbooks/puppet-integration.yml
+    --check
+

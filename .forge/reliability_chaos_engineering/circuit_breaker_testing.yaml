@@ -1,0 +1,58 @@
+goal: Test and validate circuit breaker patterns in microservices
+steps:
+- name: Deploy circuit breaker configuration
+  type: cli
+  command: "kubectl apply -f - <<EOF\napiVersion: networking.istio.io/v1beta1\nkind:\
+    \ DestinationRule\nmetadata:\n  name: api-circuit-breaker\n  namespace: production\n\
+    spec:\n  host: api-service\n  trafficPolicy:\n    connectionPool:\n      tcp:\n\
+    \        maxConnections: 100\n      http:\n        http1MaxPendingRequests: 50\n\
+    \        http2MaxRequests: 100\n        maxRequestsPerConnection: 10\n    outlierDetection:\n\
+    \      consecutiveErrors: 5\n      interval: 30s\n      baseEjectionTime: 30s\n\
+    \      maxEjectionPercent: 50\n      minHealthPercent: 50\n      splitExternalLocalOriginErrors:\
+    \ true\nEOF"
+- name: Configure Hystrix dashboard
+  type: cli
+  command: "kubectl apply -f - <<EOF\napiVersion: v1\nkind: ConfigMap\nmetadata:\n\
+    \  name: hystrix-config\n  namespace: production\ndata:\n  application.yml: |\n\
+    \    hystrix:\n      command:\n        default:\n          execution:\n      \
+    \      isolation:\n              thread:\n                timeoutInMilliseconds:\
+    \ 3000\n          circuitBreaker:\n            requestVolumeThreshold: 20\n  \
+    \          sleepWindowInMilliseconds: 5000\n            errorThresholdPercentage:\
+    \ 50\n      threadpool:\n        default:\n          coreSize: 10\n          maxQueueSize:\
+    \ 100\n          queueSizeRejectionThreshold: 80\nEOF"
+- name: Simulate service failures
+  type: cli
+  command: 'for i in {1..100}; do curl -X GET http://api-service.production.svc.cluster.local/api/v1/test
+    -H ''X-Fault-Injection: abort'' -w ''\n%{http_code} - %{time_total}s\n'' >> /tmp/fault_injection_results.txt;
+    sleep 0.1; done'
+- name: Monitor circuit breaker metrics
+  type: integration
+  integration: prometheus
+  method: query
+  parameters:
+    query: sum(rate(istio_requests_total{destination_service_name="api-service",response_code=~"5.."}[1m]))
+      / sum(rate(istio_requests_total{destination_service_name="api-service"}[1m]))
+- name: Test fallback behavior
+  type: cli
+  command: "python3 << 'EOF'\nimport requests\nimport json\nimport time\n\nresults\
+    \ = {\n    'total_requests': 0,\n    'successful': 0,\n    'circuit_open': 0,\n\
+    \    'fallback_responses': 0,\n    'timeouts': 0\n}\n\nfor i in range(50):\n \
+    \   try:\n        start = time.time()\n        response = requests.get(\n    \
+    \        'http://api-service.production.svc.cluster.local/api/v1/data',\n    \
+    \        timeout=5\n        )\n        duration = time.time() - start\n      \
+    \  \n        results['total_requests'] += 1\n        \n        if response.status_code\
+    \ == 200:\n            results['successful'] += 1\n        elif response.status_code\
+    \ == 503:\n            results['circuit_open'] += 1\n        elif response.headers.get('X-Fallback-Response'):\n\
+    \            results['fallback_responses'] += 1\n            \n    except requests.exceptions.Timeout:\n\
+    \        results['timeouts'] += 1\n    \n    time.sleep(0.2)\n\nwith open('/tmp/circuit_breaker_test.json',\
+    \ 'w') as f:\n    json.dump(results, f, indent=2)\nEOF"
+- name: Analyze circuit breaker events
+  type: cli
+  command: kubectl logs -n production -l app=api --since=10m | grep -E '(Circuit|Breaker|Fallback|Timeout)'
+    > /tmp/circuit_breaker_logs.txt
+- name: Evaluate circuit breaker effectiveness
+  type: prompt
+  prompt: Analyze the fault injection results, circuit breaker test data, and logs.
+    Determine if the circuit breaker is triggering appropriately, validate fallback
+    mechanisms, and recommend tuning for thresholds and timeout values.
+

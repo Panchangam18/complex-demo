@@ -1,0 +1,103 @@
+goal: Optimize CDN configuration for global content delivery
+steps:
+- name: Analyze current CDN metrics
+  type: integration
+  integration: cloudflare
+  method: zones.analytics.dashboard
+  parameters:
+    zone_id: ${ZONE_ID}
+    since: -24h
+    until: now
+    continuous: true
+- name: Check cache hit rates
+  type: cli
+  command: 'curl -X GET "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/analytics/dashboard?since=-24h&until=now"
+    -H "Authorization: Bearer ${CF_API_TOKEN}" -H "Content-Type: application/json"
+    | jq ''.result.totals.requests.cached, .result.totals.requests.uncached, .result.totals.bandwidth.cached,
+    .result.totals.bandwidth.uncached'' > /tmp/cache_stats.json'
+- name: Configure cache rules
+  type: integration
+  integration: cloudflare
+  method: zones.pagerules.create
+  parameters:
+    zone_id: ${ZONE_ID}
+    targets:
+    - target: url
+      constraint:
+        operator: matches
+        value: '*.example.com/static/*'
+    actions:
+    - id: browser_cache_ttl
+      value: 31536000
+    - id: edge_cache_ttl
+      value: 2678400
+    - id: cache_level
+      value: cache_everything
+    priority: 1
+    status: active
+- name: Setup image optimization
+  type: cli
+  command: "cat > /tmp/image_optimization.json << 'EOF'\n{\n  \"polish\": \"lossy\"\
+    ,\n  \"webp\": \"on\",\n  \"mirage\": \"on\",\n  \"formats\": [\n    {\"match\"\
+    : \"*.jpg\", \"quality\": 85},\n    {\"match\": \"*.png\", \"quality\": 90},\n\
+    \    {\"match\": \"*.webp\", \"quality\": 85}\n  ],\n  \"resize\": {\n    \"breakpoints\"\
+    : [320, 768, 1024, 1440, 1920],\n    \"fit\": \"scale-down\"\n  }\n}\nEOF"
+- name: Configure edge workers
+  type: cli
+  command: "cat > /tmp/edge_worker.js << 'EOF'\naddEventListener('fetch', event =>\
+    \ {\n  event.respondWith(handleRequest(event.request))\n})\n\nasync function handleRequest(request)\
+    \ {\n  const url = new URL(request.url)\n  \n  // Add security headers\n  const\
+    \ securityHeaders = {\n    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',\n\
+    \    'X-Content-Type-Options': 'nosniff',\n    'X-Frame-Options': 'SAMEORIGIN',\n\
+    \    'Referrer-Policy': 'strict-origin-when-cross-origin'\n  }\n  \n  // Implement\
+    \ A/B testing\n  const cookie = request.headers.get('Cookie')\n  let variant =\
+    \ 'a'\n  \n  if (cookie && cookie.includes('variant=b')) {\n    variant = 'b'\n\
+    \  } else if (!cookie || !cookie.includes('variant=')) {\n    variant = Math.random()\
+    \ < 0.5 ? 'a' : 'b'\n  }\n  \n  // Modify request based on variant\n  if (url.pathname.startsWith('/api/'))\
+    \ {\n    url.hostname = variant === 'a' ? 'api-a.example.com' : 'api-b.example.com'\n\
+    \  }\n  \n  // Fetch response\n  const response = await fetch(url, request)\n\
+    \  \n  // Create modified response\n  const modifiedResponse = new Response(response.body,\
+    \ response)\n  \n  // Add headers\n  Object.keys(securityHeaders).forEach(key\
+    \ => {\n    modifiedResponse.headers.set(key, securityHeaders[key])\n  })\n  \n\
+    \  // Set variant cookie\n  modifiedResponse.headers.append('Set-Cookie', `variant=${variant};\
+    \ Path=/; Max-Age=86400`)\n  \n  return modifiedResponse\n}\nEOF"
+- name: Test global latency
+  type: cli
+  command: "python3 << 'EOF'\nimport requests\nimport time\nimport json\nfrom concurrent.futures\
+    \ import ThreadPoolExecutor\n\n# Test endpoints from different regions\nregions\
+    \ = {\n    'us-east': 'https://us-east.example.com/api/health',\n    'us-west':\
+    \ 'https://us-west.example.com/api/health',\n    'eu-west': 'https://eu-west.example.com/api/health',\n\
+    \    'ap-southeast': 'https://ap-southeast.example.com/api/health',\n    'ap-northeast':\
+    \ 'https://ap-northeast.example.com/api/health'\n}\n\ndef test_region(region_data):\n\
+    \    region, url = region_data\n    latencies = []\n    \n    for _ in range(10):\n\
+    \        try:\n            start = time.time()\n            response = requests.get(url,\
+    \ timeout=10)\n            latency = (time.time() - start) * 1000  # Convert to\
+    \ ms\n            \n            latencies.append({\n                'latency_ms':\
+    \ latency,\n                'status_code': response.status_code,\n           \
+    \     'cf_ray': response.headers.get('CF-RAY', 'none'),\n                'cache_status':\
+    \ response.headers.get('CF-Cache-Status', 'none')\n            })\n        except\
+    \ Exception as e:\n            latencies.append({\n                'error': str(e)\n\
+    \            })\n        \n        time.sleep(0.5)\n    \n    return {\n     \
+    \   'region': region,\n        'measurements': latencies,\n        'avg_latency':\
+    \ sum(l.get('latency_ms', 0) for l in latencies if 'latency_ms' in l) / len([l\
+    \ for l in latencies if 'latency_ms' in l]) if latencies else 0\n    }\n\n# Run\
+    \ tests in parallel\nwith ThreadPoolExecutor(max_workers=5) as executor:\n   \
+    \ results = list(executor.map(test_region, regions.items()))\n\nwith open('/tmp/cdn_latency_test.json',\
+    \ 'w') as f:\n    json.dump(results, f, indent=2)\nEOF"
+- name: Configure Argo smart routing
+  type: integration
+  integration: cloudflare
+  method: zones.settings.edit
+  parameters:
+    zone_id: ${ZONE_ID}
+    items:
+    - id: argo
+      value: 'on'
+    - id: tiered_caching
+      value: 'on'
+- name: Analyze CDN performance
+  type: prompt
+  prompt: Review the cache statistics, latency test results, and current CDN configuration.
+    Identify opportunities to improve cache hit rates, reduce global latency, and
+    optimize bandwidth usage. Recommend specific cache rules and edge computing strategies.
+

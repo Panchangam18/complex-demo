@@ -1,0 +1,62 @@
+goal: Test data corruption resilience and recovery mechanisms
+steps:
+- name: Create test dataset
+  type: cli
+  command: kubectl exec -n production $(kubectl get pods -n production -l app=database
+    -o jsonpath='{.items[0].metadata.name}') -- mysql -u root -p${DB_PASSWORD} -e
+    "CREATE DATABASE IF NOT EXISTS chaos_test; USE chaos_test; CREATE TABLE test_data
+    (id INT PRIMARY KEY, data VARCHAR(255), checksum VARCHAR(64)); INSERT INTO test_data
+    SELECT seq, CONCAT('data_', seq), MD5(CONCAT('data_', seq)) FROM seq_1_to_10000;"
+    > /tmp/test_data_creation.log
+- name: Capture baseline checksums
+  type: cli
+  command: kubectl exec -n production $(kubectl get pods -n production -l app=database
+    -o jsonpath='{.items[0].metadata.name}') -- mysql -u root -p${DB_PASSWORD} -e
+    "SELECT COUNT(*), SUM(CRC32(CONCAT(id, data, checksum))) as dataset_checksum FROM
+    chaos_test.test_data;" > /tmp/baseline_checksum.txt
+- name: Inject data corruption
+  type: cli
+  command: "kubectl apply -f - <<EOF\napiVersion: chaos-mesh.org/v1alpha1\nkind: IOChaos\n\
+    metadata:\n  name: data-corruption-test\n  namespace: production\nspec:\n  action:\
+    \ fault\n  mode: all\n  selector:\n    namespaces:\n      - production\n    labelSelectors:\n\
+    \      app: database\n  volumePath: /var/lib/mysql\n  fault:\n    errno: 5  #\
+    \ I/O error\n  percent: 10\n  duration: \"2m\"\nEOF"
+- name: Monitor data integrity
+  type: cli
+  command: for i in {1..12}; do kubectl exec -n production $(kubectl get pods -n production
+    -l app=database -o jsonpath='{.items[0].metadata.name}') -- mysql -u root -p${DB_PASSWORD}
+    -e "SELECT COUNT(*) as corrupted_rows FROM chaos_test.test_data WHERE checksum
+    != MD5(data);" >> /tmp/corruption_monitor.log; sleep 10; done
+- name: Test backup consistency
+  type: cli
+  command: kubectl exec -n production backup-agent -- restic backup /data --tag chaos-test
+    --json > /tmp/backup_result.json && kubectl exec -n production backup-agent --
+    restic check --read-data --json > /tmp/backup_integrity.json
+- name: Simulate bit rot
+  type: cli
+  command: "python3 << 'EOF'\nimport random\nimport subprocess\n\n# Simulate bit flips\
+    \ in storage\nfor i in range(5):\n    offset = random.randint(1000000, 10000000)\n\
+    \    cmd = f\"kubectl exec -n production storage-node-0 -- dd if=/dev/urandom\
+    \ of=/data/corruption bs=1 count=1 seek={offset} conv=notrunc\"\n    subprocess.run(cmd,\
+    \ shell=True, capture_output=True)\n    print(f\"Corrupted byte at offset {offset}\"\
+    )\n\n# Run filesystem check\nfsck_cmd = \"kubectl exec -n production storage-node-0\
+    \ -- fsck -n /data > /tmp/fsck_results.txt 2>&1\"\nsubprocess.run(fsck_cmd, shell=True)\n\
+    EOF"
+- name: Test recovery procedures
+  type: cli
+  command: kubectl exec -n production $(kubectl get pods -n production -l app=database
+    -o jsonpath='{.items[0].metadata.name}') -- mysqlcheck -u root -p${DB_PASSWORD}
+    --auto-repair --check --all-databases > /tmp/repair_log.txt
+- name: Verify data recovery
+  type: cli
+  command: kubectl exec -n production $(kubectl get pods -n production -l app=database
+    -o jsonpath='{.items[0].metadata.name}') -- mysql -u root -p${DB_PASSWORD} -e
+    "SELECT COUNT(*), SUM(CRC32(CONCAT(id, data, checksum))) as dataset_checksum FROM
+    chaos_test.test_data;" > /tmp/recovery_checksum.txt
+- name: Analyze corruption impact
+  type: prompt
+  prompt: Compare baseline and recovery checksums to assess data loss. Analyze corruption
+    patterns, backup integrity, and recovery effectiveness. Create a data resilience
+    improvement plan including recommendations for checksumming, replication, and
+    backup strategies.
+

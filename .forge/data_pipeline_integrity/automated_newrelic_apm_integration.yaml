@@ -1,0 +1,61 @@
+goal: Automatically integrate New Relic APM monitoring when new applications are deployed
+steps:
+- name: Check if New Relic is needed
+  type: prompt
+  prompt: Determine if the application requires New Relic monitoring based on its
+    criticality and performance requirements.
+- name: Deploy New Relic lightweight version
+  type: cli
+  command: kubectl apply -f k8s/envs/dev/monitoring/newrelic-lightweight.yaml
+- name: Deploy full New Relic if needed
+  type: cli
+  command: if [ ${REQUIRE_FULL_MONITORING} = 'true' ]; then kubectl apply -f k8s/envs/dev/monitoring/newrelic-integration.yaml;
+    fi
+- name: Execute New Relic deployment script
+  type: cli
+  command: ./k8s/envs/dev/monitoring/deploy-newrelic.sh
+- name: Configure APM for backend service
+  type: integration
+  integration: kubernetes
+  method: CoreV1Api.patch_namespaced_config_map
+  parameters:
+    name: backend-config
+    namespace: ${NAMESPACE}
+    body:
+      data:
+        NEW_RELIC_APP_NAME: ${APP_NAME}-backend
+        NEW_RELIC_LICENSE_KEY: ${NR_LICENSE_KEY}
+        NEW_RELIC_DISTRIBUTED_TRACING_ENABLED: 'true'
+- name: Restart backend with APM agent
+  type: cli
+  command: kubectl rollout restart deployment/backend -n ${NAMESPACE}
+- name: Wait for APM data
+  type: cli
+  command: sleep 60 && echo 'Waiting for APM data to appear in New Relic'
+- name: Verify APM connection
+  type: cli
+  command: kubectl logs deployment/backend -n ${NAMESPACE} | grep -i 'new relic' |
+    tail -10
+- name: Create New Relic alert policy
+  type: prompt
+  prompt: Configure New Relic alert policies for response time, error rate, and Apdex
+    score.
+- name: Test APM transaction tracking
+  type: cli
+  command: kubectl exec deployment/frontend -n ${NAMESPACE} -- curl http://backend:3000/api/test
+- name: Monitor APM metrics
+  type: integration
+  integration: datadog
+  method: MetricsApi.submit_metrics
+  parameters:
+    body:
+      series:
+      - metric: apm.integration.status
+        points:
+        - - '{TIMESTAMP}'
+          - 1
+        type: gauge
+        tags:
+        - service:${SERVICE_NAME}
+        - apm:newrelic
+

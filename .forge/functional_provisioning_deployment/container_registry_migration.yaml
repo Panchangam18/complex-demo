@@ -1,0 +1,42 @@
+goal: Migrate container images between registries with verification
+steps:
+- name: List source registry images
+  type: cli
+  command: aws ecr describe-repositories --region us-east-1 --output json > /tmp/source_repos.json
+    && aws ecr list-images --repository-name app-backend --region us-east-1 --output
+    json > /tmp/source_images.json
+- name: Create destination repositories
+  type: integration
+  integration: aws
+  method: client('ecr', region_name='eu-west-1').create_repository
+  parameters:
+    repositoryName: app-backend
+    imageScanningConfiguration:
+      scanOnPush: true
+    encryptionConfiguration:
+      encryptionType: KMS
+- name: Pull and tag images
+  type: cli
+  command: docker pull 123456789012.dkr.ecr.us-east-1.amazonaws.com/app-backend:latest
+    && docker tag 123456789012.dkr.ecr.us-east-1.amazonaws.com/app-backend:latest
+    123456789012.dkr.ecr.eu-west-1.amazonaws.com/app-backend:latest
+- name: Push to destination registry
+  type: cli
+  command: aws ecr get-login-password --region eu-west-1 | docker login --username
+    AWS --password-stdin 123456789012.dkr.ecr.eu-west-1.amazonaws.com && docker push
+    123456789012.dkr.ecr.eu-west-1.amazonaws.com/app-backend:latest
+- name: Verify image integrity
+  type: cli
+  command: docker inspect 123456789012.dkr.ecr.us-east-1.amazonaws.com/app-backend:latest
+    --format='{{.Id}}' > /tmp/source_digest.txt && docker inspect 123456789012.dkr.ecr.eu-west-1.amazonaws.com/app-backend:latest
+    --format='{{.Id}}' > /tmp/dest_digest.txt
+- name: Update Kubernetes deployments
+  type: cli
+  command: kubectl get deployments -A -o json | jq '.items[] | select(.spec.template.spec.containers[].image
+    | contains("us-east-1"))' > /tmp/deployments_to_update.json
+- name: Create migration report
+  type: prompt
+  prompt: Compare the source and destination image digests to verify integrity. Create
+    a migration plan for updating all Kubernetes deployments to use the new registry,
+    including rollback procedures.
+

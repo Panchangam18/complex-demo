@@ -1,0 +1,61 @@
+goal: Harden container security with runtime policies
+steps:
+- name: Scan container images
+  type: cli
+  command: grype $(kubectl get pods -n production -o jsonpath='{.items[*].spec.containers[*].image}'
+    | tr ' ' '\n' | sort -u | head -5) -o json > /tmp/vulnerability_scan.json
+- name: Apply Pod Security Standards
+  type: cli
+  command: kubectl label namespace production pod-security.kubernetes.io/enforce=restricted
+    pod-security.kubernetes.io/audit=restricted pod-security.kubernetes.io/warn=restricted
+    --overwrite
+- name: Create security policies
+  type: cli
+  command: "kubectl apply -f - <<EOF\napiVersion: policy/v1beta1\nkind: PodSecurityPolicy\n\
+    metadata:\n  name: restricted\nspec:\n  privileged: false\n  allowPrivilegeEscalation:\
+    \ false\n  requiredDropCapabilities:\n    - ALL\n  volumes:\n    - 'configMap'\n\
+    \    - 'emptyDir'\n    - 'projected'\n    - 'secret'\n    - 'downwardAPI'\n  \
+    \  - 'persistentVolumeClaim'\n  runAsUser:\n    rule: 'MustRunAsNonRoot'\n  seLinux:\n\
+    \    rule: 'RunAsAny'\n  fsGroup:\n    rule: 'RunAsAny'\n  readOnlyRootFilesystem:\
+    \ true\nEOF"
+- name: Configure AppArmor profiles
+  type: cli
+  command: "cat > /tmp/container_apparmor_profile.txt << 'EOF'\n#include <tunables/global>\n\
+    \nprofile container-default flags=(attach_disconnected,mediate_deleted) {\n  #include\
+    \ <abstractions/base>\n  \n  # Deny all file writes\n  deny /** w,\n  \n  # Allow\
+    \ read access to specific paths\n  /etc/** r,\n  /usr/** r,\n  /lib/** r,\n  /proc/sys/kernel/random/uuid\
+    \ r,\n  \n  # Allow specific capabilities\n  capability setuid,\n  capability\
+    \ setgid,\n  \n  # Network access\n  network inet tcp,\n  network inet udp,\n\
+    \  \n  # Deny ptrace\n  deny ptrace,\n  \n  # Deny mount\n  deny mount,\n}\nEOF\n\
+    sudo apparmor_parser -r /tmp/container_apparmor_profile.txt"
+- name: Implement seccomp profiles
+  type: cli
+  command: "cat > /tmp/seccomp_profile.json << 'EOF'\n{\n  \"defaultAction\": \"SCMP_ACT_ERRNO\"\
+    ,\n  \"architectures\": [\n    \"SCMP_ARCH_X86_64\",\n    \"SCMP_ARCH_X86\"\n\
+    \  ],\n  \"syscalls\": [\n    {\n      \"names\": [\n        \"accept\", \"accept4\"\
+    , \"access\", \"bind\", \"brk\", \"clone\",\n        \"close\", \"connect\", \"\
+    dup\", \"dup2\", \"dup3\", \"epoll_create\",\n        \"epoll_create1\", \"epoll_ctl\"\
+    , \"epoll_pwait\", \"epoll_wait\",\n        \"exit\", \"exit_group\", \"fcntl\"\
+    , \"fstat\", \"fstat64\",\n        \"getdents\", \"getdents64\", \"getpid\", \"\
+    getppid\", \"getsockname\",\n        \"getsockopt\", \"gettid\", \"ioctl\", \"\
+    listen\", \"lseek\", \"madvise\",\n        \"mmap\", \"mmap2\", \"mprotect\",\
+    \ \"munmap\", \"nanosleep\", \"open\",\n        \"openat\", \"poll\", \"ppoll\"\
+    , \"pread64\", \"pselect6\", \"read\",\n        \"readv\", \"recvfrom\", \"recvmmsg\"\
+    , \"recvmsg\", \"rt_sigaction\",\n        \"rt_sigprocmask\", \"rt_sigreturn\"\
+    , \"select\", \"sendmmsg\",\n        \"sendmsg\", \"sendto\", \"setsockopt\",\
+    \ \"shutdown\", \"sigaltstack\",\n        \"socket\", \"stat\", \"stat64\", \"\
+    statfs\", \"statfs64\", \"write\",\n        \"writev\"\n      ],\n      \"action\"\
+    : \"SCMP_ACT_ALLOW\"\n    }\n  ]\n}\nEOF\nkubectl create configmap seccomp-profile\
+    \ --from-file=/tmp/seccomp_profile.json -n production"
+- name: Update deployments with security context
+  type: cli
+  command: 'kubectl patch deployment app-deployment -n production --type=''json''
+    -p=''[{"op": "add", "path": "/spec/template/spec/securityContext", "value": {"runAsNonRoot":
+    true, "runAsUser": 1000, "fsGroup": 2000, "seccompProfile": {"type": "Localhost",
+    "localhostProfile": "profiles/audit.json"}}}]'''
+- name: Verify security hardening
+  type: prompt
+  prompt: Analyze the vulnerability scan results and security profiles. Verify that
+    all containers are running with restricted permissions, check for any policy violations,
+    and create a security hardening checklist.
+

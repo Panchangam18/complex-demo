@@ -1,0 +1,73 @@
+goal: Automatically rollback deployment when health checks fail or error rate exceeds
+  threshold
+steps:
+- name: Monitor deployment health
+  type: integration
+  integration: kubernetes
+  method: AppsV1Api.read_namespaced_deployment_status
+  parameters:
+    name: ${DEPLOYMENT_NAME}
+    namespace: ${NAMESPACE}
+- name: Check backend health endpoint
+  type: cli
+  command: kubectl exec deployment/backend -n ${NAMESPACE} -- curl -f http://localhost:3000/health
+    || echo 'Health check failed'
+- name: Query error rate metrics
+  type: integration
+  integration: datadog
+  method: MetricsApi.query_timeseries_data
+  parameters:
+    body:
+      data:
+        type: timeseries_request
+        attributes:
+          formulas:
+          - formula: query1
+          queries:
+          - name: query1
+            data_source: metrics
+            query: sum:app.errors{service:${SERVICE_NAME}}.as_rate()
+          from: now-5m
+          to: now
+- name: Check if rollback needed
+  type: prompt
+  prompt: Analyze health status and error rates to determine if automatic rollback
+    should be triggered.
+- name: Get previous deployment revision
+  type: cli
+  command: kubectl rollout history deployment/${DEPLOYMENT_NAME} -n ${NAMESPACE} |
+    tail -2 | head -1 | awk '{print $1}'
+- name: Execute deployment rollback
+  type: cli
+  command: kubectl rollout undo deployment/${DEPLOYMENT_NAME} -n ${NAMESPACE} --to-revision=${PREVIOUS_REVISION}
+- name: Wait for rollback to complete
+  type: cli
+  command: kubectl rollout status deployment/${DEPLOYMENT_NAME} -n ${NAMESPACE} --timeout=300s
+- name: Verify backend is healthy after rollback
+  type: cli
+  command: ./scripts/test-env.sh --service backend --namespace ${NAMESPACE}
+- name: Verify frontend is healthy after rollback
+  type: cli
+  command: ./scripts/test-env.sh --service frontend --namespace ${NAMESPACE}
+- name: Update ArgoCD to prevent re-sync
+  type: cli
+  command: argocd app set ${APP_NAME} --revision ${PREVIOUS_GIT_COMMIT} --grpc-web
+- name: Create incident for failed deployment
+  type: integration
+  integration: datadog
+  method: MetricsApi.submit_metrics
+  parameters:
+    body:
+      series:
+      - metric: deployment.rollback
+        points:
+        - - '{TIMESTAMP}'
+          - 1
+        type: count
+        tags:
+        - service:${SERVICE_NAME}
+        - reason:${ROLLBACK_REASON}
+- name: Run post-rollback validation
+  type: cli
+  command: ./scripts/validate-complete-setup.sh --quick-check
+

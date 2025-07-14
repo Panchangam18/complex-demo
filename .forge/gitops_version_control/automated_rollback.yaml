@@ -1,0 +1,39 @@
+goal: Automatically rollback failed GitOps deployment based on health checks
+steps:
+- name: Get current deployment revision
+  type: integration
+  integration: kubernetes
+  method: AppsV1Api.read_namespaced_deployment
+  parameters:
+    name: ${deployment_name}
+    namespace: ${namespace}
+- name: Check deployment health
+  type: cli
+  command: kubectl rollout status deployment/${deployment_name} -n ${namespace} --timeout=300s
+    || echo 'FAILED' > /tmp/rollout_status.txt
+- name: Run health check endpoints
+  type: cli
+  command: 'for pod in $(kubectl get pods -n ${namespace} -l app=${app_name} -o jsonpath=''{.items[*].metadata.name}'');
+    do kubectl exec -n ${namespace} $pod -- wget -q -O- http://localhost:8080/health
+    || echo "$pod: UNHEALTHY" >> /tmp/health_checks.txt; done'
+- name: Analyze deployment health
+  type: prompt
+  prompt: Review the rollout status in /tmp/rollout_status.txt and health checks in
+    /tmp/health_checks.txt. Determine if the deployment is healthy or if a rollback
+    is needed. Consider factors like pod readiness, health endpoint responses, and
+    error rates.
+- name: Rollback to previous version
+  type: integration
+  integration: kubernetes
+  method: AppsV1Api.create_namespaced_deployment_rollback
+  parameters:
+    name: ${deployment_name}
+    namespace: ${namespace}
+    body:
+      name: ${deployment_name}
+      rollback:
+        revision: 0
+- name: Update Git repository with rollback
+  type: cli
+  command: cd /tmp/gitops-repo && git revert HEAD --no-edit && git push origin main
+

@@ -1,0 +1,65 @@
+goal: Automatically deploy lightweight Prometheus monitoring to track resource usage
+  for cost optimization
+steps:
+- name: Check existing Prometheus deployment
+  type: integration
+  integration: kubernetes
+  method: AppsV1Api.list_namespaced_deployment
+  parameters:
+    namespace: monitoring
+    label_selector: app=prometheus
+- name: Deploy Prometheus Lite for cost monitoring
+  type: cli
+  command: kubectl apply -f k8s/envs/dev/aws/observability/prometheus-lite.yaml
+- name: Wait for Prometheus to be ready
+  type: cli
+  command: kubectl wait --for=condition=ready pod -l app=prometheus -n monitoring
+    --timeout=300s
+- name: Query resource usage metrics
+  type: cli
+  command: kubectl exec -n monitoring deployment/prometheus -- promtool query instant
+    'sum(container_memory_working_set_bytes) by (namespace)'
+- name: Calculate cost per namespace
+  type: prompt
+  prompt: Calculate estimated monthly cost per namespace based on CPU and memory usage
+    metrics from Prometheus.
+- name: Check for underutilized resources
+  type: cli
+  command: 'kubectl top pods --all-namespaces --sort-by=cpu | awk ''$3 ~ /m$/ && $3+0
+    < 10 {print $1"/"$2": "$3}'''
+- name: Export cost metrics to CloudWatch
+  type: integration
+  integration: aws
+  method: cloudwatch.PutMetricData
+  parameters:
+    Namespace: KubernetesCosts
+    MetricData:
+    - MetricName: NamespaceCost
+      Dimensions:
+      - Name: Namespace
+        Value: ${NAMESPACE}
+      Value: ${MONTHLY_COST}
+      Unit: Count
+- name: Generate cost report
+  type: prompt
+  prompt: Generate a cost optimization report showing top resource consumers and recommendations
+    for rightsizing.
+- name: Apply full Prometheus if needed
+  type: cli
+  command: if [ ${REQUIRE_FULL_PROMETHEUS} = 'true' ]; then kubectl apply -f k8s/envs/dev/aws/observability/prometheus.yaml;
+    fi
+- name: Create cost alert
+  type: integration
+  integration: aws
+  method: cloudwatch.PutMetricAlarm
+  parameters:
+    AlarmName: KubernetesHighCost
+    ComparisonOperator: GreaterThanThreshold
+    EvaluationPeriods: 1
+    MetricName: NamespaceCost
+    Namespace: KubernetesCosts
+    Period: 86400
+    Statistic: Sum
+    Threshold: 1000
+    ActionsEnabled: true
+

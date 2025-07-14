@@ -1,0 +1,136 @@
+goal: Optimize serverless function cold start performance
+steps:
+- name: Measure baseline cold starts
+  type: integration
+  integration: aws
+  method: client('lambda').invoke
+  parameters:
+    FunctionName: production-api-handler
+    InvocationType: RequestResponse
+    LogType: Tail
+    Payload: '{"test": true, "cold_start_test": true}'
+- name: Analyze cold start patterns
+  type: cli
+  command: aws logs filter-log-events --log-group-name /aws/lambda/production-api-handler
+    --start-time $(date -u -d '1 hour ago' +%s)000 --filter-pattern '[REPORT RequestId=*]'
+    --query 'events[*].[timestamp,message]' --output json | jq -r '.[] | @csv' > /tmp/lambda_reports.csv
+- name: Implement provisioned concurrency
+  type: integration
+  integration: aws
+  method: client('lambda').put_provisioned_concurrency_config
+  parameters:
+    FunctionName: production-api-handler
+    ProvisionedConcurrentExecutions: 10
+    Qualifier: $LATEST
+- name: Optimize function package
+  type: cli
+  command: 'cat > /tmp/optimize_lambda.sh << ''EOF''
+
+    #!/bin/bash
+
+    # Remove unnecessary dependencies
+
+    npm prune --production
+
+
+    # Tree shake and minify
+
+    npx webpack --mode production --config webpack.lambda.js
+
+
+    # Create layers for shared dependencies
+
+    mkdir -p layers/nodejs/node_modules
+
+    cp -r node_modules/aws-sdk layers/nodejs/node_modules/
+
+    cp -r node_modules/lodash layers/nodejs/node_modules/
+
+
+    # Zip optimized function
+
+    zip -r function.zip dist/ -x "*.map" "*.test.js"
+
+
+    # Create layer
+
+    cd layers && zip -r ../shared-deps-layer.zip nodejs/
+
+
+    # Check sizes
+
+    echo "Function size: $(du -h ../function.zip | cut -f1)"
+
+    echo "Layer size: $(du -h ../shared-deps-layer.zip | cut -f1)"
+
+    EOF
+
+    chmod +x /tmp/optimize_lambda.sh'
+- name: Configure Lambda SnapStart
+  type: integration
+  integration: aws
+  method: client('lambda').update_function_configuration
+  parameters:
+    FunctionName: production-java-handler
+    SnapStart:
+      ApplyOn: PublishedVersions
+    Environment:
+      Variables:
+        JAVA_TOOL_OPTIONS: -XX:+TieredCompilation -XX:TieredStopAtLevel=1
+- name: Implement connection pooling
+  type: cli
+  command: "cat > /tmp/connection_pool.js << 'EOF'\n// Global connection pool - persists\
+    \ across invocations\nlet dbPool = null;\nlet redisClient = null;\n\nconst initializeConnections\
+    \ = async () => {\n  if (!dbPool) {\n    const { Pool } = require('pg');\n   \
+    \ dbPool = new Pool({\n      connectionString: process.env.DATABASE_URL,\n   \
+    \   max: 2, // Small pool for Lambda\n      idleTimeoutMillis: 30000,\n      connectionTimeoutMillis:\
+    \ 2000,\n    });\n    \n    // Test connection\n    await dbPool.query('SELECT\
+    \ 1');\n  }\n  \n  if (!redisClient) {\n    const Redis = require('ioredis');\n\
+    \    redisClient = new Redis({\n      host: process.env.REDIS_HOST,\n      port:\
+    \ 6379,\n      maxRetriesPerRequest: 3,\n      enableReadyCheck: false,\n    \
+    \  lazyConnect: true,\n    });\n    \n    await redisClient.connect();\n  }\n\
+    \  \n  return { dbPool, redisClient };\n};\n\n// Warm up function\nexports.warmUp\
+    \ = async (event) => {\n  if (event.source === 'serverless-plugin-warmup') {\n\
+    \    await initializeConnections();\n    return { statusCode: 200, body: 'Warm!'\
+    \ };\n  }\n  \n  // Regular execution\n  const { dbPool, redisClient } = await\
+    \ initializeConnections();\n  // ... rest of handler\n};\nEOF"
+- name: Test cold start improvements
+  type: cli
+  command: "python3 << 'EOF'\nimport boto3\nimport time\nimport json\nimport statistics\n\
+    \nlambda_client = boto3.client('lambda')\n\ndef measure_cold_start(function_name,\
+    \ force_cold=False):\n    if force_cold:\n        # Update environment variable\
+    \ to force new container\n        lambda_client.update_function_configuration(\n\
+    \            FunctionName=function_name,\n            Environment={\n        \
+    \        'Variables': {\n                    'FORCE_COLD_START': str(time.time())\n\
+    \                }\n            }\n        )\n        time.sleep(5)  # Wait for\
+    \ update\n    \n    start_time = time.time()\n    response = lambda_client.invoke(\n\
+    \        FunctionName=function_name,\n        InvocationType='RequestResponse',\n\
+    \        LogType='Tail',\n        Payload=json.dumps({'test': True})\n    )\n\
+    \    \n    duration = (time.time() - start_time) * 1000\n    \n    # Parse duration\
+    \ from logs\n    import base64\n    log_data = base64.b64decode(response['LogResult']).decode('utf-8')\n\
+    \    \n    init_duration = None\n    billed_duration = None\n    \n    for line\
+    \ in log_data.split('\\n'):\n        if 'Init Duration:' in line:\n          \
+    \  init_duration = float(line.split('Init Duration:')[1].split('ms')[0].strip())\n\
+    \        if 'Billed Duration:' in line:\n            billed_duration = float(line.split('Billed\
+    \ Duration:')[1].split('ms')[0].strip())\n    \n    return {\n        'total_duration':\
+    \ duration,\n        'init_duration': init_duration,\n        'billed_duration':\
+    \ billed_duration,\n        'is_cold_start': init_duration is not None\n    }\n\
+    \n# Test multiple invocations\nresults = []\nfor i in range(10):\n    force_cold\
+    \ = i % 3 == 0  # Force cold start every 3rd invocation\n    result = measure_cold_start('production-api-handler',\
+    \ force_cold)\n    results.append(result)\n    time.sleep(2)\n\n# Calculate statistics\n\
+    cold_starts = [r for r in results if r['is_cold_start']]\nwarm_starts = [r for\
+    \ r in results if not r['is_cold_start']]\n\nstats = {\n    'cold_starts': {\n\
+    \        'count': len(cold_starts),\n        'avg_init_duration': statistics.mean([r['init_duration']\
+    \ for r in cold_starts if r['init_duration']]),\n        'avg_total_duration':\
+    \ statistics.mean([r['total_duration'] for r in cold_starts])\n    },\n    'warm_starts':\
+    \ {\n        'count': len(warm_starts),\n        'avg_duration': statistics.mean([r['total_duration']\
+    \ for r in warm_starts]) if warm_starts else 0\n    },\n    'all_invocations':\
+    \ results\n}\n\nwith open('/tmp/cold_start_analysis.json', 'w') as f:\n    json.dump(stats,\
+    \ f, indent=2)\nEOF"
+- name: Optimize cold start performance
+  type: prompt
+  prompt: Analyze the cold start measurements and optimization strategies. Compare
+    init durations before and after optimizations. Recommend additional improvements
+    such as using lighter runtimes, reducing package size, or implementing custom
+    runtimes.
+

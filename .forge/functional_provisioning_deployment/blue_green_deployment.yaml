@@ -1,0 +1,56 @@
+goal: Implement blue-green deployment with automated rollback
+steps:
+- name: Get current target groups
+  type: integration
+  integration: aws
+  method: client('elbv2').describe_target_groups
+  parameters:
+    Names:
+    - app-blue
+    - app-green
+- name: Deploy to green environment
+  type: cli
+  command: kubectl set image deployment/app-green app=myapp:${NEW_VERSION} -n production
+    --record > /tmp/deployment_green.log
+- name: Run smoke tests
+  type: cli
+  command: pytest tests/smoke/ --base-url=https://green.example.com --junit-xml=/tmp/smoke_test_results.xml
+- name: Check green environment health
+  type: integration
+  integration: datadog
+  method: api.Metric.query
+  parameters:
+    from: now - 5m
+    to: now
+    query: avg:kubernetes.deployment.replicas.available{deployment:app-green}
+- name: Switch traffic to green
+  type: integration
+  integration: aws
+  method: client('elbv2').modify_listener
+  parameters:
+    ListenerArn: ${PROD_LISTENER_ARN}
+    DefaultActions:
+    - Type: forward
+      TargetGroupArn: ${GREEN_TARGET_GROUP_ARN}
+- name: Monitor error rates
+  type: integration
+  integration: datadog
+  method: api.Monitor.create
+  parameters:
+    type: metric alert
+    query: avg(last_5m):avg:trace.http.request.errors{env:production} by {service}
+      > 0.05
+    name: High error rate after deployment
+    message: Error rate above 5% after deployment. Automatic rollback triggered. @pagerduty
+    options:
+      thresholds:
+        critical: 0.05
+        warning: 0.02
+      notify_no_data: false
+      evaluation_delay: 60
+- name: Implement auto-rollback
+  type: prompt
+  prompt: Create a rollback automation that switches traffic back to blue if error
+    rate exceeds 5% within 10 minutes of deployment. Include database migration rollback
+    steps.
+

@@ -1,0 +1,102 @@
+goal: Create and validate autoscaling configurations for cloud resources
+steps:
+- name: Create HPA configuration
+  type: cli
+  command: "cat > /tmp/hpa.yaml << 'EOF'\napiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\n\
+    metadata:\n  name: api-hpa\n  namespace: production\nspec:\n  scaleTargetRef:\n\
+    \    apiVersion: apps/v1\n    kind: Deployment\n    name: api-deployment\n  minReplicas:\
+    \ 3\n  maxReplicas: 50\n  metrics:\n  - type: Resource\n    resource:\n      name:\
+    \ cpu\n      target:\n        type: Utilization\n        averageUtilization: 70\n\
+    \  - type: Resource\n    resource:\n      name: memory\n      target:\n      \
+    \  type: Utilization\n        averageUtilization: 80\n  - type: Pods\n    pods:\n\
+    \      metric:\n        name: http_requests_per_second\n      target:\n      \
+    \  type: AverageValue\n        averageValue: \"1000\"\n  behavior:\n    scaleDown:\n\
+    \      stabilizationWindowSeconds: 300\n      policies:\n      - type: Percent\n\
+    \        value: 10\n        periodSeconds: 60\n      - type: Pods\n        value:\
+    \ 2\n        periodSeconds: 60\n      selectPolicy: Min\n    scaleUp:\n      stabilizationWindowSeconds:\
+    \ 60\n      policies:\n      - type: Percent\n        value: 100\n        periodSeconds:\
+    \ 15\n      - type: Pods\n        value: 5\n        periodSeconds: 60\n      selectPolicy:\
+    \ Max\nEOF"
+- name: Create VPA configuration
+  type: cli
+  command: "cat > /tmp/vpa.yaml << 'EOF'\napiVersion: autoscaling.k8s.io/v1\nkind:\
+    \ VerticalPodAutoscaler\nmetadata:\n  name: api-vpa\n  namespace: production\n\
+    spec:\n  targetRef:\n    apiVersion: apps/v1\n    kind: Deployment\n    name:\
+    \ api-deployment\n  updatePolicy:\n    updateMode: \"Auto\"\n  resourcePolicy:\n\
+    \    containerPolicies:\n    - containerName: api\n      minAllowed:\n       \
+    \ cpu: 100m\n        memory: 128Mi\n      maxAllowed:\n        cpu: 2\n      \
+    \  memory: 2Gi\n      controlledResources: [\"cpu\", \"memory\"]\nEOF"
+- name: Create AWS Auto Scaling configuration
+  type: cli
+  command: "cat > /tmp/asg_config.json << 'EOF'\n{\n  \"AutoScalingGroupName\": \"\
+    api-asg-production\",\n  \"MinSize\": 3,\n  \"MaxSize\": 50,\n  \"DesiredCapacity\"\
+    : 5,\n  \"DefaultCooldown\": 300,\n  \"HealthCheckType\": \"ELB\",\n  \"HealthCheckGracePeriod\"\
+    : 300,\n  \"LaunchTemplate\": {\n    \"LaunchTemplateId\": \"lt-1234567890abcdef\"\
+    ,\n    \"Version\": \"$Latest\"\n  },\n  \"TargetGroupARNs\": [\n    \"arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/api-tg/1234567890abcdef\"\
+    \n  ],\n  \"MetricsCollection\": [\n    {\n      \"Granularity\": \"1Minute\"\
+    ,\n      \"Metrics\": [\n        \"GroupMinSize\",\n        \"GroupMaxSize\",\n\
+    \        \"GroupDesiredCapacity\",\n        \"GroupInServiceInstances\",\n   \
+    \     \"GroupTotalInstances\"\n      ]\n    }\n  ],\n  \"Tags\": [\n    {\n  \
+    \    \"Key\": \"Environment\",\n      \"Value\": \"production\",\n      \"PropagateAtLaunch\"\
+    : true\n    },\n    {\n      \"Key\": \"Application\",\n      \"Value\": \"api\"\
+    ,\n      \"PropagateAtLaunch\": true\n    }\n  ]\n}\nEOF"
+- name: Create scaling policies
+  type: cli
+  command: "cat > /tmp/scaling_policies.json << 'EOF'\n{\n  \"policies\": [\n    {\n\
+    \      \"PolicyName\": \"cpu-scale-up\",\n      \"PolicyType\": \"TargetTrackingScaling\"\
+    ,\n      \"TargetTrackingScalingPolicyConfiguration\": {\n        \"PredefinedMetricSpecification\"\
+    : {\n          \"PredefinedMetricType\": \"ASGAverageCPUUtilization\"\n      \
+    \  },\n        \"TargetValue\": 70.0,\n        \"ScaleInCooldown\": 300,\n   \
+    \     \"ScaleOutCooldown\": 60\n      }\n    },\n    {\n      \"PolicyName\":\
+    \ \"request-count-scaling\",\n      \"PolicyType\": \"TargetTrackingScaling\"\
+    ,\n      \"TargetTrackingScalingPolicyConfiguration\": {\n        \"PredefinedMetricSpecification\"\
+    : {\n          \"PredefinedMetricType\": \"ALBRequestCountPerTarget\",\n     \
+    \     \"ResourceLabel\": \"app/api-alb/1234567890abcdef/targetgroup/api-tg/1234567890abcdef\"\
+    \n        },\n        \"TargetValue\": 1000.0\n      }\n    },\n    {\n      \"\
+    PolicyName\": \"custom-metric-scaling\",\n      \"PolicyType\": \"TargetTrackingScaling\"\
+    ,\n      \"TargetTrackingScalingPolicyConfiguration\": {\n        \"CustomizedMetricSpecification\"\
+    : {\n          \"MetricName\": \"QueueDepth\",\n          \"Namespace\": \"AWS/SQS\"\
+    ,\n          \"Statistic\": \"Average\",\n          \"Unit\": \"Count\",\n   \
+    \       \"Dimensions\": [\n            {\n              \"Name\": \"QueueName\"\
+    ,\n              \"Value\": \"api-processing-queue\"\n            }\n        \
+    \  ]\n        },\n        \"TargetValue\": 100.0\n      }\n    }\n  ]\n}\nEOF"
+- name: Validate Kubernetes autoscaling
+  type: cli
+  command: kubectl apply --dry-run=client -f /tmp/hpa.yaml -o yaml > /tmp/hpa_validated.yaml
+    && kubectl apply --dry-run=client -f /tmp/vpa.yaml -o yaml > /tmp/vpa_validated.yaml
+- name: Validate AWS configurations
+  type: cli
+  command: python3 -m json.tool /tmp/asg_config.json > /tmp/asg_validated.json &&
+    python3 -m json.tool /tmp/scaling_policies.json > /tmp/policies_validated.json
+- name: Check for configuration issues
+  type: cli
+  command: "python3 << 'EOF'\nimport json\nimport yaml\n\nissues = []\nwarnings =\
+    \ []\n\n# Check HPA configuration\nwith open('/tmp/hpa.yaml', 'r') as f:\n   \
+    \ hpa = yaml.safe_load(f)\n    \n    if hpa['spec']['minReplicas'] < 2:\n    \
+    \    issues.append('HPA: minReplicas less than 2 - no high availability')\n  \
+    \  \n    if hpa['spec']['maxReplicas'] > 100:\n        warnings.append('HPA: Very\
+    \ high maxReplicas - ensure cluster capacity')\n    \n    # Check scale down stabilization\n\
+    \    if hpa['spec']['behavior']['scaleDown']['stabilizationWindowSeconds'] < 180:\n\
+    \        warnings.append('HPA: Short scale-down stabilization may cause flapping')\n\
+    \n# Check ASG configuration\nwith open('/tmp/asg_config.json', 'r') as f:\n  \
+    \  asg = json.load(f)\n    \n    if asg['MinSize'] < 2:\n        issues.append('ASG:\
+    \ MinSize less than 2 - no high availability')\n    \n    if asg['DefaultCooldown']\
+    \ < 180:\n        warnings.append('ASG: Short cooldown period may cause rapid\
+    \ scaling')\n    \n    if 'HealthCheckType' not in asg or asg['HealthCheckType']\
+    \ != 'ELB':\n        issues.append('ASG: Should use ELB health checks for web\
+    \ applications')\n\n# Check scaling policies\nwith open('/tmp/scaling_policies.json',\
+    \ 'r') as f:\n    policies = json.load(f)\n    \n    cpu_policies = [p for p in\
+    \ policies['policies'] if 'CPU' in str(p)]\n    if not cpu_policies:\n       \
+    \ warnings.append('No CPU-based scaling policy found')\n\nvalidation_result =\
+    \ {\n    'configurations_checked': 4,\n    'critical_issues': len(issues),\n \
+    \   'warnings': len(warnings),\n    'issues': issues,\n    'warnings': warnings,\n\
+    \    'recommendations': [\n        'Test scaling behavior in staging environment',\n\
+    \        'Monitor actual scaling events',\n        'Set up alerts for scaling\
+    \ failures',\n        'Document scaling thresholds'\n    ]\n}\n\nwith open('/tmp/autoscaling_validation.json',\
+    \ 'w') as f:\n    json.dump(validation_result, f, indent=2)\nEOF"
+- name: Verify autoscaling configurations
+  type: prompt
+  prompt: Review the autoscaling configurations for both Kubernetes and AWS. Ensure
+    scaling thresholds are appropriate, cooldown periods prevent flapping, and high
+    availability is maintained.
+

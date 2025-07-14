@@ -1,0 +1,53 @@
+goal: Automate security compliance checks and remediation
+steps:
+- name: Run CIS benchmark scan
+  type: cli
+  command: docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v $(pwd):/report
+    aquasec/kube-bench:latest --config-dir /opt/kube-bench/cfg --config /opt/kube-bench/cfg/config.yaml
+    --json > /tmp/cis_benchmark_results.json
+- name: Check AWS Config compliance
+  type: integration
+  integration: aws
+  method: client('config').describe_compliance_by_config_rule
+  parameters:
+    ComplianceTypes:
+    - NON_COMPLIANT
+- name: Scan for exposed secrets
+  type: cli
+  command: trufflehog filesystem /app --json > /tmp/exposed_secrets.json 2>&1 || true
+- name: Check SSL/TLS configuration
+  type: cli
+  command: for domain in api.example.com app.example.com admin.example.com; do echo
+    "Testing $domain" && testssl --json /tmp/ssl_scan_${domain}.json $domain:443;
+    done
+- name: Audit IAM policies
+  type: integration
+  integration: aws
+  method: client('accessanalyzer').list_findings
+  parameters:
+    analyzerArn: ${ANALYZER_ARN}
+    filter:
+      status:
+        eq:
+        - ACTIVE
+      resourceType:
+        eq:
+        - AWS::IAM::Role
+- name: Generate compliance report
+  type: cli
+  command: "python3 << 'EOF'\nimport json\nimport datetime\n\n# Load scan results\n\
+    with open('/tmp/cis_benchmark_results.json', 'r') as f:\n    cis_results = json.load(f)\n\
+    \n# Create compliance summary\nsummary = {\n    'timestamp': datetime.datetime.utcnow().isoformat(),\n\
+    \    'cis_score': sum(1 for r in cis_results.get('tests', []) if r.get('test_number')),\n\
+    \    'critical_findings': [],\n    'remediation_required': []\n}\n\n# Process\
+    \ findings\nfor test in cis_results.get('tests', []):\n    if test.get('status')\
+    \ == 'FAIL':\n        summary['critical_findings'].append({\n            'test':\
+    \ test.get('test_number'),\n            'description': test.get('test_desc'),\n\
+    \            'remediation': test.get('remediation')\n        })\n\nwith open('/tmp/compliance_summary.json',\
+    \ 'w') as f:\n    json.dump(summary, f, indent=2)\nEOF"
+- name: Create remediation automation
+  type: prompt
+  prompt: Analyze all compliance scan results including CIS benchmarks, exposed secrets,
+    and SSL configurations. Prioritize critical findings, create automated remediation
+    scripts for common issues, and generate a compliance dashboard.
+

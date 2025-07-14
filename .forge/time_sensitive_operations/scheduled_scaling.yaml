@@ -1,0 +1,97 @@
+goal: Implement time-based autoscaling for predictable traffic patterns
+steps:
+- name: Analyze historical load patterns
+  type: integration
+  integration: datadog
+  method: api.Metric.query
+  parameters:
+    from: now - 7d
+    to: now
+    query: avg:kubernetes.cpu.usage{service:web-frontend} by {hour,dayofweek}.rollup(avg,
+      3600)
+- name: Get current HPA configuration
+  type: integration
+  integration: kubernetes
+  method: AutoscalingV2Api.read_namespaced_horizontal_pod_autoscaler
+  parameters:
+    name: web-frontend-hpa
+    namespace: production
+- name: Export scaling metrics
+  type: cli
+  command: kubectl top pods -n production -l app=web-frontend --sort-by=cpu > /tmp/current_pod_usage.txt
+    && datadog metric query 'avg:kubernetes.pods.running{service:web-frontend} by
+    {hour}' --from 'now-7d' --to 'now' --output json > /tmp/pod_count_history.json
+- name: Design scaling schedule
+  type: prompt
+  prompt: Based on pod count history in /tmp/pod_count_history.json and current usage
+    in /tmp/current_pod_usage.txt, design a time-based scaling schedule. Identify
+    peak hours requiring more pods, off-peak hours for scale-down, and weekend patterns.
+    Include 15-minute pre-scaling before expected load increases.
+- name: Create scheduled scaling CronJobs
+  type: integration
+  integration: kubernetes
+  method: BatchV1Api.create_namespaced_cron_job
+  parameters:
+    namespace: production
+    body:
+      metadata:
+        name: scale-up-morning-peak
+      spec:
+        schedule: 45 8 * * 1-5
+        jobTemplate:
+          spec:
+            template:
+              spec:
+                containers:
+                - name: kubectl
+                  image: bitnami/kubectl:latest
+                  command:
+                  - kubectl
+                  - scale
+                  - deployment
+                  - web-frontend
+                  - --replicas=20
+                  - -n
+                  - production
+                restartPolicy: OnFailure
+                serviceAccountName: scaler
+- name: Update HPA for time-aware scaling
+  type: integration
+  integration: kubernetes
+  method: AutoscalingV2Api.patch_namespaced_horizontal_pod_autoscaler
+  parameters:
+    name: web-frontend-hpa
+    namespace: production
+    body:
+      spec:
+        behavior:
+          scaleDown:
+            stabilizationWindowSeconds: 600
+            policies:
+            - type: Percent
+              value: 10
+              periodSeconds: 300
+          scaleUp:
+            stabilizationWindowSeconds: 60
+            policies:
+            - type: Percent
+              value: 50
+              periodSeconds: 60
+- name: Create scaling effectiveness dashboard
+  type: integration
+  integration: datadog
+  method: api.Dashboard.create
+  parameters:
+    title: Time-Based Scaling Effectiveness
+    widgets:
+    - definition:
+        type: timeseries
+        requests:
+        - q: avg:kubernetes.cpu.usage{service:web-frontend}, avg:kubernetes.pods.running{service:web-frontend}*10
+          display_type: line
+        title: CPU Usage vs Pod Count
+    tags:
+    - autoscaling
+    - scheduled
+    - performance
+

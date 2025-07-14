@@ -1,0 +1,60 @@
+goal: Resize persistent volumes for stateful workloads without data loss
+steps:
+- name: Get PVC details
+  type: integration
+  integration: kubernetes
+  method: CoreV1Api.read_namespaced_persistent_volume_claim
+  parameters:
+    name: ${pvc_name}
+    namespace: ${namespace}
+- name: Check volume usage
+  type: cli
+  command: kubectl exec -n ${namespace} ${pod_name} -- df -h | grep -E 'Filesystem|${mount_path}'
+    > /tmp/volume_usage.txt && kubectl get pv $(kubectl get pvc ${pvc_name} -n ${namespace}
+    -o jsonpath='{.spec.volumeName}') -o yaml > /tmp/pv_details.yaml
+- name: Create volume snapshot
+  type: integration
+  integration: kubernetes
+  method: SnapshotV1Api.create_namespaced_volume_snapshot
+  parameters:
+    namespace: ${namespace}
+    body:
+      metadata:
+        name: ${pvc_name}-snapshot-${timestamp}
+      spec:
+        volumeSnapshotClassName: csi-snapclass
+        source:
+          persistentVolumeClaimName: ${pvc_name}
+- name: Analyze resize requirements
+  type: prompt
+  prompt: Review volume usage in /tmp/volume_usage.txt and PV details in /tmp/pv_details.yaml.
+    Calculate the required new size based on current usage, growth rate, and a 30%
+    buffer. Verify the storage class supports volume expansion.
+- name: Scale down stateful workload
+  type: integration
+  integration: kubernetes
+  method: AppsV1Api.patch_namespaced_stateful_set_scale
+  parameters:
+    name: ${statefulset_name}
+    namespace: ${namespace}
+    body:
+      spec:
+        replicas: 0
+- name: Resize PVC
+  type: integration
+  integration: kubernetes
+  method: CoreV1Api.patch_namespaced_persistent_volume_claim
+  parameters:
+    name: ${pvc_name}
+    namespace: ${namespace}
+    body:
+      spec:
+        resources:
+          requests:
+            storage: ${new_size}Gi
+- name: Scale up and verify
+  type: cli
+  command: kubectl scale statefulset ${statefulset_name} -n ${namespace} --replicas=1
+    && sleep 30 && kubectl exec -n ${namespace} ${pod_name} -- df -h | grep ${mount_path}
+    > /tmp/new_volume_usage.txt
+

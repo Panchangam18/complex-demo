@@ -1,0 +1,58 @@
+goal: Forecast resource capacity needs based on usage trends
+steps:
+- name: Get CPU usage trends
+  type: integration
+  integration: datadog
+  method: api.Metric.query
+  parameters:
+    from: now - 30d
+    to: now
+    query: avg:kubernetes.cpu.usage.total{cluster:production} by {namespace}.rollup(avg,
+      3600)
+- name: Get memory usage trends
+  type: integration
+  integration: datadog
+  method: api.Metric.query
+  parameters:
+    from: now - 30d
+    to: now
+    query: avg:kubernetes.memory.usage{cluster:production} by {namespace}.rollup(avg,
+      3600)
+- name: Export historical data
+  type: cli
+  command: datadog metric query 'avg:kubernetes.cpu.usage.total{cluster:production}
+    by {namespace}' --from 'now-30d' --to 'now' --output json > /tmp/cpu_history.json
+    && datadog metric query 'avg:kubernetes.memory.usage{cluster:production} by {namespace}'
+    --from 'now-30d' --to 'now' --output json > /tmp/memory_history.json
+- name: Get current resource limits
+  type: cli
+  command: kubectl get resourcequota --all-namespaces -o json > /tmp/current_quotas.json
+    && kubectl top nodes -o json > /tmp/node_capacity.json
+- name: Analyze capacity trends
+  type: prompt
+  prompt: Analyze the historical resource usage in /tmp/cpu_history.json and /tmp/memory_history.json
+    against current quotas in /tmp/current_quotas.json and node capacity in /tmp/node_capacity.json.
+    Calculate growth rates, identify namespaces approaching limits, and project when
+    capacity will be exhausted at current growth rates.
+- name: Create capacity forecast dashboard
+  type: integration
+  integration: datadog
+  method: api.Dashboard.create
+  parameters:
+    title: Kubernetes Capacity Forecast
+    widgets:
+    - definition:
+        type: forecast
+        requests:
+        - query:
+            data_source: metrics
+            query: avg:kubernetes.cpu.usage.total{cluster:production}
+            aggregator: avg
+          predict:
+            interval: week
+            algorithm: linear
+    tags:
+    - capacity-planning
+    - kubernetes
+    - forecast
+

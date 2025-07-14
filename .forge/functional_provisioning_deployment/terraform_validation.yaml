@@ -1,0 +1,48 @@
+goal: Create and validate Terraform configuration for multi-tier application
+steps:
+- name: Create VPC configuration
+  type: cli
+  command: "cat > /tmp/vpc.tf << 'EOF'\nresource \"aws_vpc\" \"main\" {\n  cidr_block\
+    \           = var.vpc_cidr\n  enable_dns_hostnames = true\n  enable_dns_support\
+    \   = true\n\n  tags = {\n    Name        = \"${var.environment}-vpc\"\n    Environment\
+    \ = var.environment\n  }\n}\n\nresource \"aws_subnet\" \"public\" {\n  count \
+    \            = length(var.availability_zones)\n  vpc_id            = aws_vpc.main.id\n\
+    \  cidr_block        = cidrsubnet(var.vpc_cidr, 8, count.index)\n  availability_zone\
+    \ = var.availability_zones[count.index]\n\n  map_public_ip_on_launch = true\n\n\
+    \  tags = {\n    Name = \"${var.environment}-public-${var.availability_zones[count.index]}\"\
+    \n    Type = \"public\"\n  }\n}\n\nresource \"aws_internet_gateway\" \"main\"\
+    \ {\n  vpc_id = aws_vpc.main.id\n\n  tags = {\n    Name = \"${var.environment}-igw\"\
+    \n  }\n}\nEOF"
+- name: Create variables file
+  type: cli
+  command: "cat > /tmp/variables.tf << 'EOF'\nvariable \"environment\" {\n  description\
+    \ = \"Environment name\"\n  type        = string\n  default     = \"production\"\
+    \n}\n\nvariable \"vpc_cidr\" {\n  description = \"CIDR block for VPC\"\n  type\
+    \        = string\n  default     = \"10.0.0.0/16\"\n}\n\nvariable \"availability_zones\"\
+    \ {\n  description = \"List of availability zones\"\n  type        = list(string)\n\
+    \  default     = [\"us-east-1a\", \"us-east-1b\"]\n}\n\nvariable \"instance_type\"\
+    \ {\n  description = \"EC2 instance type\"\n  type        = string\n  default\
+    \     = \"t3.micro\"\n\n  validation {\n    condition     = contains([\"t3.micro\"\
+    , \"t3.small\", \"t3.medium\"], var.instance_type)\n    error_message = \"Instance\
+    \ type must be t3.micro, t3.small, or t3.medium.\"\n  }\n}\nEOF"
+- name: Format Terraform files
+  type: cli
+  command: cd /tmp && terraform fmt -check -diff
+- name: Initialize Terraform
+  type: cli
+  command: cd /tmp && terraform init -backend=false
+- name: Validate configuration
+  type: cli
+  command: cd /tmp && terraform validate
+- name: Run security scan
+  type: cli
+  command: tfsec /tmp --format json > /tmp/tfsec_results.json || true
+- name: Check plan output
+  type: cli
+  command: cd /tmp && terraform plan -out=tfplan > /tmp/plan_output.txt
+- name: Verify configuration correctness
+  type: prompt
+  prompt: Review the Terraform configuration files, validation results, and security
+    scan output. Ensure all syntax is correct, variables are properly defined, and
+    no security issues are present.
+

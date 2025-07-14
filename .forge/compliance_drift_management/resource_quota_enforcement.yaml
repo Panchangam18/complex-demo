@@ -1,0 +1,44 @@
+goal: Enforce resource quota compliance in Kubernetes namespaces
+steps:
+- name: List all namespaces
+  type: integration
+  integration: kubernetes
+  method: CoreV1Api.list_namespace
+- name: Check resource quotas
+  type: cli
+  command: kubectl get resourcequota --all-namespaces -o json > /tmp/current_quotas.json
+    && kubectl get namespaces -o json | jq -r '.items[].metadata.name' | while read
+    ns; do kubectl describe namespace $ns | grep -E 'Labels:|Annotations:' > /tmp/ns_${ns}_metadata.txt;
+    done
+- name: Identify non-compliant namespaces
+  type: prompt
+  prompt: 'Analyze the resource quotas in /tmp/current_quotas.json and namespace metadata.
+    Identify namespaces that are missing required quotas or have quotas that exceed
+    organizational limits (CPU: 100 cores, Memory: 200Gi, Storage: 1Ti per namespace).'
+- name: Apply compliant resource quotas
+  type: integration
+  integration: kubernetes
+  method: CoreV1Api.create_namespaced_resource_quota
+  parameters:
+    namespace: ${namespace}
+    body:
+      metadata:
+        name: compliance-quota
+      spec:
+        hard:
+          requests.cpu: '100'
+          requests.memory: 200Gi
+          requests.storage: 1Ti
+          persistentvolumeclaims: '10'
+- name: Update namespace labels
+  type: integration
+  integration: kubernetes
+  method: CoreV1Api.patch_namespace
+  parameters:
+    name: ${namespace}
+    body:
+      metadata:
+        labels:
+          compliance-status: enforced
+          quota-version: v1.2
+

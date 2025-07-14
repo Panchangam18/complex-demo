@@ -1,0 +1,52 @@
+goal: Analyze distributed traces to identify performance bottlenecks
+steps:
+- name: Query slow traces
+  type: integration
+  integration: datadog
+  method: api.api_client.call_api
+  parameters:
+    resource_path: /api/v2/apm/traces
+    method: GET
+    query_params:
+      filter[query]: service:frontend @duration:>2s
+      filter[from]: now-15m
+      filter[to]: now
+      page[limit]: 100
+- name: Export trace data
+  type: cli
+  command: datadog apm traces search 'service:frontend @duration:>2s' --from 'now-15m'
+    --to 'now' --output json > /tmp/slow_traces.json
+- name: Get service map
+  type: cli
+  command: datadog apm service-map get --from 'now-1h' --to 'now' --output json >
+    /tmp/service_map.json
+- name: Analyze trace bottlenecks
+  type: prompt
+  prompt: Analyze the slow traces in /tmp/slow_traces.json and service map in /tmp/service_map.json.
+    Identify common patterns in slow requests, pinpoint which services contribute
+    most to latency, and detect any unusual service dependencies or call patterns.
+- name: Get service metrics for bottleneck services
+  type: integration
+  integration: datadog
+  method: api.Metric.query
+  parameters:
+    from: now - 30m
+    to: now
+    query: avg:trace.${service}.request.duration{resource:${resource}} by {resource}
+- name: Create performance SLO
+  type: integration
+  integration: datadog
+  method: api.ServiceLevelObjective.create
+  parameters:
+    name: Frontend Response Time SLO
+    type: metric
+    sli:
+      metric: avg:trace.frontend.request.duration{*}
+      target: 2000
+      comparator: <=
+    target: 99.5
+    timeframe: 30d
+    tags:
+    - team:frontend
+    - slo:performance
+

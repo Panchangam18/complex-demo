@@ -1,0 +1,103 @@
+goal: Optimize auto-scaling based on custom metrics and predictions
+steps:
+- name: Collect historical metrics
+  type: integration
+  integration: prometheus
+  method: query_range
+  parameters:
+    query: avg(rate(http_requests_total[5m])) by (service)
+    start: now-7d
+    end: now
+    step: 5m
+- name: Analyze traffic patterns
+  type: cli
+  command: "python3 << 'EOF'\nimport pandas as pd\nimport numpy as np\nfrom datetime\
+    \ import datetime, timedelta\nimport json\n\n# Generate synthetic traffic pattern\
+    \ data\nnp.random.seed(42)\ndates = pd.date_range(start=datetime.now() - timedelta(days=7),\
+    \ end=datetime.now(), freq='H')\n\n# Create realistic traffic pattern\ntraffic\
+    \ = []\nfor date in dates:\n    hour = date.hour\n    day = date.weekday()\n \
+    \   \n    # Base traffic\n    base = 1000\n    \n    # Hour of day pattern\n \
+    \   if 9 <= hour <= 17:  # Business hours\n        base *= 3\n    elif 18 <= hour\
+    \ <= 22:  # Evening peak\n        base *= 2\n    elif 0 <= hour <= 6:  # Night\n\
+    \        base *= 0.3\n    \n    # Day of week pattern\n    if day in [5, 6]: \
+    \ # Weekend\n        base *= 0.6\n    \n    # Add noise\n    base += np.random.normal(0,\
+    \ base * 0.1)\n    \n    traffic.append({\n        'timestamp': date.isoformat(),\n\
+    \        'requests_per_second': max(0, int(base)),\n        'hour': hour,\n  \
+    \      'day_of_week': day\n    })\n\nwith open('/tmp/traffic_patterns.json', 'w')\
+    \ as f:\n    json.dump(traffic, f, indent=2)\n\n# Calculate percentiles for scaling\n\
+    rps_values = [t['requests_per_second'] for t in traffic]\npercentiles = {\n  \
+    \  'p50': np.percentile(rps_values, 50),\n    'p75': np.percentile(rps_values,\
+    \ 75),\n    'p90': np.percentile(rps_values, 90),\n    'p95': np.percentile(rps_values,\
+    \ 95),\n    'p99': np.percentile(rps_values, 99)\n}\n\nwith open('/tmp/traffic_percentiles.json',\
+    \ 'w') as f:\n    json.dump(percentiles, f, indent=2)\nEOF"
+- name: Configure HPA with custom metrics
+  type: cli
+  command: "kubectl apply -f - <<EOF\napiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\n\
+    metadata:\n  name: api-hpa-custom\n  namespace: production\nspec:\n  scaleTargetRef:\n\
+    \    apiVersion: apps/v1\n    kind: Deployment\n    name: api\n  minReplicas:\
+    \ 3\n  maxReplicas: 50\n  metrics:\n  - type: Pods\n    pods:\n      metric:\n\
+    \        name: http_requests_per_second\n      target:\n        type: AverageValue\n\
+    \        averageValue: \"1000\"\n  - type: Resource\n    resource:\n      name:\
+    \ cpu\n      target:\n        type: Utilization\n        averageUtilization: 70\n\
+    \  - type: Resource\n    resource:\n      name: memory\n      target:\n      \
+    \  type: Utilization\n        averageUtilization: 80\n  behavior:\n    scaleDown:\n\
+    \      stabilizationWindowSeconds: 300\n      policies:\n      - type: Percent\n\
+    \        value: 10\n        periodSeconds: 60\n      - type: Pods\n        value:\
+    \ 2\n        periodSeconds: 60\n    scaleUp:\n      stabilizationWindowSeconds:\
+    \ 60\n      policies:\n      - type: Percent\n        value: 50\n        periodSeconds:\
+    \ 60\n      - type: Pods\n        value: 5\n        periodSeconds: 60\nEOF"
+- name: Implement predictive scaling
+  type: cli
+  command: "cat > /tmp/predictive_scaler.py << 'EOF'\nimport json\nimport numpy as\
+    \ np\nfrom sklearn.linear_model import LinearRegression\nfrom datetime import\
+    \ datetime, timedelta\n\n# Load traffic data\nwith open('/tmp/traffic_patterns.json',\
+    \ 'r') as f:\n    traffic = json.load(f)\n\n# Prepare features for prediction\n\
+    X = []\ny = []\n\nfor i, point in enumerate(traffic[:-1]):\n    X.append([\n \
+    \       point['hour'],\n        point['day_of_week'],\n        point['requests_per_second']\n\
+    \    ])\n    y.append(traffic[i+1]['requests_per_second'])\n\nX = np.array(X)\n\
+    y = np.array(y)\n\n# Train model\nmodel = LinearRegression()\nmodel.fit(X, y)\n\
+    \n# Predict next hour\ncurrent = traffic[-1]\nnext_hour = (current['hour'] + 1)\
+    \ % 24\nnext_day = current['day_of_week'] if next_hour > current['hour'] else\
+    \ (current['day_of_week'] + 1) % 7\n\nprediction = model.predict([[\n    next_hour,\n\
+    \    next_day,\n    current['requests_per_second']\n]])[0]\n\n# Calculate required\
+    \ replicas\nrequests_per_pod = 200  # Assumed capacity\nrequired_replicas = max(3,\
+    \ int(np.ceil(prediction / requests_per_pod)))\n\nresult = {\n    'current_rps':\
+    \ current['requests_per_second'],\n    'predicted_rps': int(prediction),\n   \
+    \ 'recommended_replicas': required_replicas,\n    'prediction_time': (datetime.now()\
+    \ + timedelta(hours=1)).isoformat()\n}\n\nwith open('/tmp/scaling_prediction.json',\
+    \ 'w') as f:\n    json.dump(result, f, indent=2)\nEOF\npython3 /tmp/predictive_scaler.py"
+- name: Configure cluster autoscaler
+  type: cli
+  command: "kubectl apply -f - <<EOF\napiVersion: v1\nkind: ConfigMap\nmetadata:\n\
+    \  name: cluster-autoscaler-status\n  namespace: kube-system\ndata:\n  nodes.max:\
+    \ \"20\"\n  nodes.min: \"3\"\n  scale-down-delay-after-add: \"10m\"\n  scale-down-unneeded-time:\
+    \ \"10m\"\n  scale-down-utilization-threshold: \"0.5\"\n  skip-nodes-with-local-storage:\
+    \ \"false\"\n  skip-nodes-with-system-pods: \"false\"\n  balance-similar-node-groups:\
+    \ \"true\"\n  expander: \"priority\"\nEOF"
+- name: Test scaling behavior
+  type: cli
+  command: 'kubectl run load-generator --image=busybox --rm -it --restart=Never --
+    sh -c ''for i in $(seq 1 1000); do wget -q -O- http://api-service.production.svc.cluster.local/api/v1/test
+    & done; wait'' > /tmp/load_test.log 2>&1 &
+
+    LOAD_PID=$!
+
+    sleep 60
+
+    kubectl get hpa api-hpa-custom -n production -o json > /tmp/hpa_status.json
+
+    kill $LOAD_PID 2>/dev/null || true'
+- name: Analyze scaling metrics
+  type: integration
+  integration: datadog
+  method: api.Metric.query
+  parameters:
+    from: now - 1h
+    to: now
+    query: avg:kubernetes.hpa.current_replicas{hpa:api-hpa-custom} by {hpa}
+- name: Optimize scaling strategy
+  type: prompt
+  prompt: Analyze the traffic patterns, scaling predictions, and HPA behavior. Evaluate
+    if the scaling thresholds are appropriate, recommend optimizations for the scaling
+    policies, and suggest improvements for cost-efficiency while maintaining performance.
+

@@ -1,0 +1,121 @@
+goal: Create and validate cloud cost optimization policies and budgets
+steps:
+- name: Create budget configuration
+  type: cli
+  command: "cat > /tmp/budget_config.json << 'EOF'\n{\n  \"BudgetName\": \"MonthlyProductionBudget\"\
+    ,\n  \"BudgetLimit\": {\n    \"Amount\": \"10000\",\n    \"Unit\": \"USD\"\n \
+    \ },\n  \"TimeUnit\": \"MONTHLY\",\n  \"BudgetType\": \"COST\",\n  \"CostFilters\"\
+    : {\n    \"TagKeyValue\": [\"Environment$Production\"]\n  },\n  \"CostTypes\"\
+    : {\n    \"IncludeTax\": true,\n    \"IncludeSubscription\": true,\n    \"UseBlended\"\
+    : false,\n    \"IncludeRefund\": false,\n    \"IncludeCredit\": false,\n    \"\
+    IncludeUpfront\": true,\n    \"IncludeRecurring\": true,\n    \"IncludeOtherSubscription\"\
+    : true,\n    \"IncludeSupport\": true,\n    \"IncludeDiscount\": true,\n    \"\
+    UseAmortized\": true\n  },\n  \"TimePeriod\": {\n    \"Start\": \"2024-01-01T00:00:00Z\"\
+    ,\n    \"End\": \"2024-12-31T23:59:59Z\"\n  },\n  \"CalculatedSpend\": {\n   \
+    \ \"ActualSpend\": {\n      \"Amount\": \"0\",\n      \"Unit\": \"USD\"\n    }\n\
+    \  },\n  \"NotificationsWithSubscribers\": [\n    {\n      \"Notification\": {\n\
+    \        \"NotificationType\": \"ACTUAL\",\n        \"ComparisonOperator\": \"\
+    GREATER_THAN\",\n        \"Threshold\": 80,\n        \"ThresholdType\": \"PERCENTAGE\"\
+    ,\n        \"NotificationState\": \"ALARM\"\n      },\n      \"Subscribers\":\
+    \ [\n        {\n          \"SubscriptionType\": \"EMAIL\",\n          \"Address\"\
+    : \"finance@example.com\"\n        },\n        {\n          \"SubscriptionType\"\
+    : \"SNS\",\n          \"Address\": \"arn:aws:sns:us-east-1:123456789012:budget-alerts\"\
+    \n        }\n      ]\n    },\n    {\n      \"Notification\": {\n        \"NotificationType\"\
+    : \"FORECASTED\",\n        \"ComparisonOperator\": \"GREATER_THAN\",\n       \
+    \ \"Threshold\": 100,\n        \"ThresholdType\": \"PERCENTAGE\"\n      },\n \
+    \     \"Subscribers\": [\n        {\n          \"SubscriptionType\": \"EMAIL\"\
+    ,\n          \"Address\": \"cto@example.com\"\n        }\n      ]\n    }\n  ]\n\
+    }\nEOF"
+- name: Create tagging policy
+  type: cli
+  command: "cat > /tmp/tagging_policy.json << 'EOF'\n{\n  \"Version\": \"2012-10-17\"\
+    ,\n  \"Statement\": [\n    {\n      \"Sid\": \"RequireEnvironmentTag\",\n    \
+    \  \"Effect\": \"Deny\",\n      \"Principal\": \"*\",\n      \"Action\": [\n \
+    \       \"ec2:RunInstances\",\n        \"rds:CreateDBInstance\",\n        \"elasticloadbalancing:CreateLoadBalancer\"\
+    \n      ],\n      \"Resource\": \"*\",\n      \"Condition\": {\n        \"StringNotLike\"\
+    : {\n          \"aws:RequestTag/Environment\": [\"production\", \"staging\", \"\
+    development\"]\n        }\n      }\n    },\n    {\n      \"Sid\": \"RequireCostCenterTag\"\
+    ,\n      \"Effect\": \"Deny\",\n      \"Principal\": \"*\",\n      \"Action\"\
+    : [\n        \"ec2:RunInstances\",\n        \"rds:CreateDBInstance\"\n      ],\n\
+    \      \"Resource\": \"*\",\n      \"Condition\": {\n        \"StringNotLike\"\
+    : {\n          \"aws:RequestTag/CostCenter\": [\"engineering\", \"marketing\"\
+    , \"sales\", \"operations\"]\n        }\n      }\n    },\n    {\n      \"Sid\"\
+    : \"RequireOwnerTag\",\n      \"Effect\": \"Deny\",\n      \"Principal\": \"*\"\
+    ,\n      \"Action\": \"*\",\n      \"Resource\": \"*\",\n      \"Condition\":\
+    \ {\n        \"StringNotLike\": {\n          \"aws:RequestTag/Owner\": \"*@example.com\"\
+    \n        }\n      }\n    }\n  ]\n}\nEOF"
+- name: Create cost anomaly detector
+  type: cli
+  command: "cat > /tmp/anomaly_detector.json << 'EOF'\n{\n  \"AnomalyMonitor\": {\n\
+    \    \"MonitorName\": \"ProductionCostMonitor\",\n    \"MonitorType\": \"DIMENSIONAL\"\
+    ,\n    \"MonitorDimension\": \"SERVICE\",\n    \"MonitorSpecification\": {\n \
+    \     \"Or\": [\n        {\n          \"Dimensions\": {\n            \"Key\":\
+    \ \"LINKED_ACCOUNT\",\n            \"Values\": [\"123456789012\"]\n          }\n\
+    \        }\n      ],\n      \"And\": [\n        {\n          \"Tags\": {\n   \
+    \         \"Key\": \"Environment\",\n            \"Values\": [\"production\"]\n\
+    \          }\n        }\n      ]\n    }\n  },\n  \"AnomalySubscription\": {\n\
+    \    \"SubscriptionName\": \"ProductionCostAnomalies\",\n    \"Threshold\": 100,\n\
+    \    \"Frequency\": \"DAILY\",\n    \"MonitorArnList\": [],\n    \"Subscribers\"\
+    : [\n      {\n        \"Type\": \"EMAIL\",\n        \"Address\": \"cost-alerts@example.com\"\
+    \n      }\n    ]\n  }\n}\nEOF"
+- name: Create instance scheduler configuration
+  type: cli
+  command: "cat > /tmp/instance_scheduler.yaml << 'EOF'\nschedules:\n  - name: business-hours\n\
+    \    description: \"Run instances only during business hours\"\n    timezone:\
+    \ \"America/New_York\"\n    periods:\n      - name: weekdays\n        begintime:\
+    \ \"08:00\"\n        endtime: \"18:00\"\n        weekdays: [\"mon\", \"tue\",\
+    \ \"wed\", \"thu\", \"fri\"]\n    \n  - name: always-on\n    description: \"24/7\
+    \ operation for production\"\n    periods:\n      - name: allweek\n        begintime:\
+    \ \"00:00\"\n        endtime: \"23:59\"\n        weekdays: [\"mon\", \"tue\",\
+    \ \"wed\", \"thu\", \"fri\", \"sat\", \"sun\"]\n\n  - name: development-hours\n\
+    \    description: \"Development environment schedule\"\n    timezone: \"America/New_York\"\
+    \n    periods:\n      - name: weekdays-extended\n        begintime: \"07:00\"\n\
+    \        endtime: \"20:00\"\n        weekdays: [\"mon\", \"tue\", \"wed\", \"\
+    thu\", \"fri\"]\n      - name: saturday-morning\n        begintime: \"09:00\"\n\
+    \        endtime: \"13:00\"\n        weekdays: [\"sat\"]\n\ntagged_instances:\n\
+    \  - tags:\n      Environment: \"development\"\n      Schedule: \"business-hours\"\
+    \n    action: \"stop\"\n    \n  - tags:\n      Environment: \"staging\"\n    \
+    \  Schedule: \"development-hours\"\n    action: \"stop\"\n    \n  - tags:\n  \
+    \    Environment: \"production\"\n      Schedule: \"always-on\"\n    action: \"\
+    none\"\nEOF"
+- name: Validate JSON configurations
+  type: cli
+  command: python3 -m json.tool /tmp/budget_config.json > /tmp/budget_validated.json
+    && python3 -m json.tool /tmp/tagging_policy.json > /tmp/tagging_validated.json
+    && python3 -m json.tool /tmp/anomaly_detector.json > /tmp/anomaly_validated.json
+- name: Validate YAML configuration
+  type: cli
+  command: yamllint -d relaxed /tmp/instance_scheduler.yaml > /tmp/scheduler_validation.txt
+    || true
+- name: Check policy effectiveness
+  type: cli
+  command: "python3 << 'EOF'\nimport json\nimport yaml\n\nissues = []\nrecommendations\
+    \ = []\n\n# Check budget configuration\nwith open('/tmp/budget_config.json', 'r')\
+    \ as f:\n    budget = json.load(f)\n    \n    if float(budget['BudgetLimit']['Amount'])\
+    \ > 50000:\n        issues.append('Very high budget limit - ensure approval')\n\
+    \    \n    if len(budget['NotificationsWithSubscribers']) < 2:\n        recommendations.append('Add\
+    \ more notification thresholds (50%, 90%)')\n\n# Check tagging policy\nwith open('/tmp/tagging_policy.json',\
+    \ 'r') as f:\n    tagging = json.load(f)\n    \n    required_tags = ['Environment',\
+    \ 'CostCenter', 'Owner']\n    enforced_tags = []\n    \n    for statement in tagging['Statement']:\n\
+    \        if 'RequestTag' in str(statement):\n            enforced_tags.extend(required_tags)\n\
+    \    \n    missing_tags = set(required_tags) - set(enforced_tags)\n    if missing_tags:\n\
+    \        recommendations.append(f'Enforce additional tags: {list(missing_tags)}')\n\
+    \n# Check instance scheduler\nwith open('/tmp/instance_scheduler.yaml', 'r') as\
+    \ f:\n    scheduler = yaml.safe_load(f)\n    \n    dev_schedules = [s for s in\
+    \ scheduler['schedules'] if 'business' in s['name']]\n    if dev_schedules:\n\
+    \        hours_per_week = 0\n        for schedule in dev_schedules:\n        \
+    \    for period in schedule['periods']:\n                hours_per_week += 10\
+    \ * len(period.get('weekdays', []))\n        \n        potential_savings = (168\
+    \ - hours_per_week) / 168 * 100\n        recommendations.append(f'Instance scheduling\
+    \ can save ~{potential_savings:.0f}% on dev/staging costs')\n\nvalidation_result\
+    \ = {\n    'policies_validated': 4,\n    'issues': issues,\n    'recommendations':\
+    \ recommendations,\n    'cost_controls': {\n        'budgets': 'configured',\n\
+    \        'tagging_enforcement': 'configured',\n        'anomaly_detection': 'configured',\n\
+    \        'instance_scheduling': 'configured'\n    }\n}\n\nwith open('/tmp/cost_policy_validation.json',\
+    \ 'w') as f:\n    json.dump(validation_result, f, indent=2)\nEOF"
+- name: Verify cost optimization policies
+  type: prompt
+  prompt: Review the budget configurations, tagging policies, anomaly detection settings,
+    and instance scheduling rules. Ensure they provide comprehensive cost control
+    without impacting production workloads.
+

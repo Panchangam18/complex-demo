@@ -1,0 +1,44 @@
+goal: Automate SSL certificate renewal for production domains
+steps:
+- name: Check certificate expiration
+  type: cli
+  command: openssl s_client -servername api.example.com -connect api.example.com:443
+    2>/dev/null | openssl x509 -noout -dates > /tmp/cert_dates.txt
+- name: List AWS ACM certificates
+  type: integration
+  integration: aws
+  method: client('acm').list_certificates
+  parameters:
+    CertificateStatuses:
+    - EXPIRED
+    - INACTIVE
+- name: Create Let's Encrypt certificate
+  type: cli
+  command: certbot certonly --dns-route53 -d api.example.com -d *.api.example.com
+    --non-interactive --agree-tos -m ops@example.com > /tmp/certbot_output.log
+- name: Import certificate to ACM
+  type: integration
+  integration: aws
+  method: client('acm').import_certificate
+  parameters:
+    Certificate: ${CERTIFICATE_BODY}
+    PrivateKey: ${PRIVATE_KEY}
+    CertificateChain: ${CERTIFICATE_CHAIN}
+    Tags:
+    - Key: Environment
+      Value: production
+    - Key: AutoRenewed
+      Value: 'true'
+- name: Update ALB listeners
+  type: integration
+  integration: aws
+  method: client('elbv2').modify_listener
+  parameters:
+    ListenerArn: ${LISTENER_ARN}
+    Certificates:
+    - CertificateArn: ${NEW_CERTIFICATE_ARN}
+- name: Create renewal Lambda function
+  type: prompt
+  prompt: Create a Lambda function that checks certificate expiration daily and triggers
+    renewal 30 days before expiration. Include SNS notifications for the ops team.
+

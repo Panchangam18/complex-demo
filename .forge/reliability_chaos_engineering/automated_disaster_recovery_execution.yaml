@@ -1,0 +1,69 @@
+goal: Automatically execute disaster recovery procedures when primary region fails
+steps:
+- name: Detect primary region failure
+  type: integration
+  integration: aws
+  method: cloudwatch.GetMetricStatistics
+  parameters:
+    Namespace: AWS/ELB
+    MetricName: HealthyHostCount
+    Dimensions:
+    - Name: LoadBalancer
+      Value: ${PRIMARY_ALB}
+    StartTime: ${FIVE_MINUTES_AGO}
+    EndTime: ${NOW}
+    Period: 60
+    Statistics:
+    - Average
+- name: Execute disaster recovery script
+  type: cli
+  command: ./scripts/setup-disaster-recovery.sh --failover --region ${BACKUP_REGION}
+- name: Check backup EKS cluster status
+  type: integration
+  integration: aws
+  method: eks.DescribeCluster
+  parameters:
+    name: ${BACKUP_CLUSTER_NAME}
+- name: Apply ArgoCD applications to backup cluster
+  type: cli
+  command: kubectl apply -f k8s/envs/dev/applications.yaml --context ${BACKUP_CONTEXT}
+- name: Deploy backend to backup region
+  type: cli
+  command: kubectl apply -f k8s/envs/dev/backend/deployment.yaml --context ${BACKUP_CONTEXT}
+- name: Deploy frontend to backup region
+  type: cli
+  command: kubectl apply -f k8s/envs/dev/frontend/deployment.yaml --context ${BACKUP_CONTEXT}
+- name: Execute runbook for service outage
+  type: cli
+  command: kubectl apply -f runbooks/multi-cloud-service-outage.yaml --context ${BACKUP_CONTEXT}
+- name: Update DNS to point to backup region
+  type: integration
+  integration: aws
+  method: route53.ChangeResourceRecordSets
+  parameters:
+    HostedZoneId: ${ZONE_ID}
+    ChangeBatch:
+      Changes:
+      - Action: UPSERT
+        ResourceRecordSet:
+          Name: ${APP_DOMAIN}
+          Type: A
+          AliasTarget:
+            HostedZoneId: ${BACKUP_ALB_ZONE}
+            DNSName: ${BACKUP_ALB_DNS}
+            EvaluateTargetHealth: true
+- name: Verify backup services are healthy
+  type: cli
+  command: kubectl get pods --all-namespaces --context ${BACKUP_CONTEXT} | grep -v
+    Running | grep -v Completed
+- name: Test application endpoints
+  type: cli
+  command: ./scripts/test-env.sh ${BACKUP_REGION}
+- name: Update monitoring for new region
+  type: cli
+  command: ./scripts/monitoring-setup.sh --region ${BACKUP_REGION}
+- name: Send failover notification
+  type: prompt
+  prompt: Send notification about successful failover to backup region including new
+    endpoints and any degraded functionality.
+

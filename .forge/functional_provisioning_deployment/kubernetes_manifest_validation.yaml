@@ -1,0 +1,53 @@
+goal: Create and validate Kubernetes manifests for microservices deployment
+steps:
+- name: Create deployment manifest
+  type: cli
+  command: "cat > /tmp/deployment.yaml << 'EOF'\napiVersion: apps/v1\nkind: Deployment\n\
+    metadata:\n  name: api-service\n  namespace: production\n  labels:\n    app: api\n\
+    \    version: v1\nspec:\n  replicas: 3\n  selector:\n    matchLabels:\n      app:\
+    \ api\n  template:\n    metadata:\n      labels:\n        app: api\n        version:\
+    \ v1\n    spec:\n      containers:\n      - name: api\n        image: myapp/api:1.0.0\n\
+    \        ports:\n        - containerPort: 8080\n        resources:\n         \
+    \ requests:\n            memory: \"128Mi\"\n            cpu: \"100m\"\n      \
+    \    limits:\n            memory: \"256Mi\"\n            cpu: \"500m\"\n     \
+    \   livenessProbe:\n          httpGet:\n            path: /health\n          \
+    \  port: 8080\n          initialDelaySeconds: 30\n          periodSeconds: 10\n\
+    \        readinessProbe:\n          httpGet:\n            path: /ready\n     \
+    \       port: 8080\n          initialDelaySeconds: 5\n          periodSeconds:\
+    \ 5\nEOF"
+- name: Create service manifest
+  type: cli
+  command: "cat > /tmp/service.yaml << 'EOF'\napiVersion: v1\nkind: Service\nmetadata:\n\
+    \  name: api-service\n  namespace: production\n  labels:\n    app: api\nspec:\n\
+    \  type: ClusterIP\n  ports:\n  - port: 80\n    targetPort: 8080\n    protocol:\
+    \ TCP\n  selector:\n    app: api\nEOF"
+- name: Create network policy
+  type: cli
+  command: "cat > /tmp/networkpolicy.yaml << 'EOF'\napiVersion: networking.k8s.io/v1\n\
+    kind: NetworkPolicy\nmetadata:\n  name: api-network-policy\n  namespace: production\n\
+    spec:\n  podSelector:\n    matchLabels:\n      app: api\n  policyTypes:\n  - Ingress\n\
+    \  - Egress\n  ingress:\n  - from:\n    - podSelector:\n        matchLabels:\n\
+    \          app: frontend\n    - namespaceSelector:\n        matchLabels:\n   \
+    \       name: monitoring\n    ports:\n    - protocol: TCP\n      port: 8080\n\
+    \  egress:\n  - to:\n    - podSelector:\n        matchLabels:\n          app:\
+    \ database\n    ports:\n    - protocol: TCP\n      port: 5432\n  - to:\n    -\
+    \ namespaceSelector: {}\n    ports:\n    - protocol: TCP\n      port: 53\nEOF"
+- name: Validate YAML syntax
+  type: cli
+  command: yamllint -d relaxed /tmp/*.yaml > /tmp/yamllint_results.txt || true
+- name: Dry run deployment
+  type: cli
+  command: kubectl apply --dry-run=client -f /tmp/deployment.yaml -o yaml > /tmp/deployment_dryrun.yaml
+- name: Validate with kubeval
+  type: cli
+  command: kubeval /tmp/*.yaml > /tmp/kubeval_results.txt || true
+- name: Run security policy check
+  type: cli
+  command: kubectl-score score /tmp/deployment.yaml > /tmp/kubescore_results.txt ||
+    true
+- name: Validate manifests
+  type: prompt
+  prompt: Review the Kubernetes manifests and validation results. Ensure all resources
+    are properly configured, follow best practices, and have appropriate security
+    settings.
+

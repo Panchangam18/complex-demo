@@ -1,0 +1,49 @@
+goal: Automatically configure service mesh with mTLS and traffic policies when new
+  services are deployed
+steps:
+- name: Execute service mesh configuration script
+  type: cli
+  command: ./scripts/configure-service-mesh.sh --enable-mtls --namespace ${NAMESPACE}
+- name: Check if Istio is installed
+  type: cli
+  command: kubectl get namespace istio-system
+- name: Label namespace for injection
+  type: cli
+  command: kubectl label namespace ${NAMESPACE} istio-injection=enabled --overwrite
+- name: Restart deployments for sidecar injection
+  type: cli
+  command: kubectl rollout restart deployment/backend deployment/frontend -n ${NAMESPACE}
+- name: Wait for sidecar injection
+  type: cli
+  command: kubectl wait --for=condition=ready pod -l app=backend -n ${NAMESPACE} --timeout=300s
+- name: Create PeerAuthentication for mTLS
+  type: cli
+  command: "kubectl apply -f - <<EOF\napiVersion: security.istio.io/v1beta1\nkind:\
+    \ PeerAuthentication\nmetadata:\n  name: default\n  namespace: ${NAMESPACE}\n\
+    spec:\n  mtls:\n    mode: STRICT\nEOF"
+- name: Create traffic policy
+  type: cli
+  command: "kubectl apply -f - <<EOF\napiVersion: networking.istio.io/v1beta1\nkind:\
+    \ DestinationRule\nmetadata:\n  name: backend-dr\n  namespace: ${NAMESPACE}\n\
+    spec:\n  host: backend\n  trafficPolicy:\n    connectionPool:\n      tcp:\n  \
+    \      maxConnections: 100\n      http:\n        http1MaxPendingRequests: 10\n\
+    \        http2MaxRequests: 100\n    loadBalancer:\n      simple: ROUND_ROBIN\n\
+    EOF"
+- name: Verify mTLS is enabled
+  type: cli
+  command: istioctl authn tls-check ${POD_NAME}.${NAMESPACE} backend.${NAMESPACE}.svc.cluster.local
+- name: Configure monitoring for service mesh
+  type: cli
+  command: ./scripts/monitoring-setup.sh --enable-istio-metrics
+- name: Apply service monitors
+  type: cli
+  command: kubectl apply -f monitoring/datadog-servicemonitor.yaml
+- name: Test service mesh connectivity
+  type: cli
+  command: kubectl exec deployment/frontend -n ${NAMESPACE} -c frontend -- curl -v
+    http://backend:3000/health
+- name: Enable distributed tracing
+  type: prompt
+  prompt: Configure distributed tracing for the service mesh to track requests across
+    services.
+
