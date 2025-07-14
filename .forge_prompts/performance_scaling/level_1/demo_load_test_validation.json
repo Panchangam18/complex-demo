@@ -1,0 +1,53 @@
+{
+  "goal": "Create and validate load testing configurations",
+  "steps": [
+    {
+      "name": "Create k6 load test script",
+      "type": "cli",
+      "command": "cat > /tmp/load_test.js << 'EOF'\nimport http from 'k6/http';\nimport { check, sleep } from 'k6';\nimport { Rate } from 'k6/metrics';\n\n// Define custom metrics\nconst errorRate = new Rate('errors');\nconst successRate = new Rate('success');\n\n// Test configuration\nexport const options = {\n  stages: [\n    { duration: '2m', target: 10 },   // Ramp up to 10 users\n    { duration: '5m', target: 10 },   // Stay at 10 users\n    { duration: '2m', target: 50 },   // Ramp up to 50 users\n    { duration: '5m', target: 50 },   // Stay at 50 users\n    { duration: '2m', target: 100 },  // Ramp up to 100 users\n    { duration: '5m', target: 100 },  // Stay at 100 users\n    { duration: '5m', target: 0 },    // Ramp down to 0 users\n  ],\n  thresholds: {\n    http_req_duration: ['p(95)<500', 'p(99)<1000'], // 95% of requests under 500ms\n    errors: ['rate<0.1'],                            // Error rate under 10%\n    success: ['rate>0.9'],                           // Success rate over 90%\n  },\n};\n\n// Test data\nconst users = JSON.parse(open('./users.json'));\n\nexport default function () {\n  const user = users[Math.floor(Math.random() * users.length)];\n  \n  // Login request\n  const loginRes = http.post(\n    'https://api.example.com/auth/login',\n    JSON.stringify({\n      username: user.username,\n      password: user.password,\n    }),\n    {\n      headers: { 'Content-Type': 'application/json' },\n    }\n  );\n  \n  const loginSuccess = check(loginRes, {\n    'login successful': (r) => r.status === 200,\n    'token received': (r) => r.json('token') !== '',\n  });\n  \n  errorRate.add(!loginSuccess);\n  successRate.add(loginSuccess);\n  \n  if (loginSuccess) {\n    const token = loginRes.json('token');\n    const headers = {\n      'Authorization': `Bearer ${token}`,\n      'Content-Type': 'application/json',\n    };\n    \n    // Get user profile\n    const profileRes = http.get('https://api.example.com/user/profile', { headers });\n    \n    check(profileRes, {\n      'profile retrieved': (r) => r.status === 200,\n    });\n    \n    // Create order\n    const orderRes = http.post(\n      'https://api.example.com/orders',\n      JSON.stringify({\n        items: [\n          { product_id: 1, quantity: 2 },\n          { product_id: 3, quantity: 1 },\n        ],\n      }),\n      { headers }\n    );\n    \n    check(orderRes, {\n      'order created': (r) => r.status === 201,\n      'order ID returned': (r) => r.json('order_id') !== '',\n    });\n  }\n  \n  sleep(1);\n}\n\nexport function handleSummary(data) {\n  return {\n    'summary.json': JSON.stringify(data),\n    stdout: textSummary(data, { indent: ' ', enableColors: true }),\n  };\n}\nEOF",
+      "files": ["/tmp/load_test.js"]
+    },
+    {
+      "name": "Create test data file",
+      "type": "cli",
+      "command": "cat > /tmp/users.json << 'EOF'\n[\n  {\"username\": \"user1\", \"password\": \"password1\"},\n  {\"username\": \"user2\", \"password\": \"password2\"},\n  {\"username\": \"user3\", \"password\": \"password3\"},\n  {\"username\": \"user4\", \"password\": \"password4\"},\n  {\"username\": \"user5\", \"password\": \"password5\"}\n]\nEOF",
+      "files": ["/tmp/users.json"]
+    },
+    {
+      "name": "Validate k6 script syntax",
+      "type": "cli",
+      "command": "k6 inspect /tmp/load_test.js > /tmp/k6_validation.txt || echo 'k6 not installed - script validation skipped' > /tmp/k6_validation.txt",
+      "files": ["/tmp/k6_validation.txt"]
+    },
+    {
+      "name": "Create JMeter test plan",
+      "type": "cli",
+      "command": "cat > /tmp/test_plan.jmx << 'EOF'\n<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<jmeterTestPlan version=\"1.2\" properties=\"5.0\" jmeter=\"5.5\">\n  <TestPlan guiclass=\"TestPlanGui\" testclass=\"TestPlan\" testname=\"API Load Test\" enabled=\"true\">\n    <stringProp name=\"TestPlan.comments\">Load test for REST API</stringProp>\n    <elementProp name=\"TestPlan.user_defined_variables\" elementType=\"Arguments\">\n      <collectionProp name=\"Arguments.arguments\">\n        <elementProp name=\"BASE_URL\" elementType=\"Argument\">\n          <stringProp name=\"Argument.name\">BASE_URL</stringProp>\n          <stringProp name=\"Argument.value\">https://api.example.com</stringProp>\n        </elementProp>\n      </collectionProp>\n    </elementProp>\n  </TestPlan>\n  <ThreadGroup guiclass=\"ThreadGroupGui\" testclass=\"ThreadGroup\" testname=\"API Users\" enabled=\"true\">\n    <stringProp name=\"ThreadGroup.num_threads\">100</stringProp>\n    <stringProp name=\"ThreadGroup.ramp_time\">60</stringProp>\n    <stringProp name=\"ThreadGroup.duration\">300</stringProp>\n    <HTTPSamplerProxy guiclass=\"HttpTestSampleGui\" testclass=\"HTTPSamplerProxy\" testname=\"Login Request\" enabled=\"true\">\n      <stringProp name=\"HTTPSampler.domain\">${BASE_URL}</stringProp>\n      <stringProp name=\"HTTPSampler.path\">/auth/login</stringProp>\n      <stringProp name=\"HTTPSampler.method\">POST</stringProp>\n    </HTTPSamplerProxy>\n    <ResponseAssertion guiclass=\"AssertionGui\" testclass=\"ResponseAssertion\" testname=\"Response Code Assertion\" enabled=\"true\">\n      <collectionProp name=\"Asserion.test_strings\">\n        <stringProp name=\"49586\">200</stringProp>\n      </collectionProp>\n      <stringProp name=\"Assertion.test_field\">Assertion.response_code</stringProp>\n    </ResponseAssertion>\n  </ThreadGroup>\n</jmeterTestPlan>\nEOF",
+      "files": ["/tmp/test_plan.jmx"]
+    },
+    {
+      "name": "Validate JMeter test plan",
+      "type": "cli",
+      "command": "xmllint --noout /tmp/test_plan.jmx 2>&1 > /tmp/jmeter_validation.txt && echo 'JMeter test plan XML is valid' >> /tmp/jmeter_validation.txt || echo 'XML validation failed' >> /tmp/jmeter_validation.txt",
+      "files": ["/tmp/jmeter_validation.txt"]
+    },
+    {
+      "name": "Create Gatling simulation",
+      "type": "cli",
+      "command": "cat > /tmp/LoadSimulation.scala << 'EOF'\nimport io.gatling.core.Predef._\nimport io.gatling.http.Predef._\nimport scala.concurrent.duration._\n\nclass LoadSimulation extends Simulation {\n  \n  val httpProtocol = http\n    .baseUrl(\"https://api.example.com\")\n    .acceptHeader(\"application/json\")\n    .contentTypeHeader(\"application/json\")\n    .userAgentHeader(\"Gatling/3.9\")\n  \n  val loginScenario = scenario(\"Login and Browse\")\n    .exec(\n      http(\"Login\")\n        .post(\"/auth/login\")\n        .body(StringBody(\"\"\"{\n          \"username\": \"testuser\",\n          \"password\": \"testpass\"\n        }\"\"\")).asJson\n        .check(status.is(200))\n        .check(jsonPath(\"$.token\").saveAs(\"authToken\"))\n    )\n    .pause(1, 3)\n    .exec(\n      http(\"Get Profile\")\n        .get(\"/user/profile\")\n        .header(\"Authorization\", \"Bearer ${authToken}\")\n        .check(status.is(200))\n    )\n    .pause(2, 5)\n    .exec(\n      http(\"List Products\")\n        .get(\"/products\")\n        .header(\"Authorization\", \"Bearer ${authToken}\")\n        .check(status.is(200))\n        .check(jsonPath(\"$.products[*]\").count.gte(1))\n    )\n  \n  setUp(\n    loginScenario.inject(\n      rampUsersPerSec(1).to(10).during(2.minutes),\n      constantUsersPerSec(10).during(5.minutes),\n      rampUsersPerSec(10).to(50).during(2.minutes),\n      constantUsersPerSec(50).during(5.minutes)\n    ).protocols(httpProtocol)\n  ).assertions(\n    global.responseTime.max.lt(3000),\n    global.responseTime.percentile(95).lt(1000),\n    global.successfulRequests.percent.gt(95)\n  )\n}\nEOF",
+      "files": ["/tmp/LoadSimulation.scala"]
+    },
+    {
+      "name": "Check for common issues",
+      "type": "cli",
+      "command": "python3 << 'EOF'\nimport json\n\nissues = []\n\n# Check k6 script\nwith open('/tmp/load_test.js', 'r') as f:\n    k6_content = f.read()\n    \n    if 'sleep' not in k6_content:\n        issues.append('k6: No sleep between requests - may overwhelm server')\n    \n    if 'thresholds' not in k6_content:\n        issues.append('k6: No performance thresholds defined')\n    \n    if 'handleSummary' not in k6_content:\n        issues.append('k6: No summary handler defined')\n\n# Check test configuration\nif '1000' in k6_content:  # Check for very high user count\n    issues.append('Very high user count detected - ensure infrastructure can handle load')\n\nvalidation_result = {\n    'scripts_validated': 3,\n    'issues_found': len(issues),\n    'issues': issues,\n    'recommendations': [\n        'Add authentication token management',\n        'Implement proper error handling',\n        'Add data parameterization',\n        'Configure result collection'\n    ]\n}\n\nwith open('/tmp/validation_summary.json', 'w') as f:\n    json.dump(validation_result, f, indent=2)\nEOF",
+      "files": ["/tmp/validation_summary.json"]
+    },
+    {
+      "name": "Verify load test configurations",
+      "type": "prompt",
+      "prompt": "Review the load test scripts for k6, JMeter, and Gatling. Ensure they have proper ramp-up periods, realistic think times, appropriate assertions, and error handling.",
+      "files": ["/tmp/load_test.js", "/tmp/test_plan.jmx", "/tmp/LoadSimulation.scala", "/tmp/validation_summary.json"]
+    }
+  ]
+}

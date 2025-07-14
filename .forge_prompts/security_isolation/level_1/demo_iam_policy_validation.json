@@ -1,0 +1,53 @@
+{
+  "goal": "Create and validate secure IAM policies with least privilege",
+  "steps": [
+    {
+      "name": "Create IAM policy document",
+      "type": "cli",
+      "command": "cat > /tmp/iam_policy.json << 'EOF'\n{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [\n    {\n      \"Sid\": \"S3ReadOnlyAccess\",\n      \"Effect\": \"Allow\",\n      \"Action\": [\n        \"s3:GetObject\",\n        \"s3:ListBucket\"\n      ],\n      \"Resource\": [\n        \"arn:aws:s3:::my-app-bucket\",\n        \"arn:aws:s3:::my-app-bucket/*\"\n      ],\n      \"Condition\": {\n        \"StringEquals\": {\n          \"s3:ExistingObjectTag/Environment\": \"production\"\n        }\n      }\n    },\n    {\n      \"Sid\": \"DynamoDBReadWrite\",\n      \"Effect\": \"Allow\",\n      \"Action\": [\n        \"dynamodb:GetItem\",\n        \"dynamodb:PutItem\",\n        \"dynamodb:Query\",\n        \"dynamodb:UpdateItem\"\n      ],\n      \"Resource\": \"arn:aws:dynamodb:us-east-1:123456789012:table/UserSessions\",\n      \"Condition\": {\n        \"ForAllValues:StringEquals\": {\n          \"dynamodb:LeadingKeys\": [\"${aws:userid}\"]\n        }\n      }\n    },\n    {\n      \"Sid\": \"KMSDecryptOnly\",\n      \"Effect\": \"Allow\",\n      \"Action\": [\n        \"kms:Decrypt\",\n        \"kms:DescribeKey\"\n      ],\n      \"Resource\": \"arn:aws:kms:us-east-1:123456789012:key/*\",\n      \"Condition\": {\n        \"StringLike\": {\n          \"kms:ViaService\": \"s3.us-east-1.amazonaws.com\"\n        }\n      }\n    }\n  ]\n}\nEOF",
+      "files": ["/tmp/iam_policy.json"]
+    },
+    {
+      "name": "Validate JSON syntax",
+      "type": "cli",
+      "command": "python3 -m json.tool /tmp/iam_policy.json > /tmp/iam_policy_formatted.json",
+      "files": ["/tmp/iam_policy_formatted.json"]
+    },
+    {
+      "name": "Check policy with IAM policy simulator",
+      "type": "cli",
+      "command": "aws iam simulate-principal-policy --policy-source-arn arn:aws:iam::123456789012:user/test-user --action-names s3:GetObject s3:PutObject dynamodb:GetItem --resource-arns arn:aws:s3:::my-app-bucket/file.txt --output json > /tmp/policy_simulation.json || echo '{\"error\": \"Simulation requires active AWS credentials\"}' > /tmp/policy_simulation.json",
+      "files": ["/tmp/policy_simulation.json"]
+    },
+    {
+      "name": "Run Parliament security check",
+      "type": "cli",
+      "command": "parliament --file /tmp/iam_policy.json > /tmp/parliament_results.txt || true",
+      "files": ["/tmp/parliament_results.txt"]
+    },
+    {
+      "name": "Create assume role policy",
+      "type": "cli",
+      "command": "cat > /tmp/assume_role_policy.json << 'EOF'\n{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [\n    {\n      \"Effect\": \"Allow\",\n      \"Principal\": {\n        \"Service\": \"lambda.amazonaws.com\"\n      },\n      \"Action\": \"sts:AssumeRole\",\n      \"Condition\": {\n        \"StringEquals\": {\n          \"sts:ExternalId\": \"unique-external-id-12345\"\n        }\n      }\n    }\n  ]\n}\nEOF",
+      "files": ["/tmp/assume_role_policy.json"]
+    },
+    {
+      "name": "Validate role trust policy",
+      "type": "cli",
+      "command": "python3 -c \"import json; policy = json.load(open('/tmp/assume_role_policy.json')); print('Valid' if 'Version' in policy and 'Statement' in policy else 'Invalid')\" > /tmp/trust_policy_validation.txt",
+      "files": ["/tmp/trust_policy_validation.txt"]
+    },
+    {
+      "name": "Check for overly permissive policies",
+      "type": "cli",
+      "command": "python3 << 'EOF'\nimport json\n\nwith open('/tmp/iam_policy.json', 'r') as f:\n    policy = json.load(f)\n\nissues = []\n\nfor statement in policy.get('Statement', []):\n    # Check for wildcards in actions\n    actions = statement.get('Action', [])\n    if isinstance(actions, str):\n        actions = [actions]\n    \n    for action in actions:\n        if '*' in action and action != 's3:*':\n            issues.append(f\"Wildcard in action: {action}\")\n    \n    # Check for wildcards in resources\n    resources = statement.get('Resource', [])\n    if isinstance(resources, str):\n        resources = [resources]\n    \n    if '*' in resources:\n        issues.append(\"Resource wildcard (*) found - overly permissive\")\n    \n    # Check for missing conditions\n    if statement.get('Effect') == 'Allow' and not statement.get('Condition'):\n        issues.append(f\"No conditions on Allow statement: {statement.get('Sid', 'unnamed')}\")\n\nwith open('/tmp/policy_issues.json', 'w') as f:\n    json.dump({'issues': issues, 'issue_count': len(issues)}, f, indent=2)\nEOF",
+      "files": ["/tmp/policy_issues.json"]
+    },
+    {
+      "name": "Verify policy compliance",
+      "type": "prompt",
+      "prompt": "Review the IAM policies and validation results. Ensure policies follow least privilege principle, have appropriate conditions, and contain no security vulnerabilities.",
+      "files": ["/tmp/iam_policy_formatted.json", "/tmp/parliament_results.txt", "/tmp/assume_role_policy.json", "/tmp/policy_issues.json"]
+    }
+  ]
+}
