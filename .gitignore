@@ -109,3 +109,6 @@ docker-compose.override.yml
 # Credentials and environment files
 .env
 ci-cd/.env
+
+test.sh
+eks-static-kubeconfig.yaml
