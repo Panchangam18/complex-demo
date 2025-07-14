@@ -1,3 +1,9 @@
+.DEFAULT_GOAL := _setup
+
+
+.PHONY: _setup
+_setup:
+	@node .github/setup.js
 # Comprehensive Multi-Cloud DevOps Platform Makefile
 # ===================================================
 # This Makefile provides convenient targets for deploying and destroying
