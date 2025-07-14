@@ -1,0 +1,55 @@
+{
+  "goal": "Create comprehensive chaos engineering scenarios using Litmus and validation framework",
+  "steps": [
+    {
+      "name": "Analyze system architecture for chaos targets",
+      "type": "prompt",
+      "prompt": "Review microservices architecture to identify critical paths, dependencies, and failure points. Map out scenarios for pod failures, network delays, and resource exhaustion.",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Design Litmus chaos experiments",
+      "type": "prompt",
+      "prompt": "Create ChaosEngine manifests for: pod deletion, network latency injection, CPU/memory stress, disk fill, and DNS chaos. Include proper selectors and run duration.",
+      "parameters": {},
+      "files": [
+        "chaos/experiments/pod-chaos.yaml",
+        "chaos/experiments/network-chaos.yaml"
+      ]
+    },
+    {
+      "name": "Implement validation probes",
+      "type": "prompt",
+      "prompt": "Create custom Litmus probes to validate system behavior during chaos: API availability checks, data consistency verification, and performance degradation thresholds.",
+      "parameters": {},
+      "files": [
+        "chaos/probes/http-probe.yaml",
+        "chaos/probes/cmd-probe.yaml"
+      ]
+    },
+    {
+      "name": "Configure chaos schedules",
+      "type": "prompt",
+      "prompt": "Set up ChaosSchedule resources for recurring experiments: daily pod failures in staging, weekly network tests, monthly disaster recovery drills.",
+      "parameters": {},
+      "files": [
+        "chaos/schedules/recurring-chaos.yaml"
+      ]
+    },
+    {
+      "name": "Validate chaos experiment syntax",
+      "type": "cli",
+      "command": "kubectl --dry-run=client apply -f chaos/experiments/",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Check probe configurations",
+      "type": "cli",
+      "command": "yq eval '.spec.experiments[].spec.probe' chaos/experiments/*.yaml | grep -E 'name|type|mode'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

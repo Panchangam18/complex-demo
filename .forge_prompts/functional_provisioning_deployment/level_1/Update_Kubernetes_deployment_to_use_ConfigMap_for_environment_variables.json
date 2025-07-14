@@ -1,0 +1,39 @@
+{
+  "goal": "Update Kubernetes deployment to use ConfigMap for environment variables",
+  "steps": [
+    {
+      "name": "Review current deployment configuration",
+      "type": "prompt",
+      "prompt": "Examine the backend deployment.yaml to understand the current environment variable configuration.",
+      "parameters": {},
+      "files": [
+        "complex-demo/k8s/envs/dev/backend/deployment.yaml"
+      ]
+    },
+    {
+      "name": "Create ConfigMap for backend configuration",
+      "type": "prompt",
+      "prompt": "Create a ConfigMap that contains the environment variables currently hardcoded in the deployment.yaml file.",
+      "parameters": {},
+      "files": [
+        "complex-demo/k8s/envs/dev/backend/configmap.yaml"
+      ]
+    },
+    {
+      "name": "Update deployment to use ConfigMap",
+      "type": "prompt",
+      "prompt": "Modify deployment.yaml to use envFrom to load environment variables from the ConfigMap instead of hardcoded values.",
+      "parameters": {},
+      "files": [
+        "complex-demo/k8s/envs/dev/backend/deployment.yaml"
+      ]
+    },
+    {
+      "name": "Validate Kubernetes manifests",
+      "type": "cli",
+      "command": "kubectl apply --dry-run=client -f complex-demo/k8s/envs/dev/backend/",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

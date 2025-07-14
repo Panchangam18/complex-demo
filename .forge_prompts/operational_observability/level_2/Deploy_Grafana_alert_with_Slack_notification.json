@@ -1,0 +1,53 @@
+{
+  "goal": "Deploy Grafana alert with Slack notification",
+  "steps": [
+    {
+      "name": "Create alert rule",
+      "type": "integration",
+      "integration_name": "create_alertrule",
+      "integration_params": {
+        "adapter_name": "grafana",
+        "method": "alerting.create_alertrule",
+        "parameters": {
+          "uid": "cpu-alert",
+          "title": "High CPU Usage",
+          "condition": "avg()",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "prometheus",
+              "expr": "avg(rate(cpu_usage_total[5m])) > 0.8"
+            }
+          ],
+          "noDataState": "NoData",
+          "execErrState": "Alerting"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Configure Slack contact",
+      "type": "integration",
+      "integration_name": "create_contactpoint",
+      "integration_params": {
+        "adapter_name": "grafana",
+        "method": "alerting.create_contactpoint",
+        "parameters": {
+          "name": "slack-alerts",
+          "type": "slack",
+          "settings": {
+            "url": "https://hooks.slack.com/services/XXX/YYY/ZZZ"
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Test alert",
+      "type": "cli",
+      "command": "curl -X POST http://localhost:3000/api/v1/eval -H 'Authorization: Bearer $GRAFANA_TOKEN' -d '{\"dashboard\":\"test\",\"panelId\":1}'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

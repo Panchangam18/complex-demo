@@ -1,0 +1,106 @@
+{
+  "goal": "Build multi-region active-active architecture with global load balancing",
+  "steps": [
+    {
+      "name": "Design global architecture",
+      "type": "prompt",
+      "prompt": "Create architecture design for active-active deployment across multiple AWS regions with Route 53 global load balancing, cross-region data replication, and regional failover.",
+      "parameters": {},
+      "files": [
+        "architecture/multi-region-design.md"
+      ]
+    },
+    {
+      "name": "Configure Route 53 health checks",
+      "type": "prompt",
+      "prompt": "Set up Route 53 health checks for each region with custom health check endpoints. Configure latency-based routing and failover policies.",
+      "parameters": {},
+      "files": [
+        "terraform/global/route53-health-checks.tf"
+      ]
+    },
+    {
+      "name": "Implement CloudFront distribution",
+      "type": "prompt",
+      "prompt": "Configure CloudFront distribution with multiple origins (one per region), origin failover groups, and custom error pages for regional outages.",
+      "parameters": {},
+      "files": [
+        "terraform/global/cloudfront.tf"
+      ]
+    },
+    {
+      "name": "Set up cross-region VPC peering",
+      "type": "prompt",
+      "prompt": "Establish VPC peering connections between all regions for internal service communication. Configure route tables and security groups for cross-region traffic.",
+      "parameters": {},
+      "files": [
+        "terraform/networking/vpc-peering.tf"
+      ]
+    },
+    {
+      "name": "Configure DynamoDB global tables",
+      "type": "prompt",
+      "prompt": "Set up DynamoDB global tables for session data and user preferences with multi-region replication. Configure auto-scaling and backup policies.",
+      "parameters": {},
+      "files": [
+        "terraform/data/dynamodb-global-tables.tf"
+      ]
+    },
+    {
+      "name": "Implement Aurora global database",
+      "type": "prompt",
+      "prompt": "Configure Aurora global database with read replicas in each region and automated failover. Set up connection routing for read/write split.",
+      "parameters": {},
+      "files": [
+        "terraform/data/aurora-global.tf"
+      ]
+    },
+    {
+      "name": "Create regional deployment scripts",
+      "type": "prompt",
+      "prompt": "Develop deployment scripts that can deploy application stack to any region with region-specific configurations and service endpoints.",
+      "parameters": {},
+      "files": [
+        "scripts/deploy-region.sh",
+        "config/regional-configs/"
+      ]
+    },
+    {
+      "name": "Test health check endpoints",
+      "type": "cli",
+      "command": "for region in us-east-1 eu-west-1 ap-southeast-1; do curl -I https://health-check-$region.example.com/health; done",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Validate Route 53 configuration",
+      "type": "cli",
+      "command": "aws route53 get-hosted-zone --id Z123456789 --query 'HostedZone.ResourceRecordSetCount'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Check VPC peering status",
+      "type": "cli",
+      "command": "aws ec2 describe-vpc-peering-connections --filters 'Name=status-code,Values=active'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify global table replication",
+      "type": "cli",
+      "command": "aws dynamodb describe-table --table-name user-sessions --query 'Table.Replicas[*].RegionName'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Document failover procedures",
+      "type": "prompt",
+      "prompt": "Create detailed runbooks for regional failover scenarios, including DNS updates, database promotion, and traffic rerouting procedures.",
+      "parameters": {},
+      "files": [
+        "runbooks/regional-failover.md"
+      ]
+    }
+  ]
+}

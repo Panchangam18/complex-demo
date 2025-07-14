@@ -1,0 +1,72 @@
+{
+  "goal": "Implement security scanning in the CI/CD pipeline",
+  "steps": [
+    {
+      "name": "Review security configurations",
+      "type": "prompt",
+      "prompt": "Examine security-enhancements directory to understand the security tools and policies available.",
+      "parameters": {},
+      "files": [
+        "security-enhancements/"
+      ]
+    },
+    {
+      "name": "Add SAST to CircleCI",
+      "type": "prompt",
+      "prompt": "Update .circleci/config.yml to add static application security testing for both frontend and backend code.",
+      "parameters": {},
+      "files": [
+        ".circleci/config.yml"
+      ]
+    },
+    {
+      "name": "Configure dependency scanning",
+      "type": "cli",
+      "command": "cd Code/server && npm audit fix && cd ../client && npm audit fix",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy OPA policies",
+      "type": "cli",
+      "command": "kubectl apply -f security-enhancements/opa/policies/",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Run container scanning",
+      "type": "cli",
+      "command": "docker scout cves $(kubectl get deployment backend -o jsonpath='{.spec.template.spec.containers[0].image}')",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create security dashboard",
+      "type": "integration",
+      "integration_name": "create_dashboard",
+      "integration_params": {
+        "adapter_name": "grafana",
+        "method": "dashboard.create_dashboard",
+        "parameters": {
+          "dashboard": {
+            "title": "Security Posture",
+            "panels": [
+              {
+                "title": "Vulnerability Count",
+                "type": "stat"
+              }
+            ]
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Verify security policies",
+      "type": "cli",
+      "command": "kubectl auth can-i --list --as=system:serviceaccount:default:backend",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

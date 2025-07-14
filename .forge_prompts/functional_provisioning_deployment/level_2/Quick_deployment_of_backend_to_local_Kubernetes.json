@@ -1,0 +1,26 @@
+{
+  "goal": "Quick deployment of backend to local Kubernetes",
+  "steps": [
+    {
+      "name": "Build Docker image",
+      "type": "cli",
+      "command": "cd Code/server && docker build -t backend:local .",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy to K8s",
+      "type": "cli",
+      "command": "kubectl create deployment backend --image=backend:local",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Expose service",
+      "type": "cli",
+      "command": "kubectl expose deployment backend --port=3000",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

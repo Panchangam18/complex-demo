@@ -1,0 +1,84 @@
+{
+  "goal": "Deploy and verify Step Functions state machine for automated disaster recovery workflow",
+  "steps": [
+    {
+      "name": "Design disaster recovery state machine",
+      "type": "prompt",
+      "prompt": "Create a Step Functions workflow that orchestrates: health checks, automated failover decisions, DNS updates, and notification sending. Include parallel execution and error handling.",
+      "parameters": {},
+      "files": [
+        "stepfunctions/disaster-recovery/dr-workflow.json"
+      ]
+    },
+    {
+      "name": "Deploy state machine to AWS",
+      "type": "integration",
+      "integration_name": "CreateStateMachine",
+      "integration_params": {
+        "adapter_name": "aws",
+        "method": "stepfunctions.CreateStateMachine",
+        "parameters": {
+          "name": "disaster-recovery-orchestrator",
+          "definition": "file://stepfunctions/disaster-recovery/dr-workflow.json",
+          "roleArn": "arn:aws:iam::123456789012:role/StepFunctionsRole"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Execute test disaster recovery scenario",
+      "type": "integration",
+      "integration_name": "StartSyncExecution",
+      "integration_params": {
+        "adapter_name": "aws",
+        "method": "stepfunctions.StartSyncExecution",
+        "parameters": {
+          "stateMachineArn": "arn:aws:states:us-west-2:123456789012:stateMachine:disaster-recovery-orchestrator",
+          "input": "{\"region\": \"us-west-2\", \"simulateFailure\": true}"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Verify health check Lambda execution",
+      "type": "cli",
+      "command": "aws logs tail /aws/lambda/dr-health-check --since 5m --follow",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Confirm DNS failover occurred",
+      "type": "cli",
+      "command": "dig api.example.com +short && aws route53 list-resource-record-sets --hosted-zone-id Z123456 --query \"ResourceRecordSets[?Name=='api.example.com.']\"",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Check CloudWatch metrics for execution",
+      "type": "integration",
+      "integration_name": "GetMetricStatistics",
+      "integration_params": {
+        "adapter_name": "aws",
+        "method": "cloudwatch.GetMetricStatistics",
+        "parameters": {
+          "Namespace": "AWS/States",
+          "MetricName": "ExecutionsFailed",
+          "StartTime": "2024-01-01T00:00:00Z",
+          "EndTime": "2024-01-01T01:00:00Z",
+          "Period": 300,
+          "Statistics": [
+            "Sum"
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Verify notifications were sent",
+      "type": "cli",
+      "command": "aws sns list-subscriptions-by-topic --topic-arn arn:aws:sns:us-west-2:123456789012:dr-notifications --query 'Subscriptions[].Endpoint'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

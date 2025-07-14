@@ -1,0 +1,171 @@
+{
+  "goal": "Set up multi-cloud disaster recovery with automated failover between AWS and Azure",
+  "steps": [
+    {
+      "name": "Assess current infrastructure",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ec2.DescribeInstances",
+      "parameters": {
+        "Filters": [
+          {
+            "Name": "tag:Environment",
+            "Values": [
+              "production"
+            ]
+          }
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Create Azure resource group",
+      "type": "integration",
+      "integration": "azure",
+      "method": "resource_groups.create_or_update",
+      "parameters": {
+        "resource_group_name": "dr-failover-rg",
+        "parameters": {
+          "location": "eastus2",
+          "tags": {
+            "Purpose": "DisasterRecovery",
+            "Primary": "AWS"
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Configure cross-cloud VPN",
+      "type": "prompt",
+      "prompt": "Set up site-to-site VPN between AWS VPC and Azure VNet for secure cross-cloud communication. Configure BGP for dynamic routing and redundant tunnels.",
+      "parameters": {},
+      "files": [
+        "terraform/multi-cloud/vpn-connection.tf"
+      ]
+    },
+    {
+      "name": "Deploy Azure Kubernetes Service",
+      "type": "integration",
+      "integration": "azure",
+      "method": "managed_clusters.begin_create_or_update",
+      "parameters": {
+        "resource_group_name": "dr-failover-rg",
+        "resource_name": "dr-aks-cluster",
+        "parameters": {
+          "location": "eastus2",
+          "dnsPrefix": "dr-aks",
+          "agentPoolProfiles": [
+            {
+              "name": "nodepool1",
+              "count": 3,
+              "vmSize": "Standard_D4s_v3",
+              "mode": "System"
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Set up database replication",
+      "type": "cli",
+      "command": "aws rds create-db-instance-read-replica --db-instance-identifier dr-replica --source-db-instance-identifier production-db --publicly-accessible",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure DNS failover",
+      "type": "integration",
+      "integration": "aws",
+      "method": "route53.create_health_check",
+      "parameters": {
+        "CallerReference": "dr-health-check-1",
+        "HealthCheckConfig": {
+          "Type": "HTTPS",
+          "ResourcePath": "/health",
+          "FullyQualifiedDomainName": "api.example.com",
+          "Port": 443,
+          "RequestInterval": 30,
+          "FailureThreshold": 3
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Deploy applications to Azure",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/dr-manifests/ --context=dr-aks-cluster",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure data synchronization",
+      "type": "prompt",
+      "prompt": "Implement bi-directional data synchronization between AWS S3 and Azure Blob Storage using Azure Data Factory and AWS DataSync for static assets and backups.",
+      "parameters": {},
+      "files": [
+        "scripts/data-sync-setup.sh"
+      ]
+    },
+    {
+      "name": "Test failover procedure",
+      "type": "cli",
+      "command": "python3 scripts/dr-failover-test.py --source aws --target azure --dry-run",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify Azure deployment health",
+      "type": "integration",
+      "integration": "azure",
+      "method": "deployments.get",
+      "parameters": {
+        "resource_group_name": "dr-failover-rg",
+        "deployment_name": "dr-deployment"
+      },
+      "files": []
+    },
+    {
+      "name": "Configure monitoring across clouds",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "DashboardsApi.create_dashboard",
+      "parameters": {
+        "body": {
+          "title": "Multi-Cloud DR Status",
+          "widgets": [
+            {
+              "definition": {
+                "type": "query_value",
+                "requests": [
+                  {
+                    "q": "avg:aws.rds.replica_lag{*}",
+                    "aggregator": "avg"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Execute live failover",
+      "type": "cli",
+      "command": "aws route53 change-resource-record-sets --hosted-zone-id Z123456 --change-batch file://route53-failover.json",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Validate failover success",
+      "type": "prompt",
+      "prompt": "Verify all services are running in Azure, data is synchronized, and traffic is properly routed. Document any issues and rollback procedures.",
+      "parameters": {},
+      "files": [
+        "reports/dr-test-results.md"
+      ]
+    }
+  ]
+}

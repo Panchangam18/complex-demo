@@ -1,0 +1,57 @@
+{
+  "goal": "Set up complete CI/CD pipeline with ArgoCD GitOps",
+  "steps": [
+    {
+      "name": "Install ArgoCD using Terraform",
+      "type": "cli",
+      "command": "cd complex-demo/terraform/envs/dev/us-east-2 && terraform apply -target=module.argocd -auto-approve",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure ArgoCD applications",
+      "type": "prompt",
+      "prompt": "Review and update the ArgoCD applications.yaml to point to the correct Git repository and paths for backend and frontend deployments.",
+      "parameters": {},
+      "files": [
+        "complex-demo/k8s/envs/dev/applications.yaml"
+      ]
+    },
+    {
+      "name": "Apply ArgoCD applications",
+      "type": "cli",
+      "command": "kubectl apply -f complex-demo/k8s/envs/dev/applications.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Trigger CircleCI build",
+      "type": "integration",
+      "integration_name": "trigger_pipeline",
+      "integration_params": {
+        "adapter_name": "circleci",
+        "method": "trigger_pipeline",
+        "parameters": {
+          "username": "complex-demo",
+          "project": "complex-demo",
+          "branch": "main"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Monitor ArgoCD sync",
+      "type": "cli",
+      "command": "argocd app get backend-dev --refresh && argocd app get frontend-dev --refresh",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify deployments",
+      "type": "cli",
+      "command": "kubectl get applications -n argocd && kubectl get deployments -n backend-dev && kubectl get deployments -n frontend-dev",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

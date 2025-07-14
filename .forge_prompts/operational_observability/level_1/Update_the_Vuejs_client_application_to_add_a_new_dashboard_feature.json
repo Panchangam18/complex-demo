@@ -1,0 +1,39 @@
+{
+  "goal": "Update the Vue.js client application to add a new dashboard feature",
+  "steps": [
+    {
+      "name": "Analyze existing Vue components",
+      "type": "prompt",
+      "prompt": "Review the Code/client/src/components directory to understand the existing component structure and identify where to add the new dashboard component.",
+      "parameters": {},
+      "files": [
+        "Code/client/src/components/"
+      ]
+    },
+    {
+      "name": "Create dashboard component",
+      "type": "prompt",
+      "prompt": "Create a new Vue component for the dashboard that displays metrics from the backend API. Use the existing component patterns found in the codebase.",
+      "parameters": {},
+      "files": [
+        "Code/client/src/components/Dashboard.vue"
+      ]
+    },
+    {
+      "name": "Update router configuration",
+      "type": "prompt",
+      "prompt": "Add the new dashboard route to the Vue router configuration to make it accessible from the navigation.",
+      "parameters": {},
+      "files": [
+        "Code/client/src/router/index.js"
+      ]
+    },
+    {
+      "name": "Run client tests",
+      "type": "cli",
+      "command": "cd Code/client && npm test",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

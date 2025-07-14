@@ -1,0 +1,74 @@
+{
+  "goal": "Deploy Azure AKS cluster with GitOps using Flux and verify application deployment",
+  "steps": [
+    {
+      "name": "Create AKS cluster configuration",
+      "type": "prompt",
+      "prompt": "Design AKS cluster with 3 node pools (system, general, gpu), Azure AD integration, and Container Insights enabled. Configure for production workloads with availability zones.",
+      "parameters": {},
+      "files": [
+        "terraform/azure/aks-cluster.tf"
+      ]
+    },
+    {
+      "name": "Deploy AKS cluster",
+      "type": "cli",
+      "command": "terraform apply -auto-approve -var-file=environments/production.tfvars",
+      "parameters": {
+        "working_directory": "terraform/azure/"
+      },
+      "files": []
+    },
+    {
+      "name": "Install Flux v2 on cluster",
+      "type": "cli",
+      "command": "flux bootstrap github --owner=example-org --repository=gitops-configs --branch=main --path=./clusters/production --personal",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure Flux to sync applications",
+      "type": "prompt",
+      "prompt": "Create Flux Kustomization resources to sync application manifests from git repository. Include image automation for continuous deployment and notification to Slack.",
+      "parameters": {},
+      "files": [
+        "clusters/production/apps/kustomization.yaml"
+      ]
+    },
+    {
+      "name": "Verify Flux components are running",
+      "type": "cli",
+      "command": "flux check --components && kubectl get pods -n flux-system",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy sample application via GitOps",
+      "type": "cli",
+      "command": "git add clusters/production/apps/ && git commit -m 'Deploy demo app' && git push origin main",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor Flux reconciliation",
+      "type": "cli",
+      "command": "flux get kustomizations --watch",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify application deployment",
+      "type": "cli",
+      "command": "kubectl get deployments,services,ingress -n demo-app && kubectl rollout status deployment/demo-api -n demo-app",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Check application endpoint health",
+      "type": "cli",
+      "command": "curl -f https://demo.example.com/health || exit 1",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

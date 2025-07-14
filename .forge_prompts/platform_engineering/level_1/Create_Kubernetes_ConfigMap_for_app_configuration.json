@@ -1,0 +1,22 @@
+{
+  "goal": "Create Kubernetes ConfigMap for app configuration",
+  "steps": [
+    {
+      "name": "Create ConfigMap",
+      "type": "prompt",
+      "prompt": "Create a ConfigMap in k8s/configmaps/ for application environment variables based on .env.template.",
+      "parameters": {},
+      "files": [
+        "k8s/configmaps/app-config.yaml",
+        ".env.template"
+      ]
+    },
+    {
+      "name": "Apply ConfigMap",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/configmaps/app-config.yaml --dry-run=client",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "goal": "Quick Datadog monitoring setup",
+  "steps": [
+    {
+      "name": "Deploy Datadog agent",
+      "type": "cli",
+      "command": "helm install datadog datadog/datadog --set datadog.apiKey=$DD_API_KEY --set datadog.logs.enabled=true",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create custom metric",
+      "type": "integration",
+      "integration_name": "SubmitMetrics",
+      "integration_params": {
+        "adapter_name": "datadog",
+        "method": "metrics.SubmitMetrics",
+        "parameters": {
+          "series": [
+            {
+              "metric": "custom.app.requests",
+              "points": [
+                [
+                  1642521600,
+                  100
+                ]
+              ],
+              "type": "gauge",
+              "tags": [
+                "env:prod"
+              ]
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Verify agent status",
+      "type": "cli",
+      "command": "kubectl exec $(kubectl get pod -l app=datadog -o name | head -1) -- agent status",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

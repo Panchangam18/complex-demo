@@ -1,0 +1,76 @@
+{
+  "goal": "Implement edge computing infrastructure with real-time data processing",
+  "steps": [
+    {
+      "name": "Deploy K3s edge cluster",
+      "type": "cli",
+      "command": "curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.25.0+k3s1 sh -s - server --disable traefik --disable servicelb --write-kubeconfig-mode 644",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Install edge data processing stack",
+      "type": "cli",
+      "command": "helm install nifi apache-nifi/nifi --set service.type=ClusterIP --namespace edge-processing --create-namespace && kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=nifi --timeout=300s",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure IoT device connections",
+      "type": "cli",
+      "command": "mosquitto_passwd -c /etc/mosquitto/passwd iot-gateway && docker run -d -p 1883:1883 -p 9001:9001 -v /etc/mosquitto:/mosquitto/config eclipse-mosquitto",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy TimescaleDB for edge storage",
+      "type": "cli",
+      "command": "kubectl apply -f edge/timescale/timescaledb-deployment.yaml && kubectl exec -it timescaledb-0 -- psql -U postgres -c 'CREATE EXTENSION IF NOT EXISTS timescaledb;'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Start data ingestion from IoT devices",
+      "type": "cli",
+      "command": "python edge/scripts/iot-simulator.py --devices 50 --interval 1 --mqtt-host localhost --mqtt-topic sensors/data &",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Process real-time data stream",
+      "type": "cli",
+      "command": "kubectl exec -n edge-processing deployment/nifi -- curl -X POST http://localhost:8080/nifi-api/process-groups/root/processors -H 'Content-Type: application/json' -d @/config/mqtt-processor.json",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor edge metrics",
+      "type": "cli",
+      "command": "curl -s http://localhost:9090/api/v1/query?query='rate(edge_data_processed_total[5m])' | jq '.data.result[0].value[1]' && echo ' messages/sec'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Sync processed data to cloud",
+      "type": "integration",
+      "integration_name": "PutRecord",
+      "integration_params": {
+        "adapter_name": "aws",
+        "method": "kinesis.PutRecord",
+        "parameters": {
+          "StreamName": "edge-data-stream",
+          "Data": "{\"timestamp\": \"2024-01-15T10:00:00Z\", \"device_count\": 50, \"avg_temperature\": 22.5, \"anomalies\": 2}",
+          "PartitionKey": "edge-location-1"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Validate edge-to-cloud pipeline",
+      "type": "cli",
+      "command": "aws kinesis describe-stream --stream-name edge-data-stream --query 'StreamDescription.StreamStatus' | grep -q ACTIVE && echo 'Cloud sync operational'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

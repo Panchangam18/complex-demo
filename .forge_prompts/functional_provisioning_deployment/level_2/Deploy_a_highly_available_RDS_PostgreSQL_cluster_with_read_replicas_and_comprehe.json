@@ -1,0 +1,164 @@
+{
+  "goal": "Deploy a highly available RDS PostgreSQL cluster with read replicas and comprehensive monitoring",
+  "steps": [
+    {
+      "name": "Analyze VPC and security requirements",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ec2.DescribeVpcs",
+      "parameters": {
+        "Filters": [
+          {
+            "Name": "tag:Environment",
+            "Values": [
+              "dev"
+            ]
+          }
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Create RDS subnet group",
+      "type": "prompt",
+      "prompt": "Create Terraform configuration for RDS subnet group spanning multiple availability zones using existing private subnets. Include proper tags and descriptions.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/aws/rds/subnet_group.tf"
+      ]
+    },
+    {
+      "name": "Configure RDS parameter group",
+      "type": "prompt",
+      "prompt": "Create custom RDS parameter group for PostgreSQL 14 with optimized settings for production workloads including connection pooling, query optimization, and logging parameters.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/aws/rds/parameter_group.tf"
+      ]
+    },
+    {
+      "name": "Write RDS instance configuration",
+      "type": "prompt",
+      "prompt": "Create Terraform for RDS PostgreSQL with: db.r5.xlarge instance, 500GB gp3 storage with encryption, multi-AZ deployment, automated backups with 30-day retention, and performance insights enabled.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/aws/rds/main.tf"
+      ]
+    },
+    {
+      "name": "Configure read replicas",
+      "type": "prompt",
+      "prompt": "Add Terraform configuration for 2 read replicas in different availability zones with dedicated parameter groups and automatic minor version upgrades enabled.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/aws/rds/read_replicas.tf"
+      ]
+    },
+    {
+      "name": "Apply Terraform configuration",
+      "type": "cli",
+      "command": "terraform apply -auto-approve",
+      "parameters": {
+        "working_directory": "terraform/envs/dev/us-east-2/"
+      },
+      "files": []
+    },
+    {
+      "name": "Verify RDS instance creation",
+      "type": "integration",
+      "integration": "aws",
+      "method": "rds.describe_db_instances",
+      "parameters": {
+        "DBInstanceIdentifier": "devops-demo-postgres-primary"
+      },
+      "files": []
+    },
+    {
+      "name": "Test database connectivity",
+      "type": "cli",
+      "command": "psql -h $(terraform output -raw rds_endpoint) -U postgres -d postgres -c 'SELECT version();'",
+      "parameters": {
+        "working_directory": "terraform/envs/dev/us-east-2/"
+      },
+      "files": []
+    },
+    {
+      "name": "Configure CloudWatch alarms",
+      "type": "integration",
+      "integration": "aws",
+      "method": "cloudwatch.PutMetricAlarm",
+      "parameters": {
+        "AlarmName": "rds-high-cpu-usage",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": 2,
+        "MetricName": "CPUUtilization",
+        "Namespace": "AWS/RDS",
+        "Period": 300,
+        "Statistic": "Average",
+        "Threshold": 80.0,
+        "ActionsEnabled": true
+      },
+      "files": []
+    },
+    {
+      "name": "Verify read replica sync status",
+      "type": "integration",
+      "integration": "aws",
+      "method": "rds.describe_db_instances",
+      "parameters": {
+        "Filters": [
+          {
+            "Name": "db-instance-id",
+            "Values": [
+              "devops-demo-postgres-replica-*"
+            ]
+          }
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Setup automated backups verification",
+      "type": "integration",
+      "integration": "aws",
+      "method": "rds.describe_db_snapshots",
+      "parameters": {
+        "DBInstanceIdentifier": "devops-demo-postgres-primary",
+        "SnapshotType": "automated"
+      },
+      "files": []
+    },
+    {
+      "name": "Configure Datadog RDS monitoring",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "MetricsApi.query_scalar_data",
+      "parameters": {
+        "body": {
+          "queries": [
+            {
+              "data_source": "metrics",
+              "query": "avg:aws.rds.cpuutilization{dbinstanceidentifier:devops-demo-postgres-primary}",
+              "name": "rds_cpu"
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Perform failover test",
+      "type": "cli",
+      "command": "aws rds failover-db-cluster --db-cluster-identifier devops-demo-postgres-cluster",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Validate complete RDS setup",
+      "type": "prompt",
+      "prompt": "Verify the RDS cluster is fully operational with primary instance, read replicas, automated backups, monitoring alarms, and proper security group configurations.",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

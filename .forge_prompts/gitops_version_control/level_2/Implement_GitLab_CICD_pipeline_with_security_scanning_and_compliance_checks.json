@@ -1,0 +1,155 @@
+{
+  "goal": "Implement GitLab CI/CD pipeline with security scanning and compliance checks",
+  "steps": [
+    {
+      "name": "Create GitLab CI configuration",
+      "type": "prompt",
+      "prompt": "Design comprehensive .gitlab-ci.yml with stages for build, test, security scanning, compliance checks, and deployment across multiple environments.",
+      "parameters": {},
+      "files": [
+        ".gitlab-ci.yml"
+      ]
+    },
+    {
+      "name": "Configure container registry",
+      "type": "integration",
+      "integration": "gitlab",
+      "method": "projects.update",
+      "parameters": {
+        "id": "${PROJECT_ID}",
+        "container_registry_enabled": true,
+        "container_registry_access_level": "enabled"
+      },
+      "files": []
+    },
+    {
+      "name": "Set up SAST scanning",
+      "type": "prompt",
+      "prompt": "Configure GitLab SAST with custom rulesets for detecting security vulnerabilities in multiple languages. Include severity thresholds for pipeline failures.",
+      "parameters": {},
+      "files": [
+        ".gitlab/sast-config.yml"
+      ]
+    },
+    {
+      "name": "Implement dependency scanning",
+      "type": "prompt",
+      "prompt": "Set up dependency scanning for vulnerabilities in third-party libraries. Configure auto-remediation for patch-level updates and notifications for major vulnerabilities.",
+      "parameters": {},
+      "files": [
+        ".gitlab/dependency-scanning.yml"
+      ]
+    },
+    {
+      "name": "Configure license compliance",
+      "type": "prompt",
+      "prompt": "Implement license compliance scanning to detect and block prohibited licenses. Define approved license list and exception approval workflow.",
+      "parameters": {},
+      "files": [
+        ".gitlab/license-compliance.yml"
+      ]
+    },
+    {
+      "name": "Validate CI configuration",
+      "type": "integration",
+      "integration": "gitlab",
+      "method": "ci_lint.validate",
+      "parameters": {
+        "content": "$(cat .gitlab-ci.yml)"
+      },
+      "files": []
+    },
+    {
+      "name": "Create deployment environments",
+      "type": "integration",
+      "integration": "gitlab",
+      "method": "environments.create",
+      "parameters": {
+        "project_id": "${PROJECT_ID}",
+        "name": "production",
+        "external_url": "https://api.example.com",
+        "tier": "production"
+      },
+      "files": []
+    },
+    {
+      "name": "Set up protected branches",
+      "type": "integration",
+      "integration": "gitlab",
+      "method": "protected_branches.protect",
+      "parameters": {
+        "id": "${PROJECT_ID}",
+        "name": "main",
+        "push_access_level": 40,
+        "merge_access_level": 30,
+        "allow_force_push": false
+      },
+      "files": []
+    },
+    {
+      "name": "Configure merge request approvals",
+      "type": "integration",
+      "integration": "gitlab",
+      "method": "merge_request_approvals.set_configuration",
+      "parameters": {
+        "id": "${PROJECT_ID}",
+        "approvals_before_merge": 2,
+        "reset_approvals_on_push": true,
+        "disable_overriding_approvers_per_merge_request": true
+      },
+      "files": []
+    },
+    {
+      "name": "Implement code quality gates",
+      "type": "prompt",
+      "prompt": "Configure code quality thresholds that block merge requests if coverage drops below 80%, cyclomatic complexity exceeds limits, or code smells increase.",
+      "parameters": {},
+      "files": [
+        ".gitlab/code-quality.yml"
+      ]
+    },
+    {
+      "name": "Set up performance testing",
+      "type": "prompt",
+      "prompt": "Add performance testing stage using k6 or JMeter. Define performance baselines and fail pipeline if response times increase by more than 20%.",
+      "parameters": {},
+      "files": [
+        "performance-tests/baseline-test.js"
+      ]
+    },
+    {
+      "name": "Configure artifact management",
+      "type": "prompt",
+      "prompt": "Set up artifact retention policies, dependency proxy for Docker images, and package registry for internal libraries with semantic versioning.",
+      "parameters": {},
+      "files": [
+        ".gitlab/artifact-config.yml"
+      ]
+    },
+    {
+      "name": "Test pipeline execution",
+      "type": "cli",
+      "command": "gitlab-runner exec docker test-job",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create compliance report",
+      "type": "prompt",
+      "prompt": "Generate compliance report dashboard showing security scan results, license compliance status, and code quality metrics across all projects.",
+      "parameters": {},
+      "files": [
+        "compliance/dashboard-config.json"
+      ]
+    },
+    {
+      "name": "Document CI/CD workflows",
+      "type": "prompt",
+      "prompt": "Create comprehensive documentation covering pipeline stages, approval workflows, rollback procedures, and troubleshooting guides for developers.",
+      "parameters": {},
+      "files": [
+        "docs/cicd-guide.md"
+      ]
+    }
+  ]
+}

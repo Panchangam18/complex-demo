@@ -1,0 +1,107 @@
+{
+  "goal": "Create comprehensive API management solution with rate limiting and authentication",
+  "steps": [
+    {
+      "name": "Design API architecture",
+      "type": "prompt",
+      "prompt": "Design RESTful API architecture with versioning strategy, resource naming conventions, and OpenAPI 3.0 specification. Include pagination, filtering, and sorting patterns.",
+      "parameters": {},
+      "files": [
+        "api-design/openapi-spec.yaml",
+        "api-design/design-guidelines.md"
+      ]
+    },
+    {
+      "name": "Implement API Gateway configuration",
+      "type": "prompt",
+      "prompt": "Configure AWS API Gateway with request/response transformations, model validation, and custom authorizers. Set up stage variables for environment-specific settings.",
+      "parameters": {},
+      "files": [
+        "terraform/api-gateway/main.tf",
+        "terraform/api-gateway/models.tf"
+      ]
+    },
+    {
+      "name": "Create rate limiting rules",
+      "type": "prompt",
+      "prompt": "Implement rate limiting using API Gateway usage plans and API keys. Configure different tiers (basic, premium, enterprise) with appropriate request quotas and burst limits.",
+      "parameters": {},
+      "files": [
+        "terraform/api-gateway/usage-plans.tf"
+      ]
+    },
+    {
+      "name": "Develop custom authorizer",
+      "type": "prompt",
+      "prompt": "Create Lambda-based custom authorizer for JWT token validation. Include token caching, role-based access control, and integration with identity providers.",
+      "parameters": {},
+      "files": [
+        "lambda-functions/api-authorizer/handler.py",
+        "lambda-functions/api-authorizer/jwt-validator.py"
+      ]
+    },
+    {
+      "name": "Configure WAF rules",
+      "type": "prompt",
+      "prompt": "Set up AWS WAF rules for API protection including SQL injection prevention, XSS protection, and IP-based rate limiting for DDoS protection.",
+      "parameters": {},
+      "files": [
+        "terraform/security/waf-rules.tf"
+      ]
+    },
+    {
+      "name": "Implement request logging",
+      "type": "prompt",
+      "prompt": "Configure structured logging for all API requests including request/response bodies, latency metrics, and error tracking. Set up log analysis dashboards.",
+      "parameters": {},
+      "files": [
+        "terraform/api-gateway/logging.tf",
+        "cloudwatch/api-dashboards.json"
+      ]
+    },
+    {
+      "name": "Validate OpenAPI specification",
+      "type": "cli",
+      "command": "swagger-cli validate api-design/openapi-spec.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test API endpoints",
+      "type": "cli",
+      "command": "newman run api-tests/postman-collection.json --environment api-tests/dev-environment.json",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Check rate limiting",
+      "type": "cli",
+      "command": "for i in {1..15}; do curl -X GET https://api.example.com/v1/products -H 'x-api-key: test-key'; done",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test custom authorizer",
+      "type": "cli",
+      "command": "curl -X GET https://api.example.com/v1/secure/data -H 'Authorization: Bearer ${JWT_TOKEN}'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Validate WAF rules",
+      "type": "cli",
+      "command": "aws wafv2 get-web-acl --scope REGIONAL --id ${WAF_ACL_ID} --name api-protection",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Generate API documentation",
+      "type": "prompt",
+      "prompt": "Create comprehensive API documentation including authentication guides, code examples in multiple languages, and interactive API explorer.",
+      "parameters": {},
+      "files": [
+        "docs/api-documentation/"
+      ]
+    }
+  ]
+}

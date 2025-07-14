@@ -1,0 +1,51 @@
+{
+  "goal": "Set up advanced security with threat detection",
+  "steps": [
+    {
+      "name": "Review threat detection config",
+      "type": "prompt",
+      "prompt": "Examine the advanced threat detection configuration to understand the security monitoring setup.",
+      "parameters": {},
+      "files": [
+        "complex-demo/security-enhancements/advanced-threat-detection.yaml"
+      ]
+    },
+    {
+      "name": "Apply threat detection",
+      "type": "cli",
+      "command": "kubectl apply -f complex-demo/security-enhancements/advanced-threat-detection.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure supply chain security",
+      "type": "prompt",
+      "prompt": "Apply the container supply chain security configuration for image scanning and policy enforcement.",
+      "parameters": {},
+      "files": [
+        "complex-demo/security-enhancements/container-supply-chain-security.yaml"
+      ]
+    },
+    {
+      "name": "Deploy security findings integration",
+      "type": "cli",
+      "command": "kubectl apply -f complex-demo/k8s/envs/dev/logging/security-findings-integration.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test security alerts",
+      "type": "cli",
+      "command": "kubectl exec -it deployment/backend -- sh -c 'nc -zv suspicious-domain.com 443' || echo 'Security alert should be triggered'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify security posture",
+      "type": "cli",
+      "command": "kubectl get networkpolicies -A && kubectl get podsecuritypolicies",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

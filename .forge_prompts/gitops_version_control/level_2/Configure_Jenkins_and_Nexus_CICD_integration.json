@@ -1,0 +1,49 @@
+{
+  "goal": "Configure Jenkins and Nexus CI/CD integration",
+  "steps": [
+    {
+      "name": "Set up Jenkins triggers",
+      "type": "cli",
+      "command": "bash complex-demo/ci-cd/jenkins/scripts/configure-jenkins-triggers.sh",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure Nexus integration",
+      "type": "cli",
+      "command": "bash complex-demo/ci-cd/jenkins/scripts/jenkins-nexus-integration-complete.sh",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Register Nexus with Consul",
+      "type": "prompt",
+      "prompt": "Apply the Nexus Consul registration to enable service discovery for the artifact repository.",
+      "parameters": {},
+      "files": [
+        "complex-demo/ci-cd/nexus/configs/nexus-consul-registration.yaml"
+      ]
+    },
+    {
+      "name": "Apply Nexus monitoring",
+      "type": "cli",
+      "command": "kubectl apply -f complex-demo/ci-cd/nexus/configs/nexus-monitoring.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test CI/CD pipeline",
+      "type": "cli",
+      "command": "bash complex-demo/ci-cd/jenkins/scripts/demo-jenkins-nexus-value.sh",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor Nexus performance",
+      "type": "cli",
+      "command": "bash complex-demo/ci-cd/nexus/scripts/demo-nexus-performance.sh",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

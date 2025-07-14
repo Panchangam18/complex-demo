@@ -1,0 +1,26 @@
+{
+  "goal": "Quick EFK stack deployment",
+  "steps": [
+    {
+      "name": "Deploy Elasticsearch",
+      "type": "cli",
+      "command": "kubectl apply -f https://download.elastic.co/downloads/eck/2.9.0/crds.yaml && kubectl apply -f https://download.elastic.co/downloads/eck/2.9.0/operator.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy Kibana",
+      "type": "cli",
+      "command": "kubectl apply -f - <<EOF\napiVersion: kibana.k8s.elastic.co/v1\nkind: Kibana\nmetadata:\n  name: quickstart\nspec:\n  version: 8.11.0\n  count: 1\n  elasticsearchRef:\n    name: quickstart\nEOF",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy Fluentd",
+      "type": "cli",
+      "command": "kubectl apply -f https://raw.githubusercontent.com/fluent/fluentd-kubernetes-daemonset/master/fluentd-daemonset-elasticsearch-rbac.yaml",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

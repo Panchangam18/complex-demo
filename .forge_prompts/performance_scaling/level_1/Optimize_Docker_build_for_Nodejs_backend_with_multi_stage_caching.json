@@ -1,0 +1,38 @@
+{
+  "goal": "Optimize Docker build for Node.js backend with multi-stage caching",
+  "steps": [
+    {
+      "name": "Review current Dockerfile",
+      "type": "prompt",
+      "prompt": "Analyze the existing Dockerfile to identify opportunities for build optimization and layer caching improvements.",
+      "parameters": {},
+      "files": [
+        "complex-demo/Code/server/Dockerfile"
+      ]
+    },
+    {
+      "name": "Update Dockerfile with build cache",
+      "type": "prompt",
+      "prompt": "Modify the Dockerfile to use Docker BuildKit cache mounts for npm modules and add .dockerignore optimizations.",
+      "parameters": {},
+      "files": [
+        "complex-demo/Code/server/Dockerfile",
+        "complex-demo/Code/server/.dockerignore"
+      ]
+    },
+    {
+      "name": "Test optimized build",
+      "type": "cli",
+      "command": "cd complex-demo/Code/server && DOCKER_BUILDKIT=1 docker build --progress=plain -t backend:optimized .",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Compare build times",
+      "type": "cli",
+      "command": "docker history backend:optimized --human --format \"table {{.CreatedBy}}\\t{{.Size}}\"",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

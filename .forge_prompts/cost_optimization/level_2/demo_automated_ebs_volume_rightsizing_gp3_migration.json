@@ -1,0 +1,260 @@
+{
+  "goal": "Automatically identify oversized EBS volumes and migrate to cheaper GP3 storage with optimal IOPS allocation",
+  "steps": [
+    {
+      "name": "List all EBS volumes",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ec2.DescribeVolumes",
+      "parameters": {
+        "Filters": [
+          {
+            "Name": "status",
+            "Values": ["in-use", "available"]
+          }
+        ],
+        "MaxResults": 500
+      },
+      "files": ["ebs/all-volumes.json"]
+    },
+    {
+      "name": "Get volume usage metrics",
+      "type": "integration",
+      "integration": "aws",
+      "method": "cloudwatch.GetMetricStatistics",
+      "parameters": {
+        "Namespace": "AWS/EBS",
+        "MetricName": "VolumeReadBytes",
+        "Dimensions": [
+          {
+            "Name": "VolumeId",
+            "Value": "${VOLUME_ID}"
+          }
+        ],
+        "StartTime": "${START_TIME}",
+        "EndTime": "${END_TIME}",
+        "Period": 3600,
+        "Statistics": ["Average", "Maximum"]
+      },
+      "files": ["ebs/volume-read-metrics.json"]
+    },
+    {
+      "name": "Get volume write metrics",
+      "type": "integration",
+      "integration": "aws",
+      "method": "cloudwatch.GetMetricStatistics",
+      "parameters": {
+        "Namespace": "AWS/EBS",
+        "MetricName": "VolumeWriteBytes",
+        "Dimensions": [
+          {
+            "Name": "VolumeId", 
+            "Value": "${VOLUME_ID}"
+          }
+        ],
+        "StartTime": "${START_TIME}",
+        "EndTime": "${END_TIME}",
+        "Period": 3600,
+        "Statistics": ["Average", "Maximum"]
+      },
+      "files": ["ebs/volume-write-metrics.json"]
+    },
+    {
+      "name": "Calculate volume utilization",
+      "type": "prompt",
+      "prompt": "Analyze read/write metrics to identify volumes with <20% utilization over 30 days. Calculate potential savings from downsizing and GP2 to GP3 migration.",
+      "parameters": {
+        "utilization_threshold": 0.2,
+        "analysis_period_days": 30,
+        "minimum_volume_size": 100,
+        "gp3_base_cost_per_gb": 0.08,
+        "gp2_cost_per_gb": 0.10
+      },
+      "files": ["ebs/utilization-analysis.json"]
+    },
+    {
+      "name": "Get IOPS metrics for GP3 sizing",
+      "type": "integration",
+      "integration": "aws",
+      "method": "cloudwatch.GetMetricStatistics",
+      "parameters": {
+        "Namespace": "AWS/EBS",
+        "MetricName": "VolumeReadOps",
+        "Dimensions": [
+          {
+            "Name": "VolumeId",
+            "Value": "${VOLUME_ID}"
+          }
+        ],
+        "StartTime": "${START_TIME}",
+        "EndTime": "${END_TIME}",
+        "Period": 300,
+        "Statistics": ["Average", "Maximum"],
+        "Unit": "Count/Second"
+      },
+      "files": ["ebs/iops-metrics.json"]
+    },
+    {
+      "name": "Plan GP3 migration configuration",
+      "type": "prompt",
+      "prompt": "For GP2 volumes, calculate optimal GP3 configuration. Set IOPS to 20% above historical peak (minimum 3000). Calculate if current burst performance is being used.",
+      "parameters": {
+        "iops_buffer": 0.2,
+        "gp3_base_iops": 3000,
+        "gp3_max_iops": 16000,
+        "throughput_base": 125,
+        "include_cost_comparison": true
+      },
+      "files": ["ebs/gp3-migration-plan.json"]
+    },
+    {
+      "name": "Create volume snapshots for safety",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ec2.CreateSnapshot",
+      "parameters": {
+        "VolumeId": "${VOLUME_ID}",
+        "Description": "Pre-optimization backup - ${DATE}",
+        "TagSpecifications": [
+          {
+            "ResourceType": "snapshot",
+            "Tags": [
+              {"Key": "Purpose", "Value": "volume-optimization"},
+              {"Key": "OriginalVolume", "Value": "${VOLUME_ID}"},
+              {"Key": "AutomatedBackup", "Value": "true"}
+            ]
+          }
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Check volume modification state",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ec2.DescribeVolumesModifications",
+      "parameters": {
+        "VolumeIds": ["${VOLUME_ID}"],
+        "Filters": [
+          {
+            "Name": "modification-state",
+            "Values": ["modifying", "optimizing", "failed"]
+          }
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Resize volumes if oversized",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ec2.ModifyVolume",
+      "parameters": {
+        "VolumeId": "${VOLUME_ID}",
+        "Size": "${NEW_SIZE}"
+      },
+      "files": []
+    },
+    {
+      "name": "Migrate GP2 volumes to GP3",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ec2.ModifyVolume",
+      "parameters": {
+        "VolumeId": "${VOLUME_ID}",
+        "VolumeType": "gp3",
+        "Iops": "${TARGET_IOPS}",
+        "Throughput": "${TARGET_THROUGHPUT}"
+      },
+      "files": []
+    },
+    {
+      "name": "Monitor modification progress",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ec2.DescribeVolumesModifications",
+      "parameters": {
+        "VolumeIds": ["${VOLUME_ID}"]
+      },
+      "files": ["ebs/modification-status.json"]
+    },
+    {
+      "name": "Get application performance metrics",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "MetricsApi.query_timeseries_data",
+      "parameters": {
+        "body": {
+          "data": {
+            "type": "timeseries_request",
+            "attributes": {
+              "formulas": [
+                {
+                  "formula": "query1"
+                }
+              ],
+              "queries": [
+                {
+                  "name": "query1",
+                  "data_source": "metrics",
+                  "query": "avg:aws.ebs.volume_read_time{volume_id:${VOLUME_ID}}"
+                }
+              ],
+              "from": "now-1h",
+              "to": "now"
+            }
+          }
+        }
+      },
+      "files": ["ebs/performance-metrics.json"]
+    },
+    {
+      "name": "Check for performance degradation",
+      "type": "prompt", 
+      "prompt": "Monitor EBS latency metrics after migration. If latency increases by >20%, automatically increase IOPS by 500 and recheck.",
+      "parameters": {
+        "latency_threshold": 0.2,
+        "iops_increment": 500,
+        "max_retries": 3
+      },
+      "files": ["ebs/performance-validation.json"]
+    },
+    {
+      "name": "Adjust IOPS if needed",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ec2.ModifyVolume",
+      "parameters": {
+        "VolumeId": "${VOLUME_ID}",
+        "Iops": "${ADJUSTED_IOPS}"
+      },
+      "files": []
+    },
+    {
+      "name": "Tag volumes with optimization details",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ec2.CreateTags",
+      "parameters": {
+        "Resources": ["${VOLUME_ID}"],
+        "Tags": [
+          {"Key": "CostOptimized", "Value": "${DATE}"},
+          {"Key": "OptimizationType", "Value": "automated-rightsizing"},
+          {"Key": "MonthlySavings", "Value": "${MONTHLY_SAVINGS}"},
+          {"Key": "PreviousType", "Value": "${PREVIOUS_TYPE}"},
+          {"Key": "PreviousSize", "Value": "${PREVIOUS_SIZE}"}
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Generate cost savings report",
+      "type": "prompt",
+      "prompt": "Calculate total monthly and annual savings from volume optimizations. Include breakdown by volume type changes and size reductions.",
+      "parameters": {
+        "include_metrics": ["volume_count", "gb_reduced", "gp2_to_gp3_count", "monthly_savings", "annual_savings", "roi_days"]
+      },
+      "files": ["ebs/cost-savings-report.json"]
+    }
+  ]
+}

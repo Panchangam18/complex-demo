@@ -1,0 +1,303 @@
+{
+  "workflow_name": "real_time_data_quality_enforcement",
+  "description": "Enforce data quality rules in real-time with automatic remediation and quarantine",
+  "goal": "Monitor data quality across pipelines and automatically remediate or quarantine bad data",
+  "trigger": {
+    "type": "stream",
+    "source": "kinesis:DataQualityStream",
+    "batch_size": 100
+  },
+  "inputs": {
+    "data_batch": "${event.Records}",
+    "pipeline_context": "${event.pipelineContext}",
+    "quality_rules": "${event.qualityRules}"
+  },
+  "steps": [
+    {
+      "step": 1,
+      "action": "profile_incoming_data",
+      "integration": "aws.lambda.InvokeAsync",
+      "parameters": {
+        "FunctionName": "data-profiler-lambda",
+        "InvokeArgs": {
+          "data": "${inputs.data_batch}",
+          "profiling_config": {
+            "compute_statistics": true,
+            "detect_anomalies": true,
+            "check_completeness": true,
+            "validate_formats": true
+          }
+        }
+      },
+      "output": "data_profile"
+    },
+    {
+      "step": 2,
+      "action": "retrieve_quality_baselines",
+      "integration": "aws.dynamodb.GetItem",
+      "parameters": {
+        "TableName": "data-quality-baselines",
+        "Key": {
+          "pipeline_id": "${inputs.pipeline_context.pipeline_id}",
+          "data_source": "${inputs.pipeline_context.source}"
+        }
+      },
+      "output": "quality_baselines"
+    },
+    {
+      "step": 3,
+      "action": "execute_quality_rules",
+      "integration": "aws.emr-serverless.StartJobRun",
+      "parameters": {
+        "applicationId": "${config.quality_engine_app_id}",
+        "executionRoleArn": "${config.emr_execution_role}",
+        "jobDriver": {
+          "sparkSubmit": {
+            "entryPoint": "s3://data-quality-jobs/quality-rule-executor.py",
+            "entryPointArguments": [
+              "--data-location", "${inputs.data_batch.location}",
+              "--rules", "${JSON.stringify(inputs.quality_rules)}",
+              "--baselines", "${JSON.stringify(quality_baselines)}",
+              "--output", "s3://quality-results/${execution_id}/"
+            ]
+          }
+        }
+      },
+      "output": "quality_job_id"
+    },
+    {
+      "step": 4,
+      "action": "monitor_quality_execution",
+      "integration": "aws.emr-serverless.GetJobRun",
+      "parameters": {
+        "applicationId": "${config.quality_engine_app_id}",
+        "jobRunId": "${quality_job_id}"
+      },
+      "retry": {
+        "max_attempts": 30,
+        "interval": 10,
+        "until": "state != 'RUNNING'"
+      },
+      "output": "quality_results"
+    },
+    {
+      "step": 5,
+      "action": "analyze_quality_violations",
+      "integration": "aws.athena.StartQueryExecution",
+      "parameters": {
+        "QueryString": "WITH violations AS (SELECT rule_id, COUNT(*) as violation_count, AVG(severity_score) as avg_severity FROM quality_results WHERE execution_id = '${execution_id}' AND passed = false GROUP BY rule_id) SELECT * FROM violations ORDER BY violation_count DESC",
+        "ResultConfiguration": {
+          "OutputLocation": "s3://quality-analysis-results/"
+        }
+      },
+      "output": "violation_analysis_query"
+    },
+    {
+      "step": 6,
+      "action": "determine_remediation_strategy",
+      "integration": "aws.sagemaker.InvokeEndpoint",
+      "parameters": {
+        "EndpointName": "quality-remediation-model",
+        "Body": {
+          "violations": "${quality_results.violations}",
+          "data_profile": "${data_profile}",
+          "historical_patterns": "${quality_baselines.patterns}",
+          "business_rules": "${inputs.quality_rules.business_constraints}"
+        }
+      },
+      "output": "remediation_strategy"
+    },
+    {
+      "step": 7,
+      "action": "quarantine_bad_records",
+      "integration": "aws.s3.CopyObject",
+      "condition": "${remediation_strategy.requires_quarantine}",
+      "parameters": {
+        "CopySource": "${inputs.data_batch.location}",
+        "Bucket": "data-quality-quarantine",
+        "Key": "quarantine/${inputs.pipeline_context.pipeline_id}/${timestamp()}/data.parquet",
+        "TaggingDirective": "REPLACE",
+        "Tagging": "violation_type=${remediation_strategy.violation_type}&severity=${remediation_strategy.severity}"
+      },
+      "output": "quarantine_location"
+    },
+    {
+      "step": 8,
+      "action": "apply_data_cleansing",
+      "integration": "aws.glue.StartJobRun",
+      "condition": "${remediation_strategy.can_auto_fix}",
+      "parameters": {
+        "JobName": "data-quality-cleanser",
+        "Arguments": {
+          "--input_data": "${inputs.data_batch.location}",
+          "--cleansing_rules": "${JSON.stringify(remediation_strategy.cleansing_rules)}",
+          "--output_path": "s3://cleaned-data/${execution_id}/",
+          "--quarantine_path": "${quarantine_location}",
+          "--validation_mode": "strict"
+        }
+      },
+      "output": "cleansing_job_id"
+    },
+    {
+      "step": 9,
+      "action": "validate_cleansed_data",
+      "integration": "databricks.jobs.RunNow",
+      "condition": "${cleansing_job_id != null}",
+      "parameters": {
+        "job_id": "${config.validation_job_id}",
+        "notebook_params": {
+          "input_path": "s3://cleaned-data/${execution_id}/",
+          "original_rules": "${inputs.quality_rules}",
+          "relaxed_mode": "false"
+        }
+      },
+      "output": "validation_results"
+    },
+    {
+      "step": 10,
+      "action": "update_quality_metrics",
+      "integration": "datadog.MetricsApi.submit_distribution_points",
+      "parameters": {
+        "body": {
+          "series": [{
+            "metric": "data.quality.score",
+            "points": [{
+              "timestamp": "${now()}",
+              "value": ["${quality_results.quality_score}"]
+            }],
+            "tags": [
+              "pipeline:${inputs.pipeline_context.pipeline_id}",
+              "source:${inputs.pipeline_context.source}",
+              "remediation:${remediation_strategy.type}"
+            ]
+          }]
+        }
+      },
+      "output": "metrics_result"
+    },
+    {
+      "step": 11,
+      "action": "create_quality_report",
+      "integration": "aws.quicksight.CreateAnalysis",
+      "parameters": {
+        "AwsAccountId": "${account_id}",
+        "AnalysisId": "quality-report-${execution_id}",
+        "Name": "Data Quality Report - ${inputs.pipeline_context.pipeline_id}",
+        "SourceEntity": {
+          "SourceTemplate": {
+            "DataSetReferences": [{
+              "DataSetPlaceholder": "quality_results",
+              "DataSetArn": "arn:aws:quicksight:${region}:${account}:dataset/${quality_results.dataset_id}"
+            }],
+            "Arn": "${config.quality_report_template_arn}"
+          }
+        }
+      },
+      "output": "quality_report"
+    },
+    {
+      "step": 12,
+      "action": "trigger_downstream_revalidation",
+      "integration": "aws.eventbridge.PutEvents",
+      "condition": "${validation_results.passed == true}",
+      "parameters": {
+        "Entries": [{
+          "Source": "data.quality.enforcement",
+          "DetailType": "DataQualityValidated",
+          "Detail": {
+            "pipeline_id": "${inputs.pipeline_context.pipeline_id}",
+            "cleansed_data_location": "s3://cleaned-data/${execution_id}/",
+            "quality_score": "${validation_results.final_score}",
+            "downstream_pipelines": "${inputs.pipeline_context.downstream_dependencies}"
+          }
+        }]
+      },
+      "output": "revalidation_event"
+    },
+    {
+      "step": 13,
+      "action": "update_ml_training_data",
+      "integration": "aws.sagemaker.CreateProcessingJob",
+      "condition": "${validation_results.ml_ready == true}",
+      "parameters": {
+        "ProcessingJobName": "quality-ml-data-prep-${timestamp()}",
+        "ProcessingInputs": [{
+          "InputName": "cleansed_data",
+          "S3Input": {
+            "S3Uri": "s3://cleaned-data/${execution_id}/",
+            "S3DataType": "S3Prefix"
+          }
+        }],
+        "ProcessingOutputConfig": {
+          "Outputs": [{
+            "OutputName": "ml_training_data",
+            "S3Output": {
+              "S3Uri": "s3://ml-training-data/quality-enhanced/"
+            }
+          }]
+        },
+        "RoleArn": "${config.sagemaker_role}"
+      },
+      "output": "ml_data_prep_job"
+    },
+    {
+      "step": 14,
+      "action": "alert_data_stewards",
+      "integration": "pagerduty.EventsV2Api.create_event",
+      "condition": "${remediation_strategy.requires_human_review}",
+      "parameters": {
+        "routing_key": "${secrets.pagerduty_routing_key}",
+        "event_action": "trigger",
+        "payload": {
+          "summary": "Data Quality Issue Requires Review",
+          "severity": "${remediation_strategy.severity}",
+          "source": "${inputs.pipeline_context.pipeline_id}",
+          "custom_details": {
+            "violation_count": "${quality_results.total_violations}",
+            "affected_records": "${quality_results.affected_record_count}",
+            "quarantine_location": "${quarantine_location}",
+            "suggested_actions": "${remediation_strategy.human_actions}"
+          }
+        }
+      },
+      "output": "incident_id"
+    },
+    {
+      "step": 15,
+      "action": "update_quality_baseline",
+      "integration": "aws.dynamodb.UpdateItem",
+      "condition": "${validation_results.baseline_drift > 0.1}",
+      "parameters": {
+        "TableName": "data-quality-baselines",
+        "Key": {
+          "pipeline_id": "${inputs.pipeline_context.pipeline_id}",
+          "data_source": "${inputs.pipeline_context.source}"
+        },
+        "UpdateExpression": "SET baseline_stats = :stats, last_updated = :timestamp, quality_trends = list_append(quality_trends, :new_trend)",
+        "ExpressionAttributeValues": {
+          ":stats": "${validation_results.new_baseline_stats}",
+          ":timestamp": "${now()}",
+          ":new_trend": [{
+            "timestamp": "${now()}",
+            "quality_score": "${validation_results.final_score}",
+            "drift_percentage": "${validation_results.baseline_drift}"
+          }]
+        }
+      },
+      "output": "baseline_update_result"
+    }
+  ],
+  "error_handling": {
+    "strategy": "dead_letter_queue",
+    "max_retries": 3,
+    "dlq_topic": "arn:aws:sns:${region}:${account}:data-quality-dlq",
+    "preserve_original_data": true
+  },
+  "outputs": {
+    "quality_score": "${validation_results.final_score}",
+    "records_processed": "${quality_results.total_records}",
+    "violations_found": "${quality_results.total_violations}",
+    "remediation_applied": "${remediation_strategy.type}",
+    "cleansed_data_location": "${validation_results.output_location}"
+  }
+}

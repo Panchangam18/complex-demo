@@ -1,0 +1,77 @@
+{
+  "goal": "Implement end-to-end monitoring for the application using the existing observability stack",
+  "steps": [
+    {
+      "name": "Deploy Prometheus operator",
+      "type": "cli",
+      "command": "kubectl apply -f monitoring/prometheus/kubernetes/prometheus-operator.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create ServiceMonitor for backend",
+      "type": "prompt",
+      "prompt": "Create a Prometheus ServiceMonitor to scrape metrics from the Node.js backend service based on patterns in monitoring/prometheus/kubernetes/",
+      "parameters": {},
+      "files": [
+        "monitoring/prometheus/kubernetes/backend-servicemonitor.yaml"
+      ]
+    },
+    {
+      "name": "Deploy ServiceMonitor",
+      "type": "cli",
+      "command": "kubectl apply -f monitoring/prometheus/kubernetes/backend-servicemonitor.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy Grafana",
+      "type": "cli",
+      "command": "helm install grafana grafana/grafana -f monitoring/grafana/values.yaml --namespace monitoring",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Import dashboards",
+      "type": "integration",
+      "integration_name": "create_dashboard",
+      "integration_params": {
+        "adapter_name": "grafana",
+        "method": "dashboard.create_dashboard",
+        "parameters": {
+          "dashboard": "file://monitoring/grafana/dashboards/application-metrics.json",
+          "folderId": 0
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Configure alerts",
+      "type": "integration",
+      "integration_name": "create_alertrule",
+      "integration_params": {
+        "adapter_name": "grafana",
+        "method": "alerting.create_alertrule",
+        "parameters": {
+          "uid": "app-error-rate",
+          "title": "High Application Error Rate",
+          "condition": "avg()",
+          "data": [
+            {
+              "refId": "A",
+              "expr": "rate(http_requests_total{status=~\"5..\"}[5m]) > 0.05"
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Verify metrics collection",
+      "type": "cli",
+      "command": "kubectl port-forward svc/prometheus 9090:9090 & sleep 5 && curl -s localhost:9090/api/v1/query?query=up | jq '.data.result[].metric.job'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

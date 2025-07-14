@@ -1,0 +1,132 @@
+{
+  "goal": "Deploy and configure a production-ready Kubernetes cluster with service mesh and observability",
+  "steps": [
+    {
+      "name": "Verify EKS cluster status",
+      "type": "cli",
+      "command": "aws eks describe-cluster --name devops-demo-eks --query cluster.status",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Update kubeconfig for cluster access",
+      "type": "cli",
+      "command": "aws eks update-kubeconfig --name devops-demo-eks --region us-east-2",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy Istio service mesh",
+      "type": "cli",
+      "command": "istioctl install --set profile=production -y",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify Istio components",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "CoreV1Api.list_namespaced_pod",
+      "parameters": {
+        "namespace": "istio-system",
+        "label_selector": "app=istiod"
+      },
+      "files": []
+    },
+    {
+      "name": "Deploy application workloads",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/envs/dev/ --recursive",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify deployments are running",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "AppsV1Api.list_namespaced_deployment",
+      "parameters": {
+        "namespace": "default",
+        "label_selector": "app=devops-demo"
+      },
+      "files": []
+    },
+    {
+      "name": "Configure horizontal pod autoscaling",
+      "type": "cli",
+      "command": "kubectl autoscale deployment frontend --cpu-percent=70 --min=3 --max=10",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy Prometheus monitoring stack",
+      "type": "cli",
+      "command": "helm install prometheus prometheus-community/kube-prometheus-stack -f k8s/envs/dev/monitoring/prometheus-values.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify Prometheus is collecting metrics",
+      "type": "integration",
+      "integration": "prometheus",
+      "method": "query",
+      "parameters": {
+        "query": "up{job=\"kubernetes-nodes\"}",
+        "time": "now"
+      },
+      "files": []
+    },
+    {
+      "name": "Configure Istio traffic management",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/envs/dev/microservices/istio-policies.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test service mesh traffic routing",
+      "type": "cli",
+      "command": "kubectl exec -it $(kubectl get pod -l app=frontend -o jsonpath='{.items[0].metadata.name}') -- curl -I backend-service:8080/health",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Setup distributed tracing",
+      "type": "cli",
+      "command": "kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.18/samples/addons/jaeger.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure log aggregation",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/envs/dev/logging/fluent-bit-daemonset.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify complete cluster setup",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "CoreV1Api.list_namespaced_pod",
+      "parameters": {
+        "namespace": "default"
+      },
+      "files": []
+    },
+    {
+      "name": "Run chaos engineering test",
+      "type": "cli",
+      "command": "kubectl delete pod $(kubectl get pod -l app=backend -o jsonpath='{.items[0].metadata.name}') --grace-period=0",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Validate self-healing",
+      "type": "prompt",
+      "prompt": "Monitor the cluster to ensure the deleted pod is automatically recreated and traffic continues to flow without interruption through the service mesh.",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

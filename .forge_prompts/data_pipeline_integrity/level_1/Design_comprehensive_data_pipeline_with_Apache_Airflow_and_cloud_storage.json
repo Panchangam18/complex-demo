@@ -1,0 +1,54 @@
+{
+  "goal": "Design comprehensive data pipeline with Apache Airflow and cloud storage",
+  "steps": [
+    {
+      "name": "Analyze data flow requirements",
+      "type": "prompt",
+      "prompt": "Map out data sources, transformation requirements, and destinations. Identify data volume, velocity, and quality requirements for ETL/ELT pipeline design.",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create Airflow DAG for data pipeline",
+      "type": "prompt",
+      "prompt": "Design Airflow DAG with tasks for: data extraction from multiple sources (APIs, databases, files), validation, transformation using Spark, and loading to data warehouse. Include error handling and retry logic.",
+      "parameters": {},
+      "files": [
+        "airflow/dags/data_pipeline_dag.py"
+      ]
+    },
+    {
+      "name": "Implement custom operators",
+      "type": "prompt",
+      "prompt": "Create custom Airflow operators for: data quality checks, schema validation, SLA monitoring, and notification handling. Include unit tests for each operator.",
+      "parameters": {},
+      "files": [
+        "airflow/plugins/operators/data_quality_operator.py",
+        "airflow/plugins/operators/schema_validator_operator.py"
+      ]
+    },
+    {
+      "name": "Configure dynamic task generation",
+      "type": "prompt",
+      "prompt": "Implement dynamic task generation based on configuration files. Create tasks dynamically for each data source with parallel processing and proper dependencies.",
+      "parameters": {},
+      "files": [
+        "airflow/dags/dynamic_pipeline_factory.py"
+      ]
+    },
+    {
+      "name": "Validate DAG syntax",
+      "type": "cli",
+      "command": "python -m py_compile airflow/dags/*.py && airflow dags list --subdir airflow/dags/",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test custom operators",
+      "type": "cli",
+      "command": "pytest airflow/tests/operators/ -v --cov=airflow.plugins.operators",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

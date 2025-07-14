@@ -1,0 +1,26 @@
+{
+  "goal": "Quick ECR repository setup",
+  "steps": [
+    {
+      "name": "Create ECR repos",
+      "type": "cli",
+      "command": "cd complex-demo/terraform/modules/aws/ecr && terraform apply -auto-approve",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Get login token",
+      "type": "cli",
+      "command": "aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin $(terraform output -raw ecr_url)",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Push image",
+      "type": "cli",
+      "command": "docker tag backend:latest $(terraform output -raw ecr_url)/backend:latest && docker push $(terraform output -raw ecr_url)/backend:latest",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

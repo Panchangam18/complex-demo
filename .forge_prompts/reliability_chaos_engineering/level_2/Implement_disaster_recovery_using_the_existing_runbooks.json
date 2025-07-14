@@ -1,0 +1,68 @@
+{
+  "goal": "Implement disaster recovery using the existing runbooks",
+  "steps": [
+    {
+      "name": "Review DR runbook",
+      "type": "prompt",
+      "prompt": "Review runbooks/disaster-recovery.yaml to understand the disaster recovery procedures for this application.",
+      "parameters": {},
+      "files": [
+        "runbooks/disaster-recovery.yaml"
+      ]
+    },
+    {
+      "name": "Backup application data",
+      "type": "cli",
+      "command": "kubectl exec deployment/backend -- npm run backup:dynamodb",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create infrastructure snapshot",
+      "type": "cli",
+      "command": "cd terraform && terraform state pull > backups/terraform-state-$(date +%Y%m%d).json",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test failover to secondary region",
+      "type": "cli",
+      "command": "./scripts/disaster-recovery/failover-test.sh --source us-west-2 --target us-east-1 --dry-run",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Update DNS for failover",
+      "type": "integration",
+      "integration_name": "ChangeResourceRecordSets",
+      "integration_params": {
+        "adapter_name": "aws",
+        "method": "route53.ChangeResourceRecordSets",
+        "parameters": {
+          "HostedZoneId": "Z123456789",
+          "ChangeBatch": {
+            "Changes": [
+              {
+                "Action": "UPSERT",
+                "ResourceRecordSet": {
+                  "Name": "app.example.com",
+                  "Type": "A",
+                  "SetIdentifier": "Secondary",
+                  "Failover": "SECONDARY"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Verify application in DR region",
+      "type": "cli",
+      "command": "kubectl --context aws-dr-east get deployments && curl https://app-dr.example.com/health",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "goal": "Set up comprehensive monitoring with Datadog integration",
+  "steps": [
+    {
+      "name": "Review Datadog deployment script",
+      "type": "prompt",
+      "prompt": "Examine the deploy-datadog-multicloud.sh script to understand the multi-cloud Datadog deployment approach.",
+      "parameters": {},
+      "files": [
+        "complex-demo/scripts/deploy-datadog-multicloud.sh"
+      ]
+    },
+    {
+      "name": "Update Datadog EKS configuration",
+      "type": "prompt",
+      "prompt": "Modify datadog-aws-eks.yaml to enable APM, logs collection, and process monitoring for the backend service.",
+      "parameters": {},
+      "files": [
+        "complex-demo/k8s/envs/dev/monitoring/datadog-aws-eks.yaml"
+      ]
+    },
+    {
+      "name": "Configure ServiceMonitor",
+      "type": "prompt",
+      "prompt": "Update the Datadog ServiceMonitor to scrape custom metrics from the Node.js backend /metrics endpoint.",
+      "parameters": {},
+      "files": [
+        "complex-demo/monitoring/datadog-servicemonitor.yaml"
+      ]
+    },
+    {
+      "name": "Deploy monitoring stack",
+      "type": "cli",
+      "command": "bash complex-demo/scripts/deploy-datadog-multicloud.sh",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

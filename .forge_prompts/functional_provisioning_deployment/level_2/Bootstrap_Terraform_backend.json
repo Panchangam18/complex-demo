@@ -1,0 +1,19 @@
+{
+  "goal": "Bootstrap Terraform backend",
+  "steps": [
+    {
+      "name": "Run bootstrap script",
+      "type": "cli",
+      "command": "bash complex-demo/terraform/bootstrap/run-bootstrap.sh",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Update Terragrunt",
+      "type": "cli",
+      "command": "bash complex-demo/terraform/bootstrap/update-terragrunt.sh",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

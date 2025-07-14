@@ -1,0 +1,53 @@
+{
+  "goal": "Design Elasticsearch index lifecycle management for log retention and optimization",
+  "steps": [
+    {
+      "name": "Analyze log volume and patterns",
+      "type": "prompt",
+      "prompt": "Review application logging patterns to estimate daily log volume, identify high-cardinality fields, and determine retention requirements for different log types (app, audit, security).",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create index templates with mappings",
+      "type": "prompt",
+      "prompt": "Design Elasticsearch index templates for application logs with optimized mappings: keyword fields for filtering, numeric fields for aggregations, and text fields with appropriate analyzers.",
+      "parameters": {},
+      "files": [
+        "elasticsearch/templates/logs-app-template.json"
+      ]
+    },
+    {
+      "name": "Configure ILM policies",
+      "type": "prompt",
+      "prompt": "Create ILM policies with phases: hot (7 days, 50GB max), warm (30 days, read-only, force merge), cold (90 days, frozen tier), delete. Include rollover conditions and shard allocation.",
+      "parameters": {},
+      "files": [
+        "elasticsearch/policies/logs-ilm-policy.json"
+      ]
+    },
+    {
+      "name": "Design data streams configuration",
+      "type": "prompt",
+      "prompt": "Set up data streams for time-series log data with automatic rollover. Configure backing indices, aliases, and ensure compatibility with existing log shippers.",
+      "parameters": {},
+      "files": [
+        "elasticsearch/data-streams/logs-config.json"
+      ]
+    },
+    {
+      "name": "Validate index template",
+      "type": "cli",
+      "command": "curl -X POST 'localhost:9200/_index_template/_simulate/logs-app' -H 'Content-Type: application/json' -d @elasticsearch/templates/logs-app-template.json",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test ILM policy simulation",
+      "type": "cli",
+      "command": "curl -X POST 'localhost:9200/_ilm/policy/logs-policy/_explain' -H 'Content-Type: application/json'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

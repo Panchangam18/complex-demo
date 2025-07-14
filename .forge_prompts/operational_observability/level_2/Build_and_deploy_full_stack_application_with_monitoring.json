@@ -1,0 +1,62 @@
+{
+  "goal": "Build and deploy full stack application with monitoring",
+  "steps": [
+    {
+      "name": "Build frontend and backend images",
+      "type": "cli",
+      "command": "bash complex-demo/scripts/build-and-push.sh --frontend --backend --tag $(git rev-parse --short HEAD)",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Update image tags in deployments",
+      "type": "cli",
+      "command": "bash complex-demo/scripts/update-k8s-images.sh --tag $(git rev-parse --short HEAD)",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy full stack",
+      "type": "cli",
+      "command": "bash complex-demo/scripts/deploy-full-stack.sh --namespace dev --wait",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure monitoring",
+      "type": "cli",
+      "command": "bash complex-demo/scripts/monitoring-setup.sh --datadog --prometheus --grafana",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy Elasticsearch integration",
+      "type": "cli",
+      "command": "bash complex-demo/scripts/deploy-elasticsearch-integration.sh",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure Grafana datasource",
+      "type": "prompt",
+      "prompt": "Apply the Grafana Elasticsearch datasource configuration to connect Grafana with Elasticsearch for log visualization.",
+      "parameters": {},
+      "files": [
+        "complex-demo/monitoring/grafana-elasticsearch-datasource.yaml"
+      ]
+    },
+    {
+      "name": "Import log dashboards",
+      "type": "integration",
+      "integration_name": "create_dashboard",
+      "integration_params": {
+        "adapter_name": "grafana",
+        "method": "dashboard.create_dashboard",
+        "parameters": {
+          "dashboard": "file://complex-demo/monitoring/elasticsearch-log-dashboards.json"
+        }
+      },
+      "files": []
+    }
+  ]
+}

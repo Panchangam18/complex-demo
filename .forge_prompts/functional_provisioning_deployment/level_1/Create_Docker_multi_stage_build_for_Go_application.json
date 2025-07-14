@@ -1,0 +1,21 @@
+{
+  "goal": "Create Docker multi-stage build for Go application",
+  "steps": [
+    {
+      "name": "Design Dockerfile",
+      "type": "prompt",
+      "prompt": "Create multi-stage Dockerfile for Go app: builder stage with dependencies, final stage with minimal Alpine image and non-root user.",
+      "parameters": {},
+      "files": [
+        "Dockerfile"
+      ]
+    },
+    {
+      "name": "Build and scan image",
+      "type": "cli",
+      "command": "docker build -t go-app:latest . && docker scout cves go-app:latest",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

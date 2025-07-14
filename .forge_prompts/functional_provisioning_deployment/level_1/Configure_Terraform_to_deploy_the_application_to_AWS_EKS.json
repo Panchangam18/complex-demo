@@ -1,0 +1,30 @@
+{
+  "goal": "Configure Terraform to deploy the application to AWS EKS",
+  "steps": [
+    {
+      "name": "Review EKS module",
+      "type": "prompt",
+      "prompt": "Examine terraform/modules/aws/eks to understand the existing EKS configuration and identify necessary updates for the application deployment.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/aws/eks/"
+      ]
+    },
+    {
+      "name": "Update EKS node group",
+      "type": "prompt",
+      "prompt": "Modify the EKS node group configuration to support the application's resource requirements based on the k8s manifests.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/aws/eks/main.tf"
+      ]
+    },
+    {
+      "name": "Validate Terraform changes",
+      "type": "cli",
+      "command": "cd terraform/modules/aws/eks && terraform fmt && terraform validate",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

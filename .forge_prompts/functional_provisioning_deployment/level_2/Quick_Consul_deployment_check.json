@@ -1,0 +1,23 @@
+{
+  "goal": "Quick Consul deployment check",
+  "steps": [
+    {
+      "name": "Check Consul status",
+      "type": "cli",
+      "command": "./terraform/scripts/consul-status.sh",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "List Consul members",
+      "type": "integration",
+      "integration_name": "ListAgentMembers",
+      "integration_params": {
+        "adapter_name": "consul",
+        "method": "agent.members",
+        "parameters": {}
+      },
+      "files": []
+    }
+  ]
+}

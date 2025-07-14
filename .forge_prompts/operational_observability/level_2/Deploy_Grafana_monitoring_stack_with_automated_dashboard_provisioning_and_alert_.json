@@ -1,0 +1,141 @@
+{
+  "goal": "Deploy Grafana monitoring stack with automated dashboard provisioning and alert routing",
+  "steps": [
+    {
+      "name": "Create Grafana folder structure",
+      "type": "integration",
+      "integration_name": "create_folder",
+      "integration_params": {
+        "adapter_name": "grafana",
+        "method": "folder.create_folder",
+        "parameters": {
+          "title": "Production Microservices",
+          "uid": "prod-microservices"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Add Prometheus datasource",
+      "type": "integration",
+      "integration_name": "add_datasource",
+      "integration_params": {
+        "adapter_name": "grafana",
+        "method": "datasource.add_datasource",
+        "parameters": {
+          "name": "Prometheus-Prod",
+          "type": "prometheus",
+          "url": "http://prometheus:9090",
+          "access": "proxy",
+          "isDefault": true
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Import microservices dashboard",
+      "type": "integration",
+      "integration_name": "create_dashboard",
+      "integration_params": {
+        "adapter_name": "grafana",
+        "method": "dashboard.create_dashboard",
+        "parameters": {
+          "dashboard": "file://grafana/dashboards/microservices-overview.json",
+          "folderId": "prod-microservices",
+          "overwrite": true
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Create alert notification channel",
+      "type": "integration",
+      "integration_name": "create_contactpoint",
+      "integration_params": {
+        "adapter_name": "grafana",
+        "method": "alerting.create_contactpoint",
+        "parameters": {
+          "name": "ops-team-slack",
+          "type": "slack",
+          "settings": {
+            "url": "https://hooks.slack.com/services/xxx/yyy/zzz",
+            "channel": "#alerts-production"
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Configure alert rules for SLOs",
+      "type": "integration",
+      "integration_name": "create_alertrule",
+      "integration_params": {
+        "adapter_name": "grafana",
+        "method": "alerting.create_alertrule",
+        "parameters": {
+          "uid": "slo-availability",
+          "title": "Service Availability SLO",
+          "condition": "avg()",
+          "data": [
+            {
+              "refId": "A",
+              "queryType": "prometheus",
+              "expr": "sum(rate(http_requests_total{status!~\"5..\"}[5m])) / sum(rate(http_requests_total[5m])) < 0.999"
+            }
+          ],
+          "folderUID": "prod-microservices"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Set dashboard permissions",
+      "type": "integration",
+      "integration_name": "update_permissions_by_uid",
+      "integration_params": {
+        "adapter_name": "grafana",
+        "method": "dashboard.update_permissions_by_uid",
+        "parameters": {
+          "uid": "microservices-overview",
+          "permissions": [
+            {
+              "role": "Viewer",
+              "permission": 1
+            },
+            {
+              "teamId": 2,
+              "permission": 2
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Test dashboard data queries",
+      "type": "integration",
+      "integration_name": "smartquery",
+      "integration_params": {
+        "adapter_name": "grafana",
+        "method": "datasource.smartquery",
+        "parameters": {
+          "datasourceId": 1,
+          "targets": [
+            {
+              "expr": "sum(rate(http_requests_total[5m])) by (service)",
+              "refId": "A"
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Verify alerts are active",
+      "type": "cli",
+      "command": "curl -s http://localhost:3000/api/alertmanager/grafana/api/v2/alerts | jq '.[] | select(.labels.alertname==\"Service Availability SLO\")'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

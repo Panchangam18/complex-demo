@@ -1,0 +1,33 @@
+{
+  "goal": "Create Azure Storage account with CDN",
+  "steps": [
+    {
+      "name": "Create storage account",
+      "type": "cli",
+      "command": "az storage account create --name staticcontent2024 --resource-group prod-rg --location eastus --sku Standard_LRS --kind StorageV2",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Enable static website",
+      "type": "cli",
+      "command": "az storage blob service-properties update --account-name staticcontent2024 --static-website --index-document index.html",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create CDN profile",
+      "type": "cli",
+      "command": "az cdn profile create --name cdn-profile --resource-group prod-rg --sku Standard_Microsoft",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Link CDN to storage",
+      "type": "cli",
+      "command": "az cdn endpoint create --name static-endpoint --profile-name cdn-profile --resource-group prod-rg --origin staticcontent2024.z13.web.core.windows.net",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

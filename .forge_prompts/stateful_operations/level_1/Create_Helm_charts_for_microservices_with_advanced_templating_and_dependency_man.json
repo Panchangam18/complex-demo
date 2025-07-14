@@ -1,0 +1,109 @@
+{
+  "goal": "Create Helm charts for microservices with advanced templating and dependency management",
+  "steps": [
+    {
+      "name": "Initialize Helm chart structure",
+      "type": "cli",
+      "command": "helm create microservices-chart",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Design values schema",
+      "type": "prompt",
+      "prompt": "Create a comprehensive values.schema.json file defining all configurable parameters with types, constraints, and defaults for the microservices deployment.",
+      "parameters": {},
+      "files": [
+        "microservices-chart/values.schema.json"
+      ]
+    },
+    {
+      "name": "Implement service templates",
+      "type": "prompt",
+      "prompt": "Create Helm templates for deployments, services, ingresses, and HPAs with advanced templating features including range loops, conditionals, and helper functions.",
+      "parameters": {},
+      "files": [
+        "microservices-chart/templates/deployment.yaml",
+        "microservices-chart/templates/service.yaml",
+        "microservices-chart/templates/ingress.yaml",
+        "microservices-chart/templates/hpa.yaml"
+      ]
+    },
+    {
+      "name": "Add dependency charts",
+      "type": "prompt",
+      "prompt": "Configure Chart.yaml to include dependencies for PostgreSQL, Redis, and Prometheus operator. Set up conditional enabling and version constraints.",
+      "parameters": {},
+      "files": [
+        "microservices-chart/Chart.yaml"
+      ]
+    },
+    {
+      "name": "Create helper templates",
+      "type": "prompt",
+      "prompt": "Develop _helpers.tpl with reusable template functions for generating resource names, labels, annotations, and security contexts consistently across all resources.",
+      "parameters": {},
+      "files": [
+        "microservices-chart/templates/_helpers.tpl"
+      ]
+    },
+    {
+      "name": "Implement hooks and tests",
+      "type": "prompt",
+      "prompt": "Create Helm hooks for pre-install database migrations, post-upgrade cache clearing, and test jobs to validate deployments are functioning correctly.",
+      "parameters": {},
+      "files": [
+        "microservices-chart/templates/hooks/db-migration.yaml",
+        "microservices-chart/templates/tests/api-test.yaml"
+      ]
+    },
+    {
+      "name": "Configure environment values",
+      "type": "prompt",
+      "prompt": "Create environment-specific values files for dev, staging, and production with appropriate resource limits, replica counts, and feature flags.",
+      "parameters": {},
+      "files": [
+        "microservices-chart/values-dev.yaml",
+        "microservices-chart/values-staging.yaml",
+        "microservices-chart/values-prod.yaml"
+      ]
+    },
+    {
+      "name": "Lint Helm chart",
+      "type": "cli",
+      "command": "helm lint microservices-chart/",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test chart rendering",
+      "type": "cli",
+      "command": "helm template test-release microservices-chart/ -f microservices-chart/values-dev.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Validate against Kubernetes schemas",
+      "type": "cli",
+      "command": "helm template microservices-chart/ | kubeval --strict",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Package and index chart",
+      "type": "cli",
+      "command": "helm package microservices-chart/ && helm repo index .",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Document chart usage",
+      "type": "prompt",
+      "prompt": "Create comprehensive README with installation instructions, configuration options, upgrade procedures, and troubleshooting guides for the Helm chart.",
+      "parameters": {},
+      "files": [
+        "microservices-chart/README.md"
+      ]
+    }
+  ]
+}

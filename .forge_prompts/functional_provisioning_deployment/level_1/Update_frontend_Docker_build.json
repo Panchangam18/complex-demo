@@ -1,0 +1,21 @@
+{
+  "goal": "Update frontend Docker build",
+  "steps": [
+    {
+      "name": "Optimize frontend Dockerfile",
+      "type": "prompt",
+      "prompt": "Update the frontend Dockerfile to use nginx:alpine for smaller production image size.",
+      "parameters": {},
+      "files": [
+        "complex-demo/Code/client/Dockerfile"
+      ]
+    },
+    {
+      "name": "Build optimized image",
+      "type": "cli",
+      "command": "cd complex-demo/Code/client && docker build -t frontend:slim .",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

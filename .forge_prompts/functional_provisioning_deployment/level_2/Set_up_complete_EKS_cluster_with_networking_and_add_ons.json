@@ -1,0 +1,57 @@
+{
+  "goal": "Set up complete EKS cluster with networking and add-ons",
+  "steps": [
+    {
+      "name": "Initialize Terraform workspace",
+      "type": "cli",
+      "command": "cd complex-demo/terraform/envs/dev/us-east-2 && terraform init",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Review and update EKS configuration",
+      "type": "prompt",
+      "prompt": "Review the EKS module configuration in main.tf and ensure it references the correct VPC outputs and has appropriate node group settings.",
+      "parameters": {},
+      "files": [
+        "complex-demo/terraform/envs/dev/us-east-2/main.tf",
+        "complex-demo/terraform/modules/aws/eks/main.tf"
+      ]
+    },
+    {
+      "name": "Plan infrastructure changes",
+      "type": "cli",
+      "command": "cd complex-demo/terraform/envs/dev/us-east-2 && terraform plan -out=eks.tfplan",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Apply EKS cluster creation",
+      "type": "cli",
+      "command": "cd complex-demo/terraform/envs/dev/us-east-2 && terraform apply eks.tfplan",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure kubectl context",
+      "type": "cli",
+      "command": "aws eks update-kubeconfig --name $(terraform output -raw eks_cluster_name) --region us-east-2",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy AWS Load Balancer Controller",
+      "type": "cli",
+      "command": "kubectl apply -k 'github.com/aws/eks-charts/stable/aws-load-balancer-controller/crds?ref=master'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify cluster components",
+      "type": "cli",
+      "command": "kubectl get nodes && kubectl get pods -A | grep -E 'aws-load-balancer|coredns'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

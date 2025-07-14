@@ -1,0 +1,53 @@
+{
+  "goal": "Design comprehensive Grafana monitoring dashboard with alerts for microservices architecture",
+  "steps": [
+    {
+      "name": "Analyze monitoring requirements",
+      "type": "prompt",
+      "prompt": "Review existing monitoring setup and identify key metrics for microservices: response times, error rates, throughput, resource usage. Plan dashboard layout with service dependencies visualization.",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create dashboard JSON configuration",
+      "type": "prompt",
+      "prompt": "Design Grafana dashboard JSON with panels for: service health overview, API endpoint performance, database query times, cache hit rates, and infrastructure metrics. Include variable templates for environment and service selection.",
+      "parameters": {},
+      "files": [
+        "grafana/dashboards/microservices-overview.json"
+      ]
+    },
+    {
+      "name": "Configure Prometheus queries",
+      "type": "prompt",
+      "prompt": "Write PromQL queries for each panel: rate calculations for requests, percentile latencies, error ratios, and resource saturation. Include recording rules for expensive queries.",
+      "parameters": {},
+      "files": [
+        "prometheus/rules/microservices-recording.yml"
+      ]
+    },
+    {
+      "name": "Design alert rules for SLO monitoring",
+      "type": "prompt",
+      "prompt": "Create Grafana alert rules for SLO violations: 99.9% availability, p95 latency < 200ms, error rate < 0.1%. Configure multi-window multi-burn-rate alerts to reduce noise.",
+      "parameters": {},
+      "files": [
+        "grafana/alerts/slo-alerts.yaml"
+      ]
+    },
+    {
+      "name": "Validate dashboard JSON syntax",
+      "type": "cli",
+      "command": "jq . grafana/dashboards/microservices-overview.json > /dev/null && echo 'Dashboard JSON is valid'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test PromQL queries",
+      "type": "cli",
+      "command": "promtool query instant http://localhost:9090 'rate(http_requests_total[5m])'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

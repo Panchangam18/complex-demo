@@ -1,0 +1,100 @@
+{
+  "goal": "Deploy Consul service mesh with zero-downtime migration of microservices",
+  "steps": [
+    {
+      "name": "Register services with Consul",
+      "type": "integration",
+      "integration_name": "RegisterService",
+      "integration_params": {
+        "adapter_name": "consul",
+        "method": "agent.service.register",
+        "parameters": {
+          "name": "payment-api",
+          "port": 8080,
+          "tags": [
+            "production",
+            "v2.0"
+          ],
+          "check": {
+            "http": "http://localhost:8080/health",
+            "interval": "10s",
+            "timeout": "5s"
+          },
+          "connect": {
+            "sidecar_service": {}
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Verify service registration",
+      "type": "integration",
+      "integration_name": "ListServices",
+      "integration_params": {
+        "adapter_name": "consul",
+        "method": "catalog.services",
+        "parameters": {
+          "filter": "ServiceName == payment-api"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Create service intentions",
+      "type": "cli",
+      "command": "consul intention create -allow auth-api payment-api && consul intention create -allow payment-api notification-api",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy Envoy sidecars",
+      "type": "cli",
+      "command": "kubectl apply -f consul/k8s/consul-inject-deployment.yaml && kubectl rollout status deployment/payment-api",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Check service health",
+      "type": "integration",
+      "integration_name": "ServiceHealth",
+      "integration_params": {
+        "adapter_name": "consul",
+        "method": "health.service",
+        "parameters": {
+          "service": "payment-api",
+          "passing": true
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Test service mesh communication",
+      "type": "cli",
+      "command": "kubectl exec deployment/auth-api -c auth-api -- curl -s http://payment-api.service.consul:8080/api/health | jq '.mesh_enabled'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor service mesh metrics",
+      "type": "cli",
+      "command": "consul monitor -log-level=debug | grep -E 'payment-api.*intention' &",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Perform traffic shifting",
+      "type": "cli",
+      "command": "consul config write - <<EOF\nKind: service-splitter\nName: payment-api\nSplits:\n  - Weight: 90\n    ServiceSubset: v1\n  - Weight: 10\n    ServiceSubset: v2\nEOF",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify zero-downtime migration",
+      "type": "cli",
+      "command": "while true; do curl -s -o /dev/null -w '%{http_code}' http://payment-api:8080/health || echo 'Request failed'; sleep 0.5; done | head -20 | grep -c 200",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

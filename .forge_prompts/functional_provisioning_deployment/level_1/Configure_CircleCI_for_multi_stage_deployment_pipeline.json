@@ -1,0 +1,39 @@
+{
+  "goal": "Configure CircleCI for multi-stage deployment pipeline",
+  "steps": [
+    {
+      "name": "Review CircleCI configuration",
+      "type": "prompt",
+      "prompt": "Examine the current CircleCI config to understand the existing workflow structure and job definitions.",
+      "parameters": {},
+      "files": [
+        "complex-demo/.circleci/config.yml"
+      ]
+    },
+    {
+      "name": "Add staging deployment job",
+      "type": "prompt",
+      "prompt": "Update config.yml to add a staging deployment job that runs after tests pass, with manual approval for production.",
+      "parameters": {},
+      "files": [
+        "complex-demo/.circleci/config.yml"
+      ]
+    },
+    {
+      "name": "Configure environment variables",
+      "type": "prompt",
+      "prompt": "Add CircleCI context references for AWS, GCP, and Azure credentials in the deployment jobs.",
+      "parameters": {},
+      "files": [
+        "complex-demo/.circleci/config.yml"
+      ]
+    },
+    {
+      "name": "Validate CircleCI config",
+      "type": "cli",
+      "command": "circleci config validate complex-demo/.circleci/config.yml",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

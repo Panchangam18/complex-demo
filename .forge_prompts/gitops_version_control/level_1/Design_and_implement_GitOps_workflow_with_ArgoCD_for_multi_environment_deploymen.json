@@ -1,0 +1,101 @@
+{
+  "goal": "Design and implement GitOps workflow with ArgoCD for multi-environment deployments",
+  "steps": [
+    {
+      "name": "Review repository structure",
+      "type": "prompt",
+      "prompt": "Analyze the existing Git repository structure to design an optimal GitOps layout with separate repos/directories for application code, infrastructure code, and environment configurations.",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create ArgoCD application manifests",
+      "type": "prompt",
+      "prompt": "Write ArgoCD Application CRDs for each environment (dev, staging, prod) with appropriate sync policies, automated pruning, and self-healing configurations.",
+      "parameters": {},
+      "files": [
+        "k8s/argocd/applications/dev-app.yaml",
+        "k8s/argocd/applications/staging-app.yaml",
+        "k8s/argocd/applications/prod-app.yaml"
+      ]
+    },
+    {
+      "name": "Configure Kustomize overlays",
+      "type": "prompt",
+      "prompt": "Create Kustomize base configurations and environment-specific overlays for customizing deployments across environments with different resource limits, replicas, and configurations.",
+      "parameters": {},
+      "files": [
+        "k8s/base/kustomization.yaml",
+        "k8s/overlays/dev/kustomization.yaml",
+        "k8s/overlays/staging/kustomization.yaml",
+        "k8s/overlays/prod/kustomization.yaml"
+      ]
+    },
+    {
+      "name": "Implement sealed secrets",
+      "type": "prompt",
+      "prompt": "Create SealedSecret configurations for managing sensitive data in Git. Include database passwords, API keys, and TLS certificates encrypted with the cluster's public key.",
+      "parameters": {},
+      "files": [
+        "k8s/sealed-secrets/database-credentials.yaml",
+        "k8s/sealed-secrets/api-keys.yaml"
+      ]
+    },
+    {
+      "name": "Design progressive delivery strategy",
+      "type": "prompt",
+      "prompt": "Implement Flagger or Argo Rollouts configurations for canary deployments, blue-green deployments, and automated rollback based on metrics from Prometheus.",
+      "parameters": {},
+      "files": [
+        "k8s/progressive-delivery/canary-analysis.yaml",
+        "k8s/progressive-delivery/rollout-strategy.yaml"
+      ]
+    },
+    {
+      "name": "Create sync policies",
+      "type": "prompt",
+      "prompt": "Define ArgoCD sync policies with automated sync for dev, manual approval for staging, and restricted sync windows for production deployments.",
+      "parameters": {},
+      "files": [
+        "k8s/argocd/policies/sync-policies.yaml"
+      ]
+    },
+    {
+      "name": "Validate ArgoCD configurations",
+      "type": "cli",
+      "command": "argocd app create --dry-run --validate -f k8s/argocd/applications/dev-app.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test Kustomize builds",
+      "type": "cli",
+      "command": "kustomize build k8s/overlays/dev | kubectl apply --dry-run=client -f -",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify sealed secrets encryption",
+      "type": "cli",
+      "command": "kubeseal --validate < k8s/sealed-secrets/database-credentials.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Lint GitOps repository",
+      "type": "cli",
+      "command": "yamllint -d '{extends: relaxed, rules: {line-length: {max: 120}}}' k8s/",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Document GitOps workflow",
+      "type": "prompt",
+      "prompt": "Create comprehensive documentation covering the GitOps workflow, branch strategies, promotion process between environments, and emergency manual deployment procedures.",
+      "parameters": {},
+      "files": [
+        "docs/gitops-workflow-guide.md"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "goal": "Configure GitHub Actions for security scanning",
+  "steps": [
+    {
+      "name": "Create security workflow",
+      "type": "prompt",
+      "prompt": "Design GitHub Actions workflow that runs on PR: dependency scanning with Dependabot, SAST with CodeQL, and secret scanning.",
+      "parameters": {},
+      "files": [
+        ".github/workflows/security.yml"
+      ]
+    },
+    {
+      "name": "Test workflow syntax",
+      "type": "cli",
+      "command": "actionlint .github/workflows/security.yml",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

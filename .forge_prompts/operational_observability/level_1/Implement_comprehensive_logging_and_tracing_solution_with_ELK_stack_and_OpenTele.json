@@ -1,0 +1,113 @@
+{
+  "goal": "Implement comprehensive logging and tracing solution with ELK stack and OpenTelemetry",
+  "steps": [
+    {
+      "name": "Design logging architecture",
+      "type": "prompt",
+      "prompt": "Create an architectural design for centralized logging using Elasticsearch, Logstash, Kibana, and Filebeat. Include log retention policies, index lifecycle management, and multi-tenancy considerations.",
+      "parameters": {},
+      "files": [
+        "docs/logging-architecture.md"
+      ]
+    },
+    {
+      "name": "Configure Elasticsearch cluster",
+      "type": "prompt",
+      "prompt": "Write Terraform configuration for a production-ready Elasticsearch cluster with 3 master nodes, 5 data nodes, and 2 coordinator nodes. Include snapshot policies and security settings.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/elasticsearch/main.tf",
+        "terraform/modules/elasticsearch/security.tf"
+      ]
+    },
+    {
+      "name": "Create Logstash pipelines",
+      "type": "prompt",
+      "prompt": "Develop Logstash pipeline configurations for parsing application logs, system logs, and audit logs. Include grok patterns, enrichment filters, and error handling.",
+      "parameters": {},
+      "files": [
+        "logstash/pipelines/application.conf",
+        "logstash/pipelines/system.conf",
+        "logstash/pipelines/audit.conf"
+      ]
+    },
+    {
+      "name": "Deploy Filebeat DaemonSet",
+      "type": "prompt",
+      "prompt": "Create Kubernetes DaemonSet configuration for Filebeat with autodiscovery, multiline pattern detection, and processor configurations for different log formats.",
+      "parameters": {},
+      "files": [
+        "k8s/logging/filebeat-daemonset.yaml",
+        "k8s/logging/filebeat-config.yaml"
+      ]
+    },
+    {
+      "name": "Implement OpenTelemetry collector",
+      "type": "prompt",
+      "prompt": "Configure OpenTelemetry collector for distributed tracing with receivers for Jaeger, Zipkin, and OTLP. Set up processors for sampling and exporters to multiple backends.",
+      "parameters": {},
+      "files": [
+        "k8s/observability/otel-collector-config.yaml",
+        "k8s/observability/otel-collector-deployment.yaml"
+      ]
+    },
+    {
+      "name": "Create Kibana dashboards",
+      "type": "prompt",
+      "prompt": "Design Kibana dashboards for application performance monitoring, error tracking, and security incident investigation. Include saved searches, visualizations, and alerts.",
+      "parameters": {},
+      "files": [
+        "kibana/dashboards/application-performance.json",
+        "kibana/dashboards/error-analysis.json",
+        "kibana/dashboards/security-monitoring.json"
+      ]
+    },
+    {
+      "name": "Configure index templates",
+      "type": "cli",
+      "command": "curl -X PUT 'localhost:9200/_index_template/logs-template' -H 'Content-Type: application/json' -d @elasticsearch/templates/logs-template.json",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Set up index lifecycle policies",
+      "type": "cli",
+      "command": "curl -X PUT 'localhost:9200/_ilm/policy/logs-policy' -H 'Content-Type: application/json' -d @elasticsearch/policies/logs-ilm-policy.json",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test log ingestion pipeline",
+      "type": "cli",
+      "command": "echo '{\"@timestamp\":\"2024-01-15T10:00:00Z\",\"level\":\"ERROR\",\"message\":\"Test error message\"}' | nc localhost 5000",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify trace collection",
+      "type": "cli",
+      "command": "curl -X POST 'localhost:4318/v1/traces' -H 'Content-Type: application/json' -d @test-data/sample-trace.json",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure log retention and archival",
+      "type": "prompt",
+      "prompt": "Implement automated log retention policies with S3 archival for compliance. Set up lifecycle rules to move old indices to cold storage and delete after retention period.",
+      "parameters": {},
+      "files": [
+        "scripts/log-archival.sh",
+        "terraform/modules/s3/log-archive-bucket.tf"
+      ]
+    },
+    {
+      "name": "Document observability practices",
+      "type": "prompt",
+      "prompt": "Create comprehensive documentation covering logging standards, trace context propagation, dashboard usage, and troubleshooting procedures for the observability stack.",
+      "parameters": {},
+      "files": [
+        "docs/observability-guide.md"
+      ]
+    }
+  ]
+}

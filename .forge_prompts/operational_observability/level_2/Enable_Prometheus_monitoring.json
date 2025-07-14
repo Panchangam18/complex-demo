@@ -1,0 +1,19 @@
+{
+  "goal": "Enable Prometheus monitoring",
+  "steps": [
+    {
+      "name": "Deploy Prometheus",
+      "type": "cli",
+      "command": "kubectl apply -f complex-demo/k8s/envs/dev/aws/observability/prometheus.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Check metrics",
+      "type": "cli",
+      "command": "kubectl port-forward -n monitoring svc/prometheus 9090:9090 & sleep 3 && curl localhost:9090/api/v1/targets",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

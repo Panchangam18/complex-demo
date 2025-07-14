@@ -1,0 +1,51 @@
+{
+  "goal": "Implement Fluent Bit logging pipeline with Elasticsearch",
+  "steps": [
+    {
+      "name": "Review Fluent Bit configuration",
+      "type": "prompt",
+      "prompt": "Examine the Fluent Bit ConfigMap to understand the current log parsing and output configuration.",
+      "parameters": {},
+      "files": [
+        "complex-demo/k8s/envs/dev/logging/fluent-bit-configmap.yaml"
+      ]
+    },
+    {
+      "name": "Update Elasticsearch output",
+      "type": "prompt",
+      "prompt": "Modify the Fluent Bit ConfigMap to add proper index patterns and authentication for Elasticsearch output.",
+      "parameters": {},
+      "files": [
+        "complex-demo/k8s/envs/dev/logging/fluent-bit-configmap.yaml"
+      ]
+    },
+    {
+      "name": "Apply Elasticsearch secret",
+      "type": "cli",
+      "command": "kubectl apply -f complex-demo/k8s/envs/dev/logging/elasticsearch-secret.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy Fluent Bit DaemonSet",
+      "type": "cli",
+      "command": "kubectl apply -f complex-demo/k8s/envs/dev/logging/fluent-bit-configmap.yaml && kubectl apply -f complex-demo/k8s/envs/dev/logging/fluent-bit-daemonset.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify Fluent Bit pods",
+      "type": "cli",
+      "command": "kubectl get pods -n kube-system -l app=fluent-bit && kubectl logs -n kube-system -l app=fluent-bit --tail=20",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test log forwarding",
+      "type": "cli",
+      "command": "kubectl exec -it deployment/backend -n backend-dev -- echo 'Test log message' && sleep 5 && curl -X GET 'http://elasticsearch:9200/logstash-*/_search?q=message:Test+log+message'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

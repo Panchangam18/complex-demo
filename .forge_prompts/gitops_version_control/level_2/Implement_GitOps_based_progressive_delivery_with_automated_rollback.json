@@ -1,0 +1,76 @@
+{
+  "goal": "Implement GitOps-based progressive delivery with automated rollback",
+  "steps": [
+    {
+      "name": "Configure Flux GitOps",
+      "type": "cli",
+      "command": "flux bootstrap github --owner=example-org --repository=gitops-config --branch=main --path=./clusters/production --personal --private=false",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create Flagger canary resource",
+      "type": "cli",
+      "command": "kubectl apply -f - <<EOF\napiVersion: flagger.app/v1beta1\nkind: Canary\nmetadata:\n  name: payment-api\n  namespace: production\nspec:\n  targetRef:\n    apiVersion: apps/v1\n    kind: Deployment\n    name: payment-api\n  service:\n    port: 8080\n  analysis:\n    interval: 1m\n    threshold: 5\n    maxWeight: 50\n    stepWeight: 10\n    metrics:\n    - name: request-success-rate\n      thresholdRange:\n        min: 99\n      interval: 1m\n    - name: request-duration\n      thresholdRange:\n        max: 500\n      interval: 1m\nEOF",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Trigger new deployment",
+      "type": "cli",
+      "command": "kubectl set image deployment/payment-api payment-api=payment-api:v2.0 -n production && kubectl annotate deployment/payment-api flagger.app/canary-revision=\"$(date +%s)\" -n production",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor canary progress",
+      "type": "cli",
+      "command": "kubectl get canary payment-api -n production -w | grep -E 'Progressing|Succeeded|Failed'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Check canary metrics",
+      "type": "integration",
+      "integration_name": "Query",
+      "integration_params": {
+        "adapter_name": "datadog",
+        "method": "metrics.Query",
+        "parameters": {
+          "query": "avg:trace.flask.request.duration{service:payment-api,version:canary}",
+          "from": "now-10m",
+          "to": "now"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Simulate failure for rollback",
+      "type": "cli",
+      "command": "kubectl exec deployment/payment-api -n production -- kill -TERM 1 && sleep 30",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify automatic rollback",
+      "type": "cli",
+      "command": "kubectl get events -n production --field-selector involvedObject.name=payment-api --sort-by='.lastTimestamp' | grep -i rollback",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Update GitOps repository",
+      "type": "cli",
+      "command": "git clone https://github.com/example-org/gitops-config && cd gitops-config && yq eval '.spec.template.spec.containers[0].image = \"payment-api:v1.9\"' -i clusters/production/payment-api/deployment.yaml && git commit -am 'Rollback payment-api to v1.9' && git push",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Confirm GitOps sync",
+      "type": "cli",
+      "command": "flux get kustomizations --watch | grep 'Applied revision: main'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

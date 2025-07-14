@@ -1,0 +1,59 @@
+{
+  "goal": "Quick GCP VM provisioning with startup script",
+  "steps": [
+    {
+      "name": "Create VM instance",
+      "type": "integration",
+      "integration_name": "insert",
+      "integration_params": {
+        "adapter_name": "gcp",
+        "method": "compute.instances.insert",
+        "parameters": {
+          "project": "my-project",
+          "zone": "us-central1-a",
+          "body": {
+            "name": "web-server-1",
+            "machineType": "zones/us-central1-a/machineTypes/e2-micro",
+            "disks": [
+              {
+                "boot": true,
+                "autoDelete": true,
+                "initializeParams": {
+                  "sourceImage": "projects/debian-cloud/global/images/family/debian-11"
+                }
+              }
+            ],
+            "networkInterfaces": [
+              {
+                "network": "global/networks/default"
+              }
+            ],
+            "metadata": {
+              "items": [
+                {
+                  "key": "startup-script",
+                  "value": "#!/bin/bash\napt-get update\napt-get install -y nginx\nsystemctl start nginx"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Get instance IP",
+      "type": "cli",
+      "command": "gcloud compute instances describe web-server-1 --zone=us-central1-a --format='get(networkInterfaces[0].accessConfigs[0].natIP)'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify web server",
+      "type": "cli",
+      "command": "curl -s -o /dev/null -w '%{http_code}' http://$(gcloud compute instances describe web-server-1 --zone=us-central1-a --format='get(networkInterfaces[0].accessConfigs[0].natIP)')",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

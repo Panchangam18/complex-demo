@@ -1,0 +1,28 @@
+{
+  "goal": "Quick RDS deployment with Terraform",
+  "steps": [
+    {
+      "name": "Configure RDS",
+      "type": "prompt",
+      "prompt": "Update the RDS module variables to use appropriate instance size and enable automated backups.",
+      "parameters": {},
+      "files": [
+        "complex-demo/terraform/modules/aws/rds/variables.tf"
+      ]
+    },
+    {
+      "name": "Deploy RDS",
+      "type": "cli",
+      "command": "cd complex-demo/terraform/modules/aws/rds && terraform apply -auto-approve",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Get endpoint",
+      "type": "cli",
+      "command": "terraform output -raw rds_endpoint",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

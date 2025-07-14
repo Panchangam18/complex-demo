@@ -1,0 +1,32 @@
+{
+  "goal": "Set up Consul key-value store",
+  "steps": [
+    {
+      "name": "Start Consul agent",
+      "type": "cli",
+      "command": "consul agent -dev -client=0.0.0.0 &",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Store configuration",
+      "type": "cli",
+      "command": "consul kv put config/database/host postgres.example.com && consul kv put config/database/port 5432",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify KV store",
+      "type": "integration",
+      "integration_name": "kv_get",
+      "integration_params": {
+        "adapter_name": "consul",
+        "method": "kv.get",
+        "parameters": {
+          "key": "config/database/host"
+        }
+      },
+      "files": []
+    }
+  ]
+}

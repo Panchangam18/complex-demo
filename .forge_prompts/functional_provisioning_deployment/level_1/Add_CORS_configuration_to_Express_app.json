@@ -1,0 +1,21 @@
+{
+  "goal": "Add CORS configuration to Express app",
+  "steps": [
+    {
+      "name": "Update CORS settings",
+      "type": "prompt",
+      "prompt": "Modify the CORS configuration in app.js to allow specific origins instead of all origins.",
+      "parameters": {},
+      "files": [
+        "complex-demo/Code/server/src/app.js"
+      ]
+    },
+    {
+      "name": "Test CORS",
+      "type": "cli",
+      "command": "cd complex-demo/Code/server && npm start & sleep 3 && curl -H 'Origin: http://localhost:8080' -I http://localhost:3001/status",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

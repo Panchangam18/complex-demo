@@ -1,0 +1,95 @@
+{
+  "goal": "Design and implement Ansible playbooks for configuration management across multiple environments",
+  "steps": [
+    {
+      "name": "Analyze existing Ansible structure",
+      "type": "prompt",
+      "prompt": "Examine the ansible/ directory to understand the current inventory structure, playbook organization, roles, and variable management patterns.",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create comprehensive inventory structure",
+      "type": "prompt",
+      "prompt": "Design a dynamic inventory structure with groups for web servers, app servers, databases, and monitoring. Include group variables for each environment (dev, staging, prod).",
+      "parameters": {},
+      "files": [
+        "ansible/inventory/hosts.yml",
+        "ansible/inventory/group_vars/all.yml"
+      ]
+    },
+    {
+      "name": "Write base system configuration playbook",
+      "type": "prompt",
+      "prompt": "Create a playbook for base system setup including user management, SSH hardening, firewall configuration, time synchronization, and system monitoring agents installation.",
+      "parameters": {},
+      "files": [
+        "ansible/playbooks/base-configuration.yml"
+      ]
+    },
+    {
+      "name": "Develop application deployment playbook",
+      "type": "prompt",
+      "prompt": "Write a playbook for deploying the application with tasks for code deployment, dependency installation, configuration file templating, service management, and zero-downtime deployment strategies.",
+      "parameters": {},
+      "files": [
+        "ansible/playbooks/app-deployment.yml"
+      ]
+    },
+    {
+      "name": "Create security hardening playbook",
+      "type": "prompt",
+      "prompt": "Implement a security hardening playbook following CIS benchmarks including kernel parameter tuning, audit logging, access controls, and automated security updates configuration.",
+      "parameters": {},
+      "files": [
+        "ansible/playbooks/security-hardening.yml"
+      ]
+    },
+    {
+      "name": "Design monitoring setup playbook",
+      "type": "prompt",
+      "prompt": "Create playbook for installing and configuring monitoring stack: Prometheus node exporters, Grafana agents, log collectors, and custom application metrics exporters.",
+      "parameters": {},
+      "files": [
+        "ansible/playbooks/monitoring-setup.yml"
+      ]
+    },
+    {
+      "name": "Implement backup configuration playbook",
+      "type": "prompt",
+      "prompt": "Write a playbook for setting up automated backups including database dumps, file system snapshots, backup rotation policies, and remote backup storage configuration.",
+      "parameters": {},
+      "files": [
+        "ansible/playbooks/backup-configuration.yml"
+      ]
+    },
+    {
+      "name": "Lint all Ansible playbooks",
+      "type": "cli",
+      "command": "ansible-lint ansible/playbooks/*.yml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Validate playbook syntax",
+      "type": "cli",
+      "command": "ansible-playbook --syntax-check ansible/playbooks/*.yml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Run security audit on playbooks",
+      "type": "cli",
+      "command": "ansible-playbook ansible/playbooks/security-hardening.yml --check --diff",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Generate playbook documentation",
+      "type": "prompt",
+      "prompt": "Review all created playbooks and verify they follow Ansible best practices, use proper variable management, implement idempotency, and include appropriate error handling.",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

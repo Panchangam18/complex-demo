@@ -1,0 +1,54 @@
+{
+  "goal": "Create and validate GitHub Actions workflow for multi-environment deployment with approval gates",
+  "steps": [
+    {
+      "name": "Analyze existing GitHub Actions workflows",
+      "type": "prompt",
+      "prompt": "Review .github/workflows directory to understand current CI/CD patterns, reusable workflows, and secret management practices.",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Design multi-stage deployment workflow",
+      "type": "prompt",
+      "prompt": "Create a GitHub Actions workflow that builds application, runs tests, deploys to staging with automated tests, requires manual approval, then deploys to production. Include rollback capabilities.",
+      "parameters": {},
+      "files": [
+        ".github/workflows/deploy-multi-env.yml"
+      ]
+    },
+    {
+      "name": "Implement reusable deployment action",
+      "type": "prompt",
+      "prompt": "Create a composite GitHub Action for standardized deployments that handles Docker builds, ECR pushes, ECS updates, and health checks. Make it reusable across environments.",
+      "parameters": {},
+      "files": [
+        ".github/actions/deploy-ecs/action.yml"
+      ]
+    },
+    {
+      "name": "Configure environment-specific variables",
+      "type": "prompt",
+      "prompt": "Set up GitHub environments (dev, staging, prod) with specific secrets, variables, and protection rules. Include required reviewers for production deployments.",
+      "parameters": {},
+      "files": [
+        ".github/environments/staging.yml",
+        ".github/environments/production.yml"
+      ]
+    },
+    {
+      "name": "Validate workflow syntax",
+      "type": "cli",
+      "command": "actionlint .github/workflows/deploy-multi-env.yml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test workflow locally with act",
+      "type": "cli",
+      "command": "act -j build --dry-run -W .github/workflows/deploy-multi-env.yml",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

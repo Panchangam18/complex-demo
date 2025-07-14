@@ -1,0 +1,96 @@
+{
+  "goal": "Deploy multi-region disaster recovery setup with automated failover testing",
+  "steps": [
+    {
+      "name": "Design multi-region architecture",
+      "type": "prompt",
+      "prompt": "Create Terraform modules for deploying identical infrastructure in us-west-2 (primary) and us-east-1 (standby). Include RDS cross-region read replicas, S3 bucket replication, and Route53 health checks.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/multi-region/main.tf"
+      ]
+    },
+    {
+      "name": "Deploy primary region infrastructure",
+      "type": "cli",
+      "command": "terraform workspace select us-west-2 && terraform apply -auto-approve -var='region=us-west-2' -var='role=primary'",
+      "parameters": {
+        "working_directory": "terraform/environments/production/"
+      },
+      "files": []
+    },
+    {
+      "name": "Deploy standby region infrastructure",
+      "type": "cli",
+      "command": "terraform workspace select us-east-1 && terraform apply -auto-approve -var='region=us-east-1' -var='role=standby'",
+      "parameters": {
+        "working_directory": "terraform/environments/production/"
+      },
+      "files": []
+    },
+    {
+      "name": "Configure RDS read replica promotion Lambda",
+      "type": "prompt",
+      "prompt": "Create Lambda function that monitors primary RDS health and automatically promotes read replica to master during outages. Include SNS notifications and CloudWatch alarms.",
+      "parameters": {},
+      "files": [
+        "lambda/dr-automation/rds-failover.py"
+      ]
+    },
+    {
+      "name": "Set up Route53 failover routing",
+      "type": "integration",
+      "integration_name": "ChangeResourceRecordSets",
+      "integration_params": {
+        "adapter_name": "aws",
+        "method": "route53.ChangeResourceRecordSets",
+        "parameters": {
+          "HostedZoneId": "Z123456789",
+          "ChangeBatch": {
+            "Changes": [
+              {
+                "Action": "UPSERT",
+                "ResourceRecordSet": {
+                  "Name": "api.example.com",
+                  "Type": "A",
+                  "SetIdentifier": "Primary",
+                  "Failover": "PRIMARY",
+                  "HealthCheckId": "health-check-primary"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Execute chaos engineering test",
+      "type": "cli",
+      "command": "chaos-mesh apply -f chaos/regional-failure.yaml && sleep 30",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify automatic failover occurred",
+      "type": "cli",
+      "command": "dig api.example.com +short | grep -q '$(aws ec2 describe-instances --region us-east-1 --filters Name=tag:Name,Values=api-standby --query \"Reservations[0].Instances[0].PublicIpAddress\" --output text)'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Check application availability during failover",
+      "type": "cli",
+      "command": "for i in {1..60}; do curl -w '%{http_code}\\n' -o /dev/null -s https://api.example.com/health || true; sleep 1; done | grep -c 200",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Validate data consistency after failover",
+      "type": "cli",
+      "command": "aws rds describe-db-instances --region us-east-1 --db-instance-identifier api-db-replica --query 'DBInstances[0].DBInstanceStatus' | grep -q 'available'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "goal": "Set up PostgreSQL backup script",
+  "steps": [
+    {
+      "name": "Create backup script",
+      "type": "prompt",
+      "prompt": "Write bash script to backup PostgreSQL database with compression and S3 upload. Include retention policy.",
+      "parameters": {},
+      "files": [
+        "scripts/pg-backup.sh"
+      ]
+    },
+    {
+      "name": "Test backup",
+      "type": "cli",
+      "command": "bash scripts/pg-backup.sh --dry-run",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

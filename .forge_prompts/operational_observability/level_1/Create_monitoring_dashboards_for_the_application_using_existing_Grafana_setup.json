@@ -1,0 +1,40 @@
+{
+  "goal": "Create monitoring dashboards for the application using existing Grafana setup",
+  "steps": [
+    {
+      "name": "Review monitoring configuration",
+      "type": "prompt",
+      "prompt": "Examine monitoring/grafana and monitoring/prometheus directories to understand the existing monitoring setup.",
+      "parameters": {},
+      "files": [
+        "monitoring/grafana/",
+        "monitoring/prometheus/"
+      ]
+    },
+    {
+      "name": "Create application dashboard",
+      "type": "prompt",
+      "prompt": "Design a Grafana dashboard JSON for the Node.js application metrics using the existing dashboard patterns in monitoring/grafana/dashboards.",
+      "parameters": {},
+      "files": [
+        "monitoring/grafana/dashboards/application-metrics.json"
+      ]
+    },
+    {
+      "name": "Add Prometheus scrape config",
+      "type": "prompt",
+      "prompt": "Update the Prometheus configuration to scrape metrics from the Node.js backend service.",
+      "parameters": {},
+      "files": [
+        "monitoring/prometheus/config/prometheus.yml"
+      ]
+    },
+    {
+      "name": "Validate monitoring configuration",
+      "type": "cli",
+      "command": "promtool check config monitoring/prometheus/config/prometheus.yml",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "goal": "Deploy frontend with updated image",
+  "steps": [
+    {
+      "name": "Build frontend",
+      "type": "cli",
+      "command": "cd complex-demo/Code/client && docker build -t frontend:latest .",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Update deployment",
+      "type": "prompt",
+      "prompt": "Update the frontend deployment image tag to use the newly built image.",
+      "parameters": {},
+      "files": [
+        "complex-demo/k8s/envs/dev/frontend/deployment.yaml"
+      ]
+    },
+    {
+      "name": "Deploy",
+      "type": "cli",
+      "command": "kubectl apply -f complex-demo/k8s/envs/dev/frontend/deployment.yaml",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

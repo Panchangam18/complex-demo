@@ -1,0 +1,39 @@
+{
+  "goal": "Add new API endpoint to Vue.js REST service client",
+  "steps": [
+    {
+      "name": "Review REST services implementation",
+      "type": "prompt",
+      "prompt": "Examine RestServices.js to understand how API calls are structured in the Vue.js application.",
+      "parameters": {},
+      "files": [
+        "complex-demo/Code/client/src/services/RestServices.js"
+      ]
+    },
+    {
+      "name": "Add new service method",
+      "type": "prompt",
+      "prompt": "Add a new method to RestServices.js for fetching user profile data from a new /api/getUserProfile endpoint.",
+      "parameters": {},
+      "files": [
+        "complex-demo/Code/client/src/services/RestServices.js"
+      ]
+    },
+    {
+      "name": "Update Vue component to use new service",
+      "type": "prompt",
+      "prompt": "Modify the Main.vue component to call the new getUserProfile service method and display the results.",
+      "parameters": {},
+      "files": [
+        "complex-demo/Code/client/src/components/Main.vue"
+      ]
+    },
+    {
+      "name": "Test the frontend changes",
+      "type": "cli",
+      "command": "cd complex-demo/Code/client && npm run test:unit",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

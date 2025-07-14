@@ -1,0 +1,21 @@
+{
+  "goal": "Configure S3 bucket in Terraform",
+  "steps": [
+    {
+      "name": "Update S3 module",
+      "type": "prompt",
+      "prompt": "Add versioning and lifecycle rules to the S3 bucket configuration in the Terraform module.",
+      "parameters": {},
+      "files": [
+        "complex-demo/terraform/modules/aws/s3/main.tf"
+      ]
+    },
+    {
+      "name": "Validate changes",
+      "type": "cli",
+      "command": "cd complex-demo/terraform/modules/aws/s3 && terraform fmt && terraform validate",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

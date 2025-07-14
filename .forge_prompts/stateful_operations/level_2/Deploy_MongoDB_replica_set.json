@@ -1,0 +1,26 @@
+{
+  "goal": "Deploy MongoDB replica set",
+  "steps": [
+    {
+      "name": "Deploy MongoDB with Helm",
+      "type": "cli",
+      "command": "helm install mongodb bitnami/mongodb --set architecture=replicaset --set replicaCount=3",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify replica set",
+      "type": "cli",
+      "command": "kubectl exec mongodb-0 -- mongo --eval 'rs.status()' | jq '.members[].stateStr'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create database user",
+      "type": "cli",
+      "command": "kubectl exec mongodb-0 -- mongo admin -u root -p $MONGODB_ROOT_PASSWORD --eval 'db.createUser({user:\"app\",pwd:\"pass123\",roles:[{role:\"readWrite\",db:\"myapp\"}]})'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

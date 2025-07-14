@@ -1,0 +1,39 @@
+{
+  "goal": "Set up basic Jenkins job with email notification",
+  "steps": [
+    {
+      "name": "Create Jenkins job",
+      "type": "integration",
+      "integration_name": "create_job",
+      "integration_params": {
+        "adapter_name": "jenkins",
+        "method": "job.create_job",
+        "parameters": {
+          "name": "nightly-backup",
+          "config_xml": "<project><builders><shell>tar -czf backup.tar.gz /data</shell></builders></project>"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Configure email notification",
+      "type": "cli",
+      "command": "jenkins-cli groovy = <<< 'Jenkins.instance.getJob(\"nightly-backup\").addPublisher(new hudson.tasks.Mailer(\"ops@example.com\", false, false))'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Trigger build",
+      "type": "integration",
+      "integration_name": "build_job",
+      "integration_params": {
+        "adapter_name": "jenkins",
+        "method": "job.build_job",
+        "parameters": {
+          "name": "nightly-backup"
+        }
+      },
+      "files": []
+    }
+  ]
+}

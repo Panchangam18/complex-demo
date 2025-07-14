@@ -1,0 +1,56 @@
+{
+  "goal": "Design comprehensive backup and disaster recovery strategy for multi-cloud deployment",
+  "steps": [
+    {
+      "name": "Analyze critical data and recovery requirements",
+      "type": "prompt",
+      "prompt": "Map all critical data stores, databases, and configuration files. Define RPO (Recovery Point Objective) and RTO (Recovery Time Objective) for each tier of service.",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create backup automation scripts",
+      "type": "prompt",
+      "prompt": "Design scripts for automated backups of: PostgreSQL databases with WAL archiving, Redis snapshots, Elasticsearch indices, and application state. Include encryption and compression.",
+      "parameters": {},
+      "files": [
+        "backup/scripts/database-backup.sh",
+        "backup/scripts/redis-backup.sh",
+        "backup/scripts/elasticsearch-backup.sh"
+      ]
+    },
+    {
+      "name": "Configure cross-region replication",
+      "type": "prompt",
+      "prompt": "Set up Terraform configuration for S3 cross-region replication, RDS read replicas, and DynamoDB global tables. Include lifecycle policies and cost optimization.",
+      "parameters": {},
+      "files": [
+        "terraform/disaster-recovery/replication.tf"
+      ]
+    },
+    {
+      "name": "Design failover orchestration",
+      "type": "prompt",
+      "prompt": "Create runbooks and automation scripts for failover scenarios: DNS updates, database promotion, cache warming, and service discovery updates. Include rollback procedures.",
+      "parameters": {},
+      "files": [
+        "disaster-recovery/runbooks/regional-failover.md",
+        "disaster-recovery/scripts/failover-orchestrator.py"
+      ]
+    },
+    {
+      "name": "Validate backup scripts",
+      "type": "cli",
+      "command": "shellcheck backup/scripts/*.sh && python -m py_compile disaster-recovery/scripts/*.py",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test recovery procedures",
+      "type": "cli",
+      "command": "bash backup/scripts/database-backup.sh --test-mode --verify && echo 'Backup validation passed'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

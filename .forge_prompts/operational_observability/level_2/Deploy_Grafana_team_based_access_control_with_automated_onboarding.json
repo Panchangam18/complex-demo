@@ -1,0 +1,113 @@
+{
+  "goal": "Deploy Grafana team-based access control with automated onboarding",
+  "steps": [
+    {
+      "name": "Create organizational teams",
+      "type": "integration",
+      "integration_name": "add_team",
+      "integration_params": {
+        "adapter_name": "grafana",
+        "method": "teams.add_team",
+        "parameters": {
+          "name": "Platform Engineering",
+          "email": "platform@example.com"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Add team members",
+      "type": "integration",
+      "integration_name": "add_team_member",
+      "integration_params": {
+        "adapter_name": "grafana",
+        "method": "teams.add_team_member",
+        "parameters": {
+          "team_id": 1,
+          "user_id": 5
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Create team-specific folders",
+      "type": "integration",
+      "integration_name": "create_folder",
+      "integration_params": {
+        "adapter_name": "grafana",
+        "method": "folder.create_folder",
+        "parameters": {
+          "title": "Platform Engineering Dashboards",
+          "uid": "platform-eng"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Set folder permissions for team",
+      "type": "integration",
+      "integration_name": "update_folder_permissions",
+      "integration_params": {
+        "adapter_name": "grafana",
+        "method": "folder.update_folder_permissions",
+        "parameters": {
+          "uid": "platform-eng",
+          "permissions": [
+            {
+              "teamId": 1,
+              "permission": 2
+            },
+            {
+              "role": "Viewer",
+              "permission": 1
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Import team dashboard",
+      "type": "cli",
+      "command": "curl -X POST 'http://admin:admin@localhost:3000/api/dashboards/db' -H 'Content-Type: application/json' -d '{\"dashboard\": {\"title\": \"Platform Metrics\", \"panels\": []}, \"folderId\": 1, \"overwrite\": true}'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure team preferences",
+      "type": "integration",
+      "integration_name": "update_team_preferences",
+      "integration_params": {
+        "adapter_name": "grafana",
+        "method": "teams.update_team_preferences",
+        "parameters": {
+          "team_id": 1,
+          "theme": "dark",
+          "homeDashboardId": 10,
+          "timezone": "utc"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Verify team access",
+      "type": "integration",
+      "integration_name": "get_team_members",
+      "integration_params": {
+        "adapter_name": "grafana",
+        "method": "teams.get_team_members",
+        "parameters": {
+          "team_id": 1
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Test dashboard access with team member",
+      "type": "cli",
+      "command": "curl -H 'Authorization: Bearer ${TEAM_MEMBER_TOKEN}' 'http://localhost:3000/api/dashboards/uid/platform-metrics' | jq -r '.dashboard.title'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

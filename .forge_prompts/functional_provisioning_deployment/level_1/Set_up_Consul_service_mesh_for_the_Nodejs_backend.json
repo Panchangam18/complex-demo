@@ -1,0 +1,39 @@
+{
+  "goal": "Set up Consul service mesh for the Node.js backend",
+  "steps": [
+    {
+      "name": "Review Consul configuration",
+      "type": "prompt",
+      "prompt": "Examine terraform/modules/consul/k8s-client to understand how Consul is configured for Kubernetes.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/consul/k8s-client/main.tf"
+      ]
+    },
+    {
+      "name": "Create service definition",
+      "type": "prompt",
+      "prompt": "Create a Consul service definition for the Node.js backend server based on the existing patterns in the codebase.",
+      "parameters": {},
+      "files": [
+        "k8s/consul/backend-service.yaml"
+      ]
+    },
+    {
+      "name": "Update backend deployment",
+      "type": "prompt",
+      "prompt": "Modify the backend Kubernetes deployment to include Consul Connect sidecar annotations.",
+      "parameters": {},
+      "files": [
+        "k8s/deployments/backend-deployment.yaml"
+      ]
+    },
+    {
+      "name": "Validate Consul configuration",
+      "type": "cli",
+      "command": "consul validate k8s/consul/backend-service.yaml",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

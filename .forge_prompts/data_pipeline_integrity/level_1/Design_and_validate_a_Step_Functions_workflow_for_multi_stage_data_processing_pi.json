@@ -1,0 +1,55 @@
+{
+  "goal": "Design and validate a Step Functions workflow for multi-stage data processing pipeline",
+  "steps": [
+    {
+      "name": "Analyze existing Step Functions patterns",
+      "type": "prompt",
+      "prompt": "Examine the codebase for existing Step Functions state machines, identifying naming conventions, error handling patterns, and integration with Lambda functions.",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create state machine definition for ETL pipeline",
+      "type": "prompt",
+      "prompt": "Design a Step Functions state machine that orchestrates: data extraction from S3, transformation via Lambda, validation checks, and loading to RDS. Include error handling with retry logic and failure notifications.",
+      "parameters": {},
+      "files": [
+        "stepfunctions/data-pipeline/etl-workflow.json"
+      ]
+    },
+    {
+      "name": "Implement Lambda functions for each stage",
+      "type": "prompt",
+      "prompt": "Create Lambda functions for extract (read from S3), transform (data cleaning and enrichment), and load (write to RDS) stages. Include proper error handling and CloudWatch logging.",
+      "parameters": {},
+      "files": [
+        "lambda/etl/extract.py",
+        "lambda/etl/transform.py",
+        "lambda/etl/load.py"
+      ]
+    },
+    {
+      "name": "Configure IAM roles and policies",
+      "type": "prompt",
+      "prompt": "Create IAM roles for Step Functions execution and Lambda functions with least-privilege access to S3, RDS, CloudWatch, and SNS for notifications.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/step-functions/iam.tf"
+      ]
+    },
+    {
+      "name": "Validate Step Functions definition",
+      "type": "cli",
+      "command": "aws stepfunctions validate-state-machine-definition --definition file://stepfunctions/data-pipeline/etl-workflow.json",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test Lambda functions locally",
+      "type": "cli",
+      "command": "python -m pytest lambda/etl/tests/ -v --cov=lambda/etl",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

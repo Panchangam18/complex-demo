@@ -1,0 +1,103 @@
+{
+  "goal": "Execute Jenkins security pipeline with automated remediation and compliance reporting",
+  "steps": [
+    {
+      "name": "Create security scan job",
+      "type": "integration",
+      "integration_name": "create_job",
+      "integration_params": {
+        "adapter_name": "jenkins",
+        "method": "job.create_job",
+        "parameters": {
+          "name": "security-compliance-scan",
+          "config_xml": "file://jenkins/jobs/security-scan-config.xml"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Configure job credentials",
+      "type": "integration",
+      "integration_name": "create_credential",
+      "integration_params": {
+        "adapter_name": "jenkins",
+        "method": "credential.create_credential",
+        "parameters": {
+          "credential_type": "usernamePassword",
+          "credential_id": "sonarqube-token",
+          "username": "admin",
+          "password": "${SONAR_TOKEN}",
+          "description": "SonarQube authentication"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Trigger security scan build",
+      "type": "integration",
+      "integration_name": "build_job",
+      "integration_params": {
+        "adapter_name": "jenkins",
+        "method": "job.build_job",
+        "parameters": {
+          "name": "security-compliance-scan",
+          "parameters": {
+            "BRANCH": "main",
+            "SCAN_TYPE": "full",
+            "FAIL_ON_HIGH": "true"
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Monitor build progress",
+      "type": "integration",
+      "integration_name": "get_build_info",
+      "integration_params": {
+        "adapter_name": "jenkins",
+        "method": "build.get_build_info",
+        "parameters": {
+          "name": "security-compliance-scan",
+          "number": "lastBuild"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Retrieve security scan results",
+      "type": "integration",
+      "integration_name": "get_build_console_output",
+      "integration_params": {
+        "adapter_name": "jenkins",
+        "method": "build.get_build_console_output",
+        "parameters": {
+          "name": "security-compliance-scan",
+          "number": "lastBuild"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Check quality gate status",
+      "type": "cli",
+      "command": "curl -s -u admin:${SONAR_TOKEN} 'http://sonarqube:9000/api/qualitygates/project_status?projectKey=microservices' | jq -r '.projectStatus.status'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Generate compliance report",
+      "type": "cli",
+      "command": "jenkins-cli get-job security-compliance-scan | xmllint --xpath '//lastBuild/artifacts/relativePath[contains(text(),\"compliance-report\")]' - | xargs -I {} curl -O http://jenkins:8080/job/security-compliance-scan/lastBuild/artifact/{}",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create remediation tasks if needed",
+      "type": "cli",
+      "command": "if [ $(jq '.vulnerabilities.high' security-scan-results.json) -gt 0 ]; then gh issue create --title 'High severity vulnerabilities found' --body \"$(jq '.vulnerabilities' security-scan-results.json)\"; fi",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

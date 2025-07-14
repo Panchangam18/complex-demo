@@ -1,0 +1,177 @@
+{
+  "goal": "Implement zero-trust security architecture with AWS IAM, service mesh policies, and network segmentation",
+  "steps": [
+    {
+      "name": "Analyze current security posture",
+      "type": "integration",
+      "integration": "aws",
+      "method": "iam.get_account_authorization_details",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create IAM roles with minimal permissions",
+      "type": "prompt",
+      "prompt": "Design IAM roles following principle of least privilege for each service. Create separate roles for frontend, backend, and data processing services with only required permissions.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/aws/iam/service-roles.tf"
+      ]
+    },
+    {
+      "name": "Implement AWS PrivateLink endpoints",
+      "type": "prompt",
+      "prompt": "Configure VPC endpoints for AWS services (S3, DynamoDB, ECR, etc.) to ensure traffic doesn't traverse the internet. Include endpoint policies restricting access.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/aws/vpc/endpoints.tf"
+      ]
+    },
+    {
+      "name": "Deploy AWS WAF rules",
+      "type": "integration",
+      "integration": "aws",
+      "method": "wafv2.create_web_acl",
+      "parameters": {
+        "Name": "zero-trust-waf",
+        "Scope": "REGIONAL",
+        "DefaultAction": {
+          "Block": {}
+        },
+        "Rules": [
+          {
+            "Name": "RateLimitRule",
+            "Priority": 1,
+            "Statement": {
+              "RateBasedStatement": {
+                "Limit": 2000,
+                "AggregateKeyType": "IP"
+              }
+            },
+            "Action": {
+              "Block": {}
+            }
+          }
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Configure Istio authorization policies",
+      "type": "prompt",
+      "prompt": "Create Istio AuthorizationPolicy resources implementing zero-trust between services. Define explicit allow rules for service-to-service communication with JWT validation.",
+      "parameters": {},
+      "files": [
+        "k8s/service-mesh/authorization-policies.yaml"
+      ]
+    },
+    {
+      "name": "Apply network policies",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/network-policies/ --recursive",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy secrets management",
+      "type": "integration",
+      "integration": "aws",
+      "method": "secretsmanager.create_secret",
+      "parameters": {
+        "Name": "app/database/credentials",
+        "SecretString": "{\"username\":\"dbuser\",\"password\":\"${GENERATED_PASSWORD}\"}",
+        "KmsKeyId": "alias/aws/secretsmanager"
+      },
+      "files": []
+    },
+    {
+      "name": "Enable AWS GuardDuty",
+      "type": "integration",
+      "integration": "aws",
+      "method": "guardduty.create_detector",
+      "parameters": {
+        "Enable": true,
+        "FindingPublishingFrequency": "FIFTEEN_MINUTES",
+        "DataSources": {
+          "S3Logs": {
+            "Enable": true
+          },
+          "Kubernetes": {
+            "AuditLogs": {
+              "Enable": true
+            }
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Configure mTLS between services",
+      "type": "cli",
+      "command": "istioctl install --set values.global.mtls.auto=true --set values.global.mtls.enabled=true",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test service authorization",
+      "type": "cli",
+      "command": "kubectl exec -it $(kubectl get pod -l app=test-client -o jsonpath='{.items[0].metadata.name}') -- curl -I https://backend-service:8443/api/health",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify network segmentation",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ec2.DescribeSecurityGroups",
+      "parameters": {
+        "Filters": [
+          {
+            "Name": "vpc-id",
+            "Values": [
+              "${VPC_ID}"
+            ]
+          }
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Run security compliance scan",
+      "type": "cli",
+      "command": "prowler aws --compliance cis_level2_aws",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure security monitoring",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "SecurityMonitoringApi.create_security_monitoring_rule",
+      "parameters": {
+        "body": {
+          "name": "Unauthorized Access Attempts",
+          "query": "source:aws.guardduty @threatIntelligenceDetail.threatNames:*",
+          "isEnabled": true,
+          "cases": [
+            {
+              "status": "high",
+              "condition": "above",
+              "threshold": 1
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Document security architecture",
+      "type": "prompt",
+      "prompt": "Create comprehensive documentation of the zero-trust architecture including network diagrams, authentication flows, and incident response procedures.",
+      "parameters": {},
+      "files": [
+        "docs/zero-trust-architecture.md"
+      ]
+    }
+  ]
+}

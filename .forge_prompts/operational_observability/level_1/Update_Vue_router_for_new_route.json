@@ -1,0 +1,21 @@
+{
+  "goal": "Update Vue router for new route",
+  "steps": [
+    {
+      "name": "Add dashboard route",
+      "type": "prompt",
+      "prompt": "Add a new route for /dashboard in the Vue router configuration that loads a Dashboard component.",
+      "parameters": {},
+      "files": [
+        "complex-demo/Code/client/src/router/index.js"
+      ]
+    },
+    {
+      "name": "Verify routing",
+      "type": "cli",
+      "command": "cd complex-demo/Code/client && npm run serve",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

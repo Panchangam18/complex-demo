@@ -1,0 +1,39 @@
+{
+  "goal": "Update CircleCI pipeline for the full-stack application",
+  "steps": [
+    {
+      "name": "Review existing CircleCI config",
+      "type": "prompt",
+      "prompt": "Examine .circleci/config.yml to understand the current CI pipeline structure.",
+      "parameters": {},
+      "files": [
+        ".circleci/config.yml"
+      ]
+    },
+    {
+      "name": "Add frontend build job",
+      "type": "prompt",
+      "prompt": "Add a new job to the CircleCI pipeline to build and test the Vue.js frontend application.",
+      "parameters": {},
+      "files": [
+        ".circleci/config.yml"
+      ]
+    },
+    {
+      "name": "Add backend build job",
+      "type": "prompt",
+      "prompt": "Add a job to build the Node.js backend, run tests, and create a Docker image.",
+      "parameters": {},
+      "files": [
+        ".circleci/config.yml"
+      ]
+    },
+    {
+      "name": "Validate CircleCI configuration",
+      "type": "cli",
+      "command": "circleci config validate .circleci/config.yml",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

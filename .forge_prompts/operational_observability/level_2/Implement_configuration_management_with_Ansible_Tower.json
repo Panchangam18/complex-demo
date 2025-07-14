@@ -1,0 +1,49 @@
+{
+  "goal": "Implement configuration management with Ansible Tower",
+  "steps": [
+    {
+      "name": "Configure Ansible Tower",
+      "type": "cli",
+      "command": "bash complex-demo/scripts/configure-ansible-tower.sh --license-file license.txt",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Set up Puppet integration",
+      "type": "prompt",
+      "prompt": "Review and apply the Puppet integration playbook to connect Ansible with Puppet Enterprise.",
+      "parameters": {},
+      "files": [
+        "complex-demo/ansible/playbooks/puppet-integration.yml"
+      ]
+    },
+    {
+      "name": "Apply Puppet-Elasticsearch integration",
+      "type": "cli",
+      "command": "ansible-playbook -i inventory complex-demo/ansible/playbooks/puppet-elasticsearch-integration.yml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Run configuration management setup",
+      "type": "cli",
+      "command": "bash complex-demo/scripts/setup-configuration-management.sh",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Validate Ansible Tower",
+      "type": "cli",
+      "command": "bash complex-demo/scripts/validate-ansible-tower.sh",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Validate config management",
+      "type": "cli",
+      "command": "bash complex-demo/scripts/validate-config-management.sh",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

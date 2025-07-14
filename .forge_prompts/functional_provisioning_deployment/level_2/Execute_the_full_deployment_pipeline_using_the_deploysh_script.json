@@ -1,0 +1,47 @@
+{
+  "goal": "Execute the full deployment pipeline using the deploy.sh script",
+  "steps": [
+    {
+      "name": "Set up environment variables",
+      "type": "cli",
+      "command": "cp .env.template .env && source .env",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Run deployment script",
+      "type": "cli",
+      "command": "./deploy.sh --environment prod --clouds aws,gcp --features eks,gke,consul,monitoring",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor deployment progress",
+      "type": "cli",
+      "command": "tail -f logs/deploy-$(date +%Y%m%d).log | grep -E 'STEP|SUCCESS|ERROR'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify Consul federation",
+      "type": "cli",
+      "command": "consul members -wan && consul catalog datacenters",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Check cross-cloud connectivity",
+      "type": "cli",
+      "command": "kubectl exec -it deployment/backend --context aws-prod -- curl http://backend.service.consul:3000/health",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Run smoke tests",
+      "type": "cli",
+      "command": "cd Code/tests && npm run integration-tests -- --env=prod",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

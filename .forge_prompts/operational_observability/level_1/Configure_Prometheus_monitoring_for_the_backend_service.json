@@ -1,0 +1,39 @@
+{
+  "goal": "Configure Prometheus monitoring for the backend service",
+  "steps": [
+    {
+      "name": "Review Prometheus configuration",
+      "type": "prompt",
+      "prompt": "Examine the existing Prometheus configuration to understand the scrape configs and service discovery setup.",
+      "parameters": {},
+      "files": [
+        "complex-demo/k8s/envs/dev/aws/observability/prometheus.yaml"
+      ]
+    },
+    {
+      "name": "Add backend service monitoring",
+      "type": "prompt",
+      "prompt": "Update prometheus.yaml to add a new scrape config for the backend service using Kubernetes service discovery.",
+      "parameters": {},
+      "files": [
+        "complex-demo/k8s/envs/dev/aws/observability/prometheus.yaml"
+      ]
+    },
+    {
+      "name": "Create ServiceMonitor for backend",
+      "type": "prompt",
+      "prompt": "Create a ServiceMonitor resource that tells Prometheus how to scrape metrics from the backend service.",
+      "parameters": {},
+      "files": [
+        "complex-demo/k8s/envs/dev/backend/servicemonitor.yaml"
+      ]
+    },
+    {
+      "name": "Apply monitoring configuration",
+      "type": "cli",
+      "command": "kubectl apply -f complex-demo/k8s/envs/dev/aws/observability/prometheus.yaml",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

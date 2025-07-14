@@ -1,0 +1,56 @@
+{
+  "goal": "Design Consul service mesh configuration with health checking and traffic management",
+  "steps": [
+    {
+      "name": "Analyze service architecture for mesh implementation",
+      "type": "prompt",
+      "prompt": "Review microservices architecture to identify service dependencies, communication patterns, and security requirements for Consul service mesh implementation.",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create Consul service definitions",
+      "type": "prompt",
+      "prompt": "Design Consul service definitions for each microservice including: service name, tags, port configurations, health check endpoints, and Connect sidecar proxy settings.",
+      "parameters": {},
+      "files": [
+        "consul/services/auth-api.json",
+        "consul/services/payment-api.json",
+        "consul/services/notification-api.json"
+      ]
+    },
+    {
+      "name": "Configure service intentions",
+      "type": "prompt",
+      "prompt": "Define Consul Connect intentions to control service-to-service communication. Set up allow/deny rules based on zero-trust principles with explicit permissions only where needed.",
+      "parameters": {},
+      "files": [
+        "consul/intentions/service-intentions.hcl"
+      ]
+    },
+    {
+      "name": "Implement health check scripts",
+      "type": "prompt",
+      "prompt": "Create comprehensive health check scripts that validate: database connectivity, external API availability, cache responsiveness, and internal service endpoints. Include timeout and retry logic.",
+      "parameters": {},
+      "files": [
+        "consul/health-checks/api-health.sh",
+        "consul/health-checks/dependency-check.sh"
+      ]
+    },
+    {
+      "name": "Validate Consul configuration",
+      "type": "cli",
+      "command": "consul validate consul/services/*.json && consul validate consul/intentions/*.hcl",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test health check scripts",
+      "type": "cli",
+      "command": "bash -n consul/health-checks/*.sh && shellcheck consul/health-checks/*.sh",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

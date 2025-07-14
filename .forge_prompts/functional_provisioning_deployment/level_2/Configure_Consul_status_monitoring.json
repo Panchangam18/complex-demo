@@ -1,0 +1,19 @@
+{
+  "goal": "Configure Consul status monitoring",
+  "steps": [
+    {
+      "name": "Check Consul status",
+      "type": "cli",
+      "command": "bash complex-demo/terraform/scripts/consul-status.sh",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Validate Terraform modules",
+      "type": "cli",
+      "command": "bash complex-demo/terraform/scripts/validate-modules.sh",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "goal": "Implement security hardening for Kubernetes deployments",
+  "steps": [
+    {
+      "name": "Review security hardening script",
+      "type": "prompt",
+      "prompt": "Examine the security-hardening.sh script to understand the security measures being applied.",
+      "parameters": {},
+      "files": [
+        "complex-demo/scripts/security-hardening.sh"
+      ]
+    },
+    {
+      "name": "Update backend deployment security",
+      "type": "prompt",
+      "prompt": "Modify the backend deployment.yaml to add security context with runAsNonRoot, readOnlyRootFilesystem, and capabilities drop.",
+      "parameters": {},
+      "files": [
+        "complex-demo/k8s/envs/dev/backend/deployment.yaml"
+      ]
+    },
+    {
+      "name": "Add network policy",
+      "type": "prompt",
+      "prompt": "Create a NetworkPolicy for the backend namespace to restrict ingress traffic only from frontend pods.",
+      "parameters": {},
+      "files": [
+        "complex-demo/k8s/envs/dev/backend/network-policy.yaml"
+      ]
+    },
+    {
+      "name": "Apply security policies",
+      "type": "cli",
+      "command": "kubectl apply -f complex-demo/k8s/envs/dev/backend/network-policy.yaml --dry-run=client",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

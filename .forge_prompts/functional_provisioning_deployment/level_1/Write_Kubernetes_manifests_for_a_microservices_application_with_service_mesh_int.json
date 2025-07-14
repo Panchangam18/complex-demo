@@ -1,0 +1,96 @@
+{
+  "goal": "Write Kubernetes manifests for a microservices application with service mesh integration",
+  "steps": [
+    {
+      "name": "Analyze existing Kubernetes configurations",
+      "type": "prompt",
+      "prompt": "Examine the k8s/ directory structure to understand the existing manifests, namespace organization, and deployment patterns. Review any existing service mesh configurations.",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create namespace configuration with labels",
+      "type": "prompt",
+      "prompt": "Create a namespace manifest for 'microservices-demo' with appropriate labels for service mesh injection (istio-injection=enabled) and environment tags.",
+      "parameters": {},
+      "files": [
+        "k8s/namespaces/microservices-demo.yaml"
+      ]
+    },
+    {
+      "name": "Write frontend service deployment manifest",
+      "type": "prompt",
+      "prompt": "Create a Kubernetes deployment for the frontend service with 3 replicas, resource limits (cpu: 200m, memory: 256Mi), readiness/liveness probes, and anti-affinity rules for high availability.",
+      "parameters": {},
+      "files": [
+        "k8s/envs/dev/microservices/frontend-deployment.yaml"
+      ]
+    },
+    {
+      "name": "Create backend API deployment manifest",
+      "type": "prompt",
+      "prompt": "Write deployment manifest for backend API service with 5 replicas, horizontal pod autoscaling configuration, persistent volume claims for data, and init containers for database migration.",
+      "parameters": {},
+      "files": [
+        "k8s/envs/dev/microservices/backend-deployment.yaml"
+      ]
+    },
+    {
+      "name": "Configure services and ingress",
+      "type": "prompt",
+      "prompt": "Create service definitions for frontend (ClusterIP) and backend (ClusterIP), plus an Ingress resource with TLS termination, path-based routing, and rate limiting annotations.",
+      "parameters": {},
+      "files": [
+        "k8s/envs/dev/microservices/services.yaml",
+        "k8s/envs/dev/microservices/ingress.yaml"
+      ]
+    },
+    {
+      "name": "Add ConfigMaps and Secrets",
+      "type": "prompt",
+      "prompt": "Create ConfigMaps for application configuration (API endpoints, feature flags) and Secret manifests for database credentials and API keys with proper base64 encoding.",
+      "parameters": {},
+      "files": [
+        "k8s/envs/dev/microservices/configmaps.yaml",
+        "k8s/envs/dev/microservices/secrets.yaml"
+      ]
+    },
+    {
+      "name": "Write service mesh traffic policies",
+      "type": "prompt",
+      "prompt": "Create Istio VirtualService and DestinationRule resources for canary deployments (90/10 traffic split), circuit breaking, and retry policies for the microservices.",
+      "parameters": {},
+      "files": [
+        "k8s/envs/dev/microservices/istio-policies.yaml"
+      ]
+    },
+    {
+      "name": "Validate Kubernetes manifests syntax",
+      "type": "cli",
+      "command": "kubectl apply --dry-run=client -f k8s/envs/dev/microservices/ --recursive",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Run Kubernetes security scanner",
+      "type": "cli",
+      "command": "kubesec scan k8s/envs/dev/microservices/*.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Validate service mesh configurations",
+      "type": "cli",
+      "command": "istioctl analyze k8s/envs/dev/microservices/",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Check manifest best practices",
+      "type": "cli",
+      "command": "kube-score score k8s/envs/dev/microservices/*.yaml",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

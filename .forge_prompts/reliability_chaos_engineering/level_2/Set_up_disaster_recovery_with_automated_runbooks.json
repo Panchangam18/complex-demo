@@ -1,0 +1,45 @@
+{
+  "goal": "Set up disaster recovery with automated runbooks",
+  "steps": [
+    {
+      "name": "Configure DR infrastructure",
+      "type": "cli",
+      "command": "bash complex-demo/scripts/setup-disaster-recovery.sh --primary us-east-2 --secondary us-west-2",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Review runbook configuration",
+      "type": "prompt",
+      "prompt": "Examine the multi-cloud service outage runbook to understand the automated recovery procedures.",
+      "parameters": {},
+      "files": [
+        "complex-demo/runbooks/multi-cloud-service-outage.yaml"
+      ]
+    },
+    {
+      "name": "Create runbook automation",
+      "type": "prompt",
+      "prompt": "Convert the YAML runbook into an executable automation script that can be triggered during incidents.",
+      "parameters": {},
+      "files": [
+        "complex-demo/runbooks/multi-cloud-service-outage.yaml",
+        "complex-demo/runbooks/execute-dr-runbook.sh"
+      ]
+    },
+    {
+      "name": "Test DR failover",
+      "type": "cli",
+      "command": "bash complex-demo/runbooks/execute-dr-runbook.sh --scenario regional-failure --dry-run",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Validate DR readiness",
+      "type": "cli",
+      "command": "kubectl get deployments -A --context=dr-cluster && curl https://dr.example.com/health",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

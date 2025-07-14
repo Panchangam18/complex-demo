@@ -1,0 +1,26 @@
+{
+  "goal": "Quick stress test deployment",
+  "steps": [
+    {
+      "name": "Run server stress test",
+      "type": "cli",
+      "command": "cd complex-demo/Code/server && artillery run src/tests/stresstests/stress_server.yml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Run client stress test",
+      "type": "cli",
+      "command": "cd complex-demo/Code/client && artillery run src/tests/stresstests/stress_client.yml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Update load test URLs",
+      "type": "cli",
+      "command": "bash complex-demo/scripts/update-load-test-urls.sh",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

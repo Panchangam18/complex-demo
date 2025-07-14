@@ -1,0 +1,108 @@
+{
+  "goal": "Implement infrastructure compliance and policy as code using Open Policy Agent",
+  "steps": [
+    {
+      "name": "Define compliance requirements",
+      "type": "prompt",
+      "prompt": "Document compliance requirements for infrastructure including CIS benchmarks, company security policies, and regulatory requirements (SOC2, HIPAA).",
+      "parameters": {},
+      "files": [
+        "compliance/requirements.md"
+      ]
+    },
+    {
+      "name": "Create OPA policies",
+      "type": "prompt",
+      "prompt": "Write Open Policy Agent (OPA) policies in Rego for infrastructure compliance: EC2 instance types, security group rules, S3 bucket policies, and tagging requirements.",
+      "parameters": {},
+      "files": [
+        "opa-policies/aws/",
+        "opa-policies/kubernetes/",
+        "opa-policies/terraform/"
+      ]
+    },
+    {
+      "name": "Implement Terraform Sentinel policies",
+      "type": "prompt",
+      "prompt": "Create Terraform Sentinel policies for pre-deployment validation including cost controls, approved AMIs, and network isolation requirements.",
+      "parameters": {},
+      "files": [
+        "sentinel-policies/cost-control.sentinel",
+        "sentinel-policies/security.sentinel"
+      ]
+    },
+    {
+      "name": "Configure Kubernetes admission controllers",
+      "type": "prompt",
+      "prompt": "Set up OPA as Kubernetes admission controller to enforce pod security policies, resource limits, and image scanning requirements.",
+      "parameters": {},
+      "files": [
+        "k8s/opa-gatekeeper/constraints.yaml",
+        "k8s/opa-gatekeeper/constraint-templates.yaml"
+      ]
+    },
+    {
+      "name": "Create policy testing framework",
+      "type": "prompt",
+      "prompt": "Develop comprehensive test suites for all policies including positive and negative test cases. Include automated testing in CI/CD pipeline.",
+      "parameters": {},
+      "files": [
+        "policy-tests/",
+        "policy-tests/test-runner.sh"
+      ]
+    },
+    {
+      "name": "Build policy documentation",
+      "type": "prompt",
+      "prompt": "Generate policy documentation with rationale, examples of compliant/non-compliant resources, and remediation guidance for policy violations.",
+      "parameters": {},
+      "files": [
+        "docs/policy-catalog.md"
+      ]
+    },
+    {
+      "name": "Test OPA policies",
+      "type": "cli",
+      "command": "opa test opa-policies/ -v",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Validate Terraform with policies",
+      "type": "cli",
+      "command": "conftest verify --policy opa-policies/terraform/ terraform/modules/",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test Kubernetes policies",
+      "type": "cli",
+      "command": "kubectl apply --dry-run=server -f k8s/test-resources/non-compliant-pod.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Run policy coverage report",
+      "type": "cli",
+      "command": "opa test opa-policies/ --coverage --format json | jq '.coverage'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Validate Sentinel policies",
+      "type": "cli",
+      "command": "sentinel test sentinel-policies/",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Generate compliance report",
+      "type": "prompt",
+      "prompt": "Create automated compliance reporting showing policy coverage, violation trends, and remediation status across all environments.",
+      "parameters": {},
+      "files": [
+        "scripts/generate-compliance-report.py"
+      ]
+    }
+  ]
+}

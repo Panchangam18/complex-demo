@@ -1,0 +1,39 @@
+{
+  "goal": "Add authentication middleware to the Node.js backend API",
+  "steps": [
+    {
+      "name": "Review existing Express app structure",
+      "type": "prompt",
+      "prompt": "Examine the Express application in app.js to understand the current middleware setup and API endpoints.",
+      "parameters": {},
+      "files": [
+        "complex-demo/Code/server/src/app.js"
+      ]
+    },
+    {
+      "name": "Create JWT authentication middleware",
+      "type": "prompt",
+      "prompt": "Create a new authentication middleware file that validates JWT tokens for the API endpoints, following the patterns in app.js.",
+      "parameters": {},
+      "files": [
+        "complex-demo/Code/server/src/middleware/auth.js"
+      ]
+    },
+    {
+      "name": "Update app.js to use authentication",
+      "type": "prompt",
+      "prompt": "Modify app.js to import and use the authentication middleware for the /api/getAllProducts endpoint.",
+      "parameters": {},
+      "files": [
+        "complex-demo/Code/server/src/app.js"
+      ]
+    },
+    {
+      "name": "Test authentication",
+      "type": "cli",
+      "command": "cd complex-demo/Code/server && npm test -- --grep 'authentication'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

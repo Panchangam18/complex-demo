@@ -1,0 +1,114 @@
+{
+  "goal": "Orchestrate multi-stage Jenkins pipeline for microservices deployment with canary analysis",
+  "steps": [
+    {
+      "name": "Create microservices deployment pipeline",
+      "type": "prompt",
+      "prompt": "Design Jenkins pipeline that builds multiple microservices in parallel, runs integration tests, deploys to staging, performs canary deployment to production with automated rollback.",
+      "parameters": {},
+      "files": [
+        "jenkins/pipelines/microservices-deploy.Jenkinsfile"
+      ]
+    },
+    {
+      "name": "Configure pipeline job in Jenkins",
+      "type": "integration",
+      "integration_name": "create_job",
+      "integration_params": {
+        "adapter_name": "jenkins",
+        "method": "job.create_job",
+        "parameters": {
+          "name": "microservices-deployment",
+          "config_xml": "<flow-definition plugin=\"workflow-job\"><definition class=\"org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition\"><scm class=\"hudson.plugins.git.GitSCM\"><configVersion>2</configVersion><userRemoteConfigs><hudson.plugins.git.UserRemoteConfig><url>https://github.com/example/microservices.git</url></hudson.plugins.git.UserRemoteConfig></userRemoteConfigs><branches><hudson.plugins.git.BranchSpec><name>*/main</name></hudson.plugins.git.BranchSpec></branches></scm><scriptPath>jenkins/pipelines/microservices-deploy.Jenkinsfile</scriptPath></definition></flow-definition>"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Trigger deployment pipeline",
+      "type": "integration",
+      "integration_name": "build_job",
+      "integration_params": {
+        "adapter_name": "jenkins",
+        "method": "job.build_job",
+        "parameters": {
+          "name": "microservices-deployment",
+          "parameters": {
+            "DEPLOY_ENV": "staging",
+            "SERVICES": "auth-api,payment-api,notification-api",
+            "CANARY_PERCENTAGE": "10"
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Monitor build stages progress",
+      "type": "integration",
+      "integration_name": "get_build_stages",
+      "integration_params": {
+        "adapter_name": "jenkins",
+        "method": "build.get_build_stages",
+        "parameters": {
+          "name": "microservices-deployment",
+          "number": "lastBuild"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Run canary analysis in Grafana",
+      "type": "integration",
+      "integration_name": "smartquery",
+      "integration_params": {
+        "adapter_name": "grafana",
+        "method": "datasource.smartquery",
+        "parameters": {
+          "datasourceId": 1,
+          "targets": [
+            {
+              "expr": "sum(rate(http_requests_total{version=\"canary\"}[5m])) / sum(rate(http_requests_total[5m]))",
+              "refId": "canary_traffic"
+            },
+            {
+              "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{version=\"canary\"}[5m]))",
+              "refId": "canary_latency"
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Check canary deployment health",
+      "type": "cli",
+      "command": "kubectl get deployments -l version=canary -o json | jq '.items[] | {name: .metadata.name, ready: .status.readyReplicas, desired: .spec.replicas}'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Decide on canary promotion",
+      "type": "cli",
+      "command": "ERROR_RATE=$(curl -s 'http://prometheus:9090/api/v1/query?query=sum(rate(http_requests_total{status=~\"5..\",version=\"canary\"}[5m]))/sum(rate(http_requests_total{version=\"canary\"}[5m]))' | jq -r '.data.result[0].value[1]'); if (( $(echo \"$ERROR_RATE < 0.01\" | bc -l) )); then echo 'Canary healthy, promoting'; else echo 'Canary unhealthy, rolling back' && exit 1; fi",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Complete deployment or rollback",
+      "type": "integration",
+      "integration_name": "build_job",
+      "integration_params": {
+        "adapter_name": "jenkins",
+        "method": "job.build_job",
+        "parameters": {
+          "name": "microservices-deployment",
+          "parameters": {
+            "ACTION": "promote-canary",
+            "CANARY_BUILD": "${BUILD_NUMBER}"
+          }
+        }
+      },
+      "files": []
+    }
+  ]
+}

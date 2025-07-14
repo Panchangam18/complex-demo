@@ -1,0 +1,38 @@
+{
+  "goal": "Deploy simple Lambda function with API Gateway",
+  "steps": [
+    {
+      "name": "Create Lambda function",
+      "type": "integration",
+      "integration_name": "CreateFunction",
+      "integration_params": {
+        "adapter_name": "aws",
+        "method": "lambda.CreateFunction",
+        "parameters": {
+          "FunctionName": "hello-api",
+          "Runtime": "nodejs18.x",
+          "Handler": "index.handler",
+          "Code": {
+            "ZipFile": "exports.handler = async (event) => { return { statusCode: 200, body: JSON.stringify('Hello!') }; };"
+          },
+          "Role": "arn:aws:iam::123456789012:role/lambda-role"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Create API Gateway",
+      "type": "cli",
+      "command": "aws apigatewayv2 create-api --name hello-api --protocol-type HTTP --target arn:aws:lambda:us-east-1:123456789012:function:hello-api",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test endpoint",
+      "type": "cli",
+      "command": "curl -s $(aws apigatewayv2 get-apis --query \"Items[?Name=='hello-api'].ApiEndpoint\" --output text)",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

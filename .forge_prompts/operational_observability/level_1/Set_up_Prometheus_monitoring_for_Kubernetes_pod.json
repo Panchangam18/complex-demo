@@ -1,0 +1,30 @@
+{
+  "goal": "Set up Prometheus monitoring for Kubernetes pod",
+  "steps": [
+    {
+      "name": "Create ServiceMonitor",
+      "type": "prompt",
+      "prompt": "Write Prometheus ServiceMonitor to scrape metrics from pods with label app=api on port 8080/metrics endpoint.",
+      "parameters": {},
+      "files": [
+        "monitoring/service-monitor.yaml"
+      ]
+    },
+    {
+      "name": "Configure alerts",
+      "type": "prompt",
+      "prompt": "Create PrometheusRule for high error rate alert when rate of 5xx errors exceeds 1% over 5 minutes.",
+      "parameters": {},
+      "files": [
+        "monitoring/alerts.yaml"
+      ]
+    },
+    {
+      "name": "Apply monitoring config",
+      "type": "cli",
+      "command": "kubectl apply -f monitoring/ --dry-run=client",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

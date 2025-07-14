@@ -1,0 +1,33 @@
+{
+  "goal": "Quick Kubernetes deployment with auto-scaling",
+  "steps": [
+    {
+      "name": "Deploy application",
+      "type": "cli",
+      "command": "kubectl create deployment web-api --image=web-api:v1.0 --replicas=3",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create HPA",
+      "type": "cli",
+      "command": "kubectl autoscale deployment web-api --cpu-percent=70 --min=3 --max=10",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Expose service",
+      "type": "cli",
+      "command": "kubectl expose deployment web-api --port=80 --target-port=8080 --type=LoadBalancer",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify deployment",
+      "type": "cli",
+      "command": "kubectl rollout status deployment/web-api && kubectl get svc web-api",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

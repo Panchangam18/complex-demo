@@ -1,0 +1,60 @@
+{
+  "goal": "Design comprehensive compliance automation for SOC2 and GDPR requirements",
+  "steps": [
+    {
+      "name": "Map compliance requirements to controls",
+      "type": "prompt",
+      "prompt": "Create mapping of SOC2 Trust Service Criteria and GDPR articles to technical controls: encryption, access logs, data retention, and privacy by design implementations.",
+      "parameters": {},
+      "files": [
+        "compliance/mappings/soc2-controls.yaml",
+        "compliance/mappings/gdpr-requirements.yaml"
+      ]
+    },
+    {
+      "name": "Implement audit logging pipeline",
+      "type": "prompt",
+      "prompt": "Design centralized audit logging with: structured logs from all services, immutable storage, automated PII detection and redaction, and retention policies per data classification.",
+      "parameters": {},
+      "files": [
+        "logging/audit/fluentd-config.yaml",
+        "logging/audit/pii-detection-rules.json"
+      ]
+    },
+    {
+      "name": "Create compliance validation tests",
+      "type": "prompt",
+      "prompt": "Develop InSpec profiles to validate: encryption at rest and in transit, access control policies, backup procedures, and data retention compliance.",
+      "parameters": {},
+      "files": [
+        "compliance/inspec/controls/encryption.rb",
+        "compliance/inspec/controls/access-control.rb",
+        "compliance/inspec/controls/data-retention.rb"
+      ]
+    },
+    {
+      "name": "Generate compliance reports",
+      "type": "prompt",
+      "prompt": "Create automated reporting templates for: monthly compliance status, audit evidence collection, risk assessment matrices, and remediation tracking.",
+      "parameters": {},
+      "files": [
+        "compliance/reports/templates/monthly-soc2.md",
+        "compliance/reports/scripts/evidence-collector.py"
+      ]
+    },
+    {
+      "name": "Run compliance checks",
+      "type": "cli",
+      "command": "inspec exec compliance/inspec --reporter json:compliance-results.json cli",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Validate audit log integrity",
+      "type": "cli",
+      "command": "sha256sum /var/log/audit/*.log > audit-hashes.txt && gpg --detach-sign audit-hashes.txt",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

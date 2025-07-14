@@ -1,0 +1,32 @@
+{
+  "goal": "Deploy GitLab CI runner",
+  "steps": [
+    {
+      "name": "Install GitLab runner",
+      "type": "cli",
+      "command": "helm install gitlab-runner gitlab/gitlab-runner --set gitlabUrl=https://gitlab.com --set runnerRegistrationToken=$RUNNER_TOKEN",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify runner registration",
+      "type": "integration",
+      "integration_name": "ListRunners",
+      "integration_params": {
+        "adapter_name": "gitlab",
+        "method": "runners.list",
+        "parameters": {
+          "status": "online"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Test pipeline",
+      "type": "cli",
+      "command": "git commit --allow-empty -m 'Test runner' && git push",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

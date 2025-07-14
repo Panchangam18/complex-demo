@@ -1,0 +1,21 @@
+{
+  "goal": "Add health check endpoint to Node.js server",
+  "steps": [
+    {
+      "name": "Add health route",
+      "type": "prompt",
+      "prompt": "Add a /health endpoint to Code/server/routes/index.js that returns server status and version.",
+      "parameters": {},
+      "files": [
+        "Code/server/routes/index.js"
+      ]
+    },
+    {
+      "name": "Test endpoint",
+      "type": "cli",
+      "command": "cd Code/server && npm start & sleep 3 && curl localhost:3000/health",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

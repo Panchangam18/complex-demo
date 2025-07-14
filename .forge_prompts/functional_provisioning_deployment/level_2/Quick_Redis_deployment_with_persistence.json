@@ -1,0 +1,26 @@
+{
+  "goal": "Quick Redis deployment with persistence",
+  "steps": [
+    {
+      "name": "Deploy Redis with Helm",
+      "type": "cli",
+      "command": "helm install redis bitnami/redis --set auth.enabled=true --set persistence.size=10Gi",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Get Redis password",
+      "type": "cli",
+      "command": "kubectl get secret redis -o jsonpath='{.data.redis-password}' | base64 -d",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test connection",
+      "type": "cli",
+      "command": "kubectl run redis-test --rm -it --image=redis:alpine --restart=Never -- redis-cli -h redis-master -a $REDIS_PASSWORD ping",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

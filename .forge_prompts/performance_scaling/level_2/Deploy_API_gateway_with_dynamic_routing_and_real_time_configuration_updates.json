@@ -1,0 +1,68 @@
+{
+  "goal": "Deploy API gateway with dynamic routing and real-time configuration updates",
+  "steps": [
+    {
+      "name": "Deploy Kong API Gateway",
+      "type": "cli",
+      "command": "helm install kong kong/kong --set proxy.type=LoadBalancer --set admin.enabled=true --set admin.type=NodePort --set postgresql.enabled=true --namespace kong --create-namespace",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure upstream services",
+      "type": "cli",
+      "command": "curl -X POST http://localhost:8001/services -d 'name=payment-service' -d 'url=http://payment-api.default.svc.cluster.local:8080'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create API routes with plugins",
+      "type": "cli",
+      "command": "curl -X POST http://localhost:8001/services/payment-service/routes -d 'paths[]=/api/v1/payment' -d 'methods[]=POST' -d 'methods[]=GET' && curl -X POST http://localhost:8001/routes/$(curl -s http://localhost:8001/routes | jq -r '.data[0].id')/plugins -d 'name=rate-limiting' -d 'config.minute=100'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Enable authentication plugin",
+      "type": "cli",
+      "command": "curl -X POST http://localhost:8001/plugins -d 'name=jwt' -d 'config.secret_is_base64=false' -d 'config.claims_to_verify[]=exp'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test API gateway routing",
+      "type": "cli",
+      "command": "TOKEN=$(jwt encode --secret 'my-secret-key' --alg HS256 '{}'); curl -H \"Authorization: Bearer $TOKEN\" http://$(kubectl get svc kong-proxy -n kong -o jsonpath='{.status.loadBalancer.ingress[0].ip}')/api/v1/payment",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure canary routing",
+      "type": "cli",
+      "command": "curl -X POST http://localhost:8001/services/payment-service/plugins -d 'name=canary' -d 'config.percentage=20' -d 'config.upstream_host=payment-api-v2.default.svc.cluster.local' -d 'config.upstream_port=8080'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor API gateway metrics",
+      "type": "cli",
+      "command": "curl -s http://localhost:8001/metrics | grep -E 'kong_http_status|kong_latency_bucket'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Update route configuration dynamically",
+      "type": "cli",
+      "command": "curl -X PATCH http://localhost:8001/routes/$(curl -s http://localhost:8001/routes | jq -r '.data[0].id') -d 'paths[]=/api/v2/payment' -d 'strip_path=true'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify configuration changes",
+      "type": "cli",
+      "command": "curl -s http://localhost:8001/routes | jq '.data[] | {id, paths, strip_path, service: .service.name}'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

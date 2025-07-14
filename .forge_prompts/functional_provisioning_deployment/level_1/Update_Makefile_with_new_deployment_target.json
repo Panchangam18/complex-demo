@@ -1,0 +1,21 @@
+{
+  "goal": "Update Makefile with new deployment target",
+  "steps": [
+    {
+      "name": "Add production target",
+      "type": "prompt",
+      "prompt": "Add a new 'deploy-prod' target to the Makefile that calls deploy.sh with production parameters.",
+      "parameters": {},
+      "files": [
+        "complex-demo/Makefile"
+      ]
+    },
+    {
+      "name": "Test new target",
+      "type": "cli",
+      "command": "make deploy-prod --dry-run",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "goal": "Set up basic Kubernetes service with health checks",
+  "steps": [
+    {
+      "name": "Create service manifest",
+      "type": "prompt",
+      "prompt": "Write Kubernetes Service and Deployment for a web API with readiness and liveness probes on /health endpoint.",
+      "parameters": {},
+      "files": [
+        "k8s/api-service.yaml"
+      ]
+    },
+    {
+      "name": "Deploy to cluster",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/api-service.yaml --dry-run=client",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

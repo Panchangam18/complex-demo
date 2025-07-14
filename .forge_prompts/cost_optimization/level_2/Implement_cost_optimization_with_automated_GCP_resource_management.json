@@ -1,0 +1,87 @@
+{
+  "goal": "Implement cost optimization with automated GCP resource management",
+  "steps": [
+    {
+      "name": "Analyze current resource usage",
+      "type": "cli",
+      "command": "gcloud compute instances list --format='table(name,machineType,status,zone)' --filter='status=RUNNING' | tee current-instances.txt",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Identify idle instances",
+      "type": "integration",
+      "integration_name": "ListInstances",
+      "integration_params": {
+        "adapter_name": "gcp",
+        "method": "compute.instances.list",
+        "parameters": {
+          "project": "devops-demo-prod",
+          "filter": "status=RUNNING AND labels.environment=development"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Create snapshot before optimization",
+      "type": "cli",
+      "command": "for instance in $(gcloud compute instances list --filter='labels.environment=development' --format='value(name,zone)'); do name=$(echo $instance | cut -d' ' -f1); zone=$(echo $instance | cut -d' ' -f2); gcloud compute disks snapshot ${name} --zone=${zone} --snapshot-names=${name}-backup-$(date +%Y%m%d); done",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Stop development instances",
+      "type": "integration",
+      "integration_name": "StopInstance",
+      "integration_params": {
+        "adapter_name": "gcp",
+        "method": "compute.instances.stop",
+        "parameters": {
+          "project": "devops-demo-prod",
+          "zone": "us-central1-a",
+          "instance": "dev-server-1"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Implement instance scheduling",
+      "type": "cli",
+      "command": "gcloud scheduler jobs create pubsub start-dev-instances --schedule='0 8 * * MON-FRI' --topic=instance-scheduler --message-body='{\"action\":\"start\",\"tags\":[\"environment:development\"]}' --time-zone='America/New_York'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Resize overprovisioned instances",
+      "type": "integration",
+      "integration_name": "SetMachineType",
+      "integration_params": {
+        "adapter_name": "gcp",
+        "method": "compute.instances.setMachineType",
+        "parameters": {
+          "project": "devops-demo-prod",
+          "zone": "us-central1-a",
+          "instance": "prod-server-1",
+          "body": {
+            "machineType": "zones/us-central1-a/machineTypes/n2-standard-2"
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Enable committed use discounts",
+      "type": "cli",
+      "command": "gcloud compute commitments create prod-commitment --plan=12-month --resources=vcpu=100,memory=400GB --region=us-central1",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Generate cost optimization report",
+      "type": "cli",
+      "command": "bq query --use_legacy_sql=false 'SELECT service.description, SUM(cost) as total_cost, SUM(CASE WHEN labels.key=\"environment\" AND labels.value=\"development\" THEN cost ELSE 0 END) as dev_cost FROM `billing_dataset.gcp_billing_export_v1` WHERE DATE(_PARTITIONTIME) >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY) GROUP BY 1 ORDER BY 2 DESC LIMIT 10'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

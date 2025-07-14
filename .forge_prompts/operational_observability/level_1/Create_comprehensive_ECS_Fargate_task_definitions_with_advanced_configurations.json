@@ -1,0 +1,53 @@
+{
+  "goal": "Create comprehensive ECS Fargate task definitions with advanced configurations",
+  "steps": [
+    {
+      "name": "Review ECS patterns in codebase",
+      "type": "prompt",
+      "prompt": "Examine existing ECS configurations to understand task definition patterns, container configurations, and secret management approaches.",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Design multi-container task definition",
+      "type": "prompt",
+      "prompt": "Create ECS task definition with main application container, sidecar for log forwarding to Datadog, and init container for configuration. Include health checks and resource limits.",
+      "parameters": {},
+      "files": [
+        "ecs/task-definitions/api-service.json"
+      ]
+    },
+    {
+      "name": "Configure secrets and environment variables",
+      "type": "prompt",
+      "prompt": "Set up task definition to use AWS Secrets Manager for database credentials and Parameter Store for configuration values. Include proper IAM task execution role.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/ecs/secrets.tf"
+      ]
+    },
+    {
+      "name": "Implement service auto-scaling",
+      "type": "prompt",
+      "prompt": "Configure ECS service with target tracking auto-scaling based on CPU and memory metrics. Include scale-in/out policies and CloudWatch alarms.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/ecs/autoscaling.tf"
+      ]
+    },
+    {
+      "name": "Validate task definition",
+      "type": "cli",
+      "command": "ecs-cli compose --file ecs/task-definitions/api-service.json validate",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Check container security",
+      "type": "cli",
+      "command": "docker scout cves --format json --only-severity critical,high api-service:latest",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

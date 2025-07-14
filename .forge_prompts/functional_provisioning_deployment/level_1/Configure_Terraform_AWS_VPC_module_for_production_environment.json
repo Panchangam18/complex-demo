@@ -1,0 +1,40 @@
+{
+  "goal": "Configure Terraform AWS VPC module for production environment",
+  "steps": [
+    {
+      "name": "Review VPC module structure",
+      "type": "prompt",
+      "prompt": "Examine the AWS VPC module to understand the configurable variables and outputs.",
+      "parameters": {},
+      "files": [
+        "complex-demo/terraform/modules/aws/vpc/main.tf",
+        "complex-demo/terraform/modules/aws/vpc/variables.tf"
+      ]
+    },
+    {
+      "name": "Create production VPC configuration",
+      "type": "prompt",
+      "prompt": "Create a production environment Terraform configuration that uses the VPC module with production-appropriate CIDR blocks and subnet configurations.",
+      "parameters": {},
+      "files": [
+        "complex-demo/terraform/envs/prod/us-west-2/vpc.tf"
+      ]
+    },
+    {
+      "name": "Configure VPC outputs",
+      "type": "prompt",
+      "prompt": "Update the outputs.tf file to expose necessary VPC information for other modules.",
+      "parameters": {},
+      "files": [
+        "complex-demo/terraform/modules/aws/vpc/outputs.tf"
+      ]
+    },
+    {
+      "name": "Validate Terraform configuration",
+      "type": "cli",
+      "command": "cd complex-demo/terraform/modules/aws/vpc && terraform fmt && terraform validate",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

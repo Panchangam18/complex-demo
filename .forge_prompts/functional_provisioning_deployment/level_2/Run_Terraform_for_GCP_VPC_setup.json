@@ -1,0 +1,26 @@
+{
+  "goal": "Run Terraform for GCP VPC setup",
+  "steps": [
+    {
+      "name": "Initialize GCP module",
+      "type": "cli",
+      "command": "cd terraform/modules/gcp/vpc && terraform init",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Apply VPC configuration",
+      "type": "cli",
+      "command": "cd terraform/modules/gcp/vpc && terraform apply -auto-approve",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify VPC creation",
+      "type": "cli",
+      "command": "gcloud compute networks list --filter='name:prod-vpc'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

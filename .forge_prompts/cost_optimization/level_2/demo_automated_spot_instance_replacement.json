@@ -1,0 +1,259 @@
+{
+  "goal": "Automatically replace On-Demand instances with Spot instances for development and batch processing workloads",
+  "steps": [
+    {
+      "name": "List development environment instances",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ec2.DescribeInstances",
+      "parameters": {
+        "Filters": [
+          {
+            "Name": "tag:environment",
+            "Values": ["dev", "development", "staging"]
+          },
+          {
+            "Name": "instance-state-name",
+            "Values": ["running"]
+          }
+        ],
+        "MaxResults": 1000
+      },
+      "files": ["spot/dev-instances.json"]
+    },
+    {
+      "name": "Analyze instance runtime patterns",
+      "type": "prompt",
+      "prompt": "Filter instances running continuously for >7 days that are good candidates for Spot replacement. Group by instance type and AZ.",
+      "parameters": {
+        "minimum_runtime_days": 7,
+        "exclude_critical_tags": ["production", "database", "stateful"],
+        "group_by": ["instance_type", "availability_zone"]
+      },
+      "files": ["spot/spot-candidates.json"]
+    },
+    {
+      "name": "Get Spot price history",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ec2.DescribeSpotPriceHistory",
+      "parameters": {
+        "InstanceTypes": ["${INSTANCE_TYPE}"],
+        "ProductDescriptions": ["Linux/UNIX"],
+        "StartTime": "${WEEK_AGO}",
+        "EndTime": "${NOW}",
+        "MaxResults": 1000
+      },
+      "files": ["spot/price-history.json"]
+    },
+    {
+      "name": "Calculate Spot savings and interruption risk",
+      "type": "prompt",
+      "prompt": "Analyze Spot price history to calculate average savings vs On-Demand and interruption risk based on price volatility.",
+      "parameters": {
+        "price_percentile": 80,
+        "volatility_threshold": 0.2,
+        "minimum_savings_percent": 50,
+        "availability_zones_required": 2
+      },
+      "files": ["spot/savings-analysis.json"]
+    },
+    {
+      "name": "Create launch template for Spot",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ec2.CreateLaunchTemplate",
+      "parameters": {
+        "LaunchTemplateName": "spot-fleet-${DATE}",
+        "LaunchTemplateData": {
+          "ImageId": "${AMI_ID}",
+          "InstanceType": "${INSTANCE_TYPE}",
+          "SecurityGroupIds": ["${SECURITY_GROUPS}"],
+          "IamInstanceProfile": {
+            "Arn": "${INSTANCE_PROFILE_ARN}"
+          },
+          "UserData": "${USER_DATA_BASE64}",
+          "TagSpecifications": [{
+            "ResourceType": "instance",
+            "Tags": [
+              {"Key": "Environment", "Value": "dev"},
+              {"Key": "InstanceLifecycle", "Value": "spot"},
+              {"Key": "ManagedBy", "Value": "automated-spot-optimizer"}
+            ]
+          }]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Create mixed instances Auto Scaling Group",
+      "type": "integration",
+      "integration": "aws",
+      "method": "autoscaling.CreateAutoScalingGroup",
+      "parameters": {
+        "AutoScalingGroupName": "dev-spot-asg-${DATE}",
+        "MixedInstancesPolicy": {
+          "LaunchTemplate": {
+            "LaunchTemplateSpecification": {
+              "LaunchTemplateName": "spot-fleet-${DATE}",
+              "Version": "$Latest"
+            },
+            "Overrides": "${INSTANCE_TYPE_OVERRIDES}"
+          },
+          "InstancesDistribution": {
+            "OnDemandPercentageAboveBaseCapacity": 20,
+            "SpotAllocationStrategy": "capacity-optimized",
+            "SpotMaxPrice": ""
+          }
+        },
+        "MinSize": 1,
+        "MaxSize": 10,
+        "DesiredCapacity": "${CURRENT_INSTANCE_COUNT}",
+        "VPCZoneIdentifier": "${SUBNET_IDS}"
+      },
+      "files": []
+    },
+    {
+      "name": "Set up Spot interruption handling",
+      "type": "cli",
+      "command": "aws autoscaling put-lifecycle-hook --lifecycle-hook-name spot-interruption-hook --auto-scaling-group-name dev-spot-asg-${DATE} --lifecycle-transition autoscaling:EC2_INSTANCE_TERMINATING --default-result CONTINUE --heartbeat-timeout 120 --notification-metadata '{\"action\":\"drain-tasks\"}'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy instance termination handler",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "AppsV1Api.create_namespaced_daemon_set",
+      "parameters": {
+        "namespace": "kube-system",
+        "body": {
+          "apiVersion": "apps/v1",
+          "kind": "DaemonSet",
+          "metadata": {
+            "name": "aws-node-termination-handler"
+          },
+          "spec": {
+            "selector": {
+              "matchLabels": {
+                "app": "aws-node-termination-handler"
+              }
+            },
+            "template": {
+              "metadata": {
+                "labels": {
+                  "app": "aws-node-termination-handler"
+                }
+              },
+              "spec": {
+                "containers": [{
+                  "name": "aws-node-termination-handler",
+                  "image": "public.ecr.aws/aws-ec2/aws-node-termination-handler:v1.19.0",
+                  "env": [
+                    {"name": "ENABLE_SPOT_INTERRUPTION_DRAINING", "value": "true"},
+                    {"name": "ENABLE_SCHEDULED_EVENT_DRAINING", "value": "true"}
+                  ]
+                }],
+                "nodeSelector": {
+                  "node.kubernetes.io/lifecycle": "spot"
+                }
+              }
+            }
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Migrate workloads to Spot instances",
+      "type": "prompt",
+      "prompt": "Create migration plan to gradually move workloads from On-Demand to Spot instances during low-traffic windows.",
+      "parameters": {
+        "migration_batch_size": 5,
+        "drain_timeout_seconds": 300,
+        "health_check_interval": 60,
+        "rollback_on_failure": true
+      },
+      "files": ["spot/migration-plan.json"]
+    },
+    {
+      "name": "Drain and terminate On-Demand instances",
+      "type": "cli",
+      "command": "for instance in $(cat spot/migration-plan.json | jq -r '.instances_to_terminate[]'); do aws ec2 create-tags --resources $instance --tags Key=ScheduledForTermination,Value=$(date -u +%Y-%m-%dT%H:%M:%SZ); kubectl drain --node-name $(aws ec2 describe-instances --instance-ids $instance --query 'Reservations[0].Instances[0].PrivateDnsName' --output text) --ignore-daemonsets --delete-emptydir-data; done",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor Spot interruption metrics",
+      "type": "integration",
+      "integration": "aws",
+      "method": "cloudwatch.PutMetricAlarm",
+      "parameters": {
+        "AlarmName": "SpotInterruptionRate-${ASG_NAME}",
+        "ComparisonOperator": "GreaterThanThreshold",
+        "EvaluationPeriods": 2,
+        "MetricName": "SpotInstanceInterruptions",
+        "Namespace": "AWS/EC2Spot",
+        "Period": 300,
+        "Statistic": "Sum",
+        "Threshold": 5,
+        "ActionsEnabled": true,
+        "AlarmActions": ["${SNS_TOPIC_ARN}"],
+        "AlarmDescription": "Alert when Spot interruption rate is too high"
+      },
+      "files": []
+    },
+    {
+      "name": "Adjust instance diversification",
+      "type": "prompt",
+      "prompt": "Monitor Spot interruption patterns and automatically adjust instance type diversification if interruptions exceed 5% threshold.",
+      "parameters": {
+        "interruption_threshold": 0.05,
+        "add_instance_types": 2,
+        "prefer_newer_generations": true,
+        "maintain_price_threshold": true
+      },
+      "files": ["spot/diversification-update.json"]
+    },
+    {
+      "name": "Update ASG with new instance types",
+      "type": "integration",
+      "integration": "aws",
+      "method": "autoscaling.UpdateAutoScalingGroup",
+      "parameters": {
+        "AutoScalingGroupName": "dev-spot-asg-${DATE}",
+        "MixedInstancesPolicy": {
+          "LaunchTemplate": {
+            "Overrides": "${UPDATED_INSTANCE_OVERRIDES}"
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Tag resources for cost tracking",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ec2.CreateTags",
+      "parameters": {
+        "Resources": "${SPOT_INSTANCE_IDS}",
+        "Tags": [
+          {"Key": "CostOptimization", "Value": "SpotMigration"},
+          {"Key": "MigrationDate", "Value": "${DATE}"},
+          {"Key": "EstimatedMonthlySavings", "Value": "${MONTHLY_SAVINGS}"}
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Generate cost savings report",
+      "type": "prompt",
+      "prompt": "Calculate actual vs projected savings from Spot migration including instance hours, cost reduction percentage, and interruption costs.",
+      "parameters": {
+        "metrics": ["on_demand_cost", "spot_cost", "savings_amount", "savings_percentage", "interruption_count", "availability_percentage"],
+        "time_period": "last_30_days"
+      },
+      "files": ["spot/savings-report.json"]
+    }
+  ]
+}

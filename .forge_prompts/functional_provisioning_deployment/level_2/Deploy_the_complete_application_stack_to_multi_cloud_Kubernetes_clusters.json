@@ -1,0 +1,61 @@
+{
+  "goal": "Deploy the complete application stack to multi-cloud Kubernetes clusters",
+  "steps": [
+    {
+      "name": "Deploy infrastructure with Terraform",
+      "type": "cli",
+      "command": "cd terraform && make init && make plan ENV=prod",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Apply Terraform changes",
+      "type": "cli",
+      "command": "cd terraform && make apply ENV=prod AUTO_APPROVE=true",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure kubectl contexts",
+      "type": "cli",
+      "command": "aws eks update-kubeconfig --name prod-eks-cluster --region us-west-2 && gcloud container clusters get-credentials prod-gke-cluster --zone us-central1-a",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy Consul to clusters",
+      "type": "cli",
+      "command": "helm install consul hashicorp/consul -f terraform/modules/consul/k8s-client/values.yaml --namespace consul --create-namespace",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy backend application",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/deployments/backend-deployment.yaml && kubectl apply -f k8s/services/backend-service.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy frontend application",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/deployments/frontend-deployment.yaml && kubectl apply -f k8s/services/frontend-service.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify deployments",
+      "type": "cli",
+      "command": "kubectl get deployments -n default && kubectl get services -n default",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Check application health",
+      "type": "cli",
+      "command": "kubectl exec -it deployment/backend -- curl localhost:3000/health",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

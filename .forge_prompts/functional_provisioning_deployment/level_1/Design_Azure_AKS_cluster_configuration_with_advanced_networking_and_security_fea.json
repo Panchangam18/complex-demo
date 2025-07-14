@@ -1,0 +1,55 @@
+{
+  "goal": "Design Azure AKS cluster configuration with advanced networking and security features",
+  "steps": [
+    {
+      "name": "Analyze Azure infrastructure patterns",
+      "type": "prompt",
+      "prompt": "Review existing Azure configurations in the codebase to understand resource naming, network architecture, and security baseline implementations.",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create AKS cluster with Azure CNI",
+      "type": "prompt",
+      "prompt": "Design Terraform configuration for AKS cluster with Azure CNI networking, multiple node pools (system and user), autoscaling enabled, and Azure AD integration for RBAC.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/azure/aks/main.tf"
+      ]
+    },
+    {
+      "name": "Configure network security",
+      "type": "prompt",
+      "prompt": "Implement network policies, Azure Firewall integration, and private endpoints for AKS API server. Configure ingress controller with WAF-enabled Application Gateway.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/azure/aks/network-security.tf"
+      ]
+    },
+    {
+      "name": "Set up monitoring and diagnostics",
+      "type": "prompt",
+      "prompt": "Configure Azure Monitor for containers, enable diagnostic logs, and set up alerts for cluster health, node issues, and pod failures. Include Log Analytics workspace configuration.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/azure/aks/monitoring.tf"
+      ]
+    },
+    {
+      "name": "Validate Terraform configuration",
+      "type": "cli",
+      "command": "terraform validate",
+      "parameters": {
+        "working_directory": "terraform/modules/azure/aks/"
+      },
+      "files": []
+    },
+    {
+      "name": "Run Azure security best practices check",
+      "type": "cli",
+      "command": "terrascan scan -i terraform -d terraform/modules/azure/aks/ --policy-type azure",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

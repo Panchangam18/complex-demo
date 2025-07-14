@@ -1,0 +1,204 @@
+{
+  "goal": "Automatically add node capacity when pods remain pending due to insufficient cluster resources",
+  "steps": [
+    {
+      "name": "List pods with Pending status",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "CoreV1Api.list_pod_for_all_namespaces",
+      "parameters": {
+        "field_selector": "status.phase=Pending",
+        "timeout_seconds": 30
+      },
+      "files": ["scaling/pending-pods.json"]
+    },
+    {
+      "name": "Get pod events for scheduling failures",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "CoreV1Api.list_event_for_all_namespaces",
+      "parameters": {
+        "field_selector": "reason=FailedScheduling",
+        "limit": 100
+      },
+      "files": ["scaling/scheduling-events.json"]
+    },
+    {
+      "name": "Analyze resource requirements",
+      "type": "prompt",
+      "prompt": "Analyze pending pods to extract CPU/memory requirements, node selectors, tolerations, and identify if they need GPU or specific instance types.",
+      "parameters": {
+        "extract_requirements": ["cpu", "memory", "gpu", "nodeSelector", "tolerations", "affinity"],
+        "group_by_requirements": true
+      },
+      "files": ["scaling/resource-analysis.json"]
+    },
+    {
+      "name": "Get current node capacity",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "CoreV1Api.list_node",
+      "parameters": {
+        "label_selector": "node.kubernetes.io/instance-type"
+      },
+      "files": ["scaling/current-nodes.json"]
+    },
+    {
+      "name": "Check node pool limits",
+      "type": "integration",
+      "integration": "aws",
+      "method": "eks.DescribeNodegroup",
+      "parameters": {
+        "clusterName": "${CLUSTER_NAME}",
+        "nodegroupName": "${NODEGROUP_NAME}"
+      },
+      "files": ["scaling/nodegroup-limits.json"]
+    },
+    {
+      "name": "Calculate optimal scaling strategy",
+      "type": "prompt",
+      "prompt": "Based on pending resource requirements and current capacity, calculate how many nodes to add. Add 2 nodes if pending pods need <50% of node capacity, 4 if >50%.",
+      "parameters": {
+        "scaling_buffer": 0.2,
+        "min_nodes_to_add": 1,
+        "max_nodes_to_add": 10,
+        "consider_spot_instances": true
+      },
+      "files": ["scaling/scaling-decision.json"]
+    },
+    {
+      "name": "Update node group desired capacity",
+      "type": "integration",
+      "integration": "aws",
+      "method": "eks.UpdateNodegroupConfig",
+      "parameters": {
+        "clusterName": "${CLUSTER_NAME}",
+        "nodegroupName": "${NODEGROUP_NAME}",
+        "scalingConfig": {
+          "desiredSize": "${NEW_DESIRED_SIZE}",
+          "maxSize": "${NEW_MAX_SIZE}"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Create autoscaling event",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "CoreV1Api.create_namespaced_event",
+      "parameters": {
+        "namespace": "kube-system",
+        "body": {
+          "metadata": {
+            "name": "node-pool-scaling-${TIMESTAMP}",
+            "namespace": "kube-system"
+          },
+          "involvedObject": {
+            "kind": "NodeGroup",
+            "name": "${NODEGROUP_NAME}",
+            "namespace": "kube-system"
+          },
+          "reason": "ScalingInitiated",
+          "message": "Scaling node pool from ${OLD_SIZE} to ${NEW_SIZE} due to ${PENDING_COUNT} pending pods",
+          "type": "Normal"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Monitor node provisioning status",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "CoreV1Api.list_node",
+      "parameters": {
+        "watch": true,
+        "timeout_seconds": 300,
+        "label_selector": "node.kubernetes.io/instance-type"
+      },
+      "files": ["scaling/node-watch-status.json"]
+    },
+    {
+      "name": "Wait for nodes to be ready",
+      "type": "prompt",
+      "prompt": "Monitor new nodes until they reach Ready state. Track provisioning time and any initialization issues.",
+      "parameters": {
+        "max_wait_minutes": 10,
+        "check_interval_seconds": 30,
+        "required_state": "Ready"
+      },
+      "files": ["scaling/node-readiness.json"]
+    },
+    {
+      "name": "Verify pods are scheduling",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "CoreV1Api.list_pod_for_all_namespaces",
+      "parameters": {
+        "field_selector": "status.phase=Pending",
+        "timeout_seconds": 30
+      },
+      "files": ["scaling/remaining-pending-pods.json"]
+    },
+    {
+      "name": "Check for scheduling conflicts",
+      "type": "prompt",
+      "prompt": "If pods remain pending after nodes are ready, analyze for taints/tolerations mismatches, affinity conflicts, or PodDisruptionBudget violations.",
+      "parameters": {
+        "check_items": ["taints", "tolerations", "nodeAffinity", "podAntiAffinity", "topologySpreadConstraints"]
+      },
+      "files": ["scaling/scheduling-conflicts.json"]
+    },
+    {
+      "name": "Create alert for unresolved issues",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "MetricsApi.submit_metrics",
+      "parameters": {
+        "body": {
+          "series": [
+            {
+              "metric": "kubernetes.pending_pods.unschedulable",
+              "points": [["{TIMESTAMP}", "${UNSCHEDULED_COUNT}"]],
+              "type": "gauge",
+              "tags": ["cluster:${CLUSTER_NAME}", "severity:high"]
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Update cluster metrics",
+      "type": "integration",
+      "integration": "aws",
+      "method": "cloudwatch.PutMetricData",
+      "parameters": {
+        "Namespace": "EKS/AutoScaling",
+        "MetricData": [
+          {
+            "MetricName": "NodeScalingEvents",
+            "Value": 1,
+            "Unit": "Count",
+            "Dimensions": [
+              {"Name": "ClusterName", "Value": "${CLUSTER_NAME}"},
+              {"Name": "Reason", "Value": "PendingPods"},
+              {"Name": "NodesAdded", "Value": "${NODES_ADDED}"}
+            ],
+            "Timestamp": "${TIMESTAMP}"
+          }
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Send scaling notification",
+      "type": "prompt",
+      "prompt": "Send notification about the scaling event including number of nodes added, reason, and any remaining issues that need manual intervention.",
+      "parameters": {
+        "notification_channels": ["slack", "email"],
+        "include_details": ["scaling_reason", "nodes_added", "cost_impact", "remaining_issues"]
+      },
+      "files": ["scaling/notification.json"]
+    }
+  ]
+}

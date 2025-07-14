@@ -1,0 +1,28 @@
+{
+  "goal": "Create CircleCI pipeline for Node.js microservice",
+  "steps": [
+    {
+      "name": "Design CircleCI config",
+      "type": "prompt",
+      "prompt": "Create CircleCI configuration for Node.js app with: test job using Jest, build Docker image, and push to registry. Use orbs for simplification.",
+      "parameters": {},
+      "files": [
+        ".circleci/config.yml"
+      ]
+    },
+    {
+      "name": "Validate CircleCI config",
+      "type": "cli",
+      "command": "circleci config validate .circleci/config.yml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test locally",
+      "type": "cli",
+      "command": "circleci local execute --job test",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

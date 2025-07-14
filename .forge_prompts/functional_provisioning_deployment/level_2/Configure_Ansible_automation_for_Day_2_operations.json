@@ -1,0 +1,58 @@
+{
+  "goal": "Configure Ansible automation for Day-2 operations",
+  "steps": [
+    {
+      "name": "Review Ansible playbooks",
+      "type": "prompt",
+      "prompt": "Examine ansible/playbooks directory to understand existing automation patterns for configuration management.",
+      "parameters": {},
+      "files": [
+        "ansible/playbooks/"
+      ]
+    },
+    {
+      "name": "Create application configuration playbook",
+      "type": "prompt",
+      "prompt": "Create an Ansible playbook to configure the Node.js application settings across all environments based on existing playbook patterns.",
+      "parameters": {},
+      "files": [
+        "ansible/playbooks/configure-app.yml"
+      ]
+    },
+    {
+      "name": "Deploy Ansible AWX",
+      "type": "cli",
+      "command": "cd terraform/modules/azure/ansible-controller && terraform apply -auto-approve",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Import playbooks to AWX",
+      "type": "cli",
+      "command": "awx project create --name 'Complex Demo' --scm-type git --scm-url https://github.com/example/complex-demo.git",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create job template",
+      "type": "cli",
+      "command": "awx job_template create --name 'Configure Application' --project 'Complex Demo' --playbook 'ansible/playbooks/configure-app.yml' --inventory 'Production'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Run configuration job",
+      "type": "cli",
+      "command": "awx job_template launch 'Configure Application' --monitor",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify configuration",
+      "type": "cli",
+      "command": "ansible -i ansible/inventory/production all -m shell -a 'cat /etc/app/config.json'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

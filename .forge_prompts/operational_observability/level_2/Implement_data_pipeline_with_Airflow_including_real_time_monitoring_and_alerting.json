@@ -1,0 +1,61 @@
+{
+  "goal": "Implement data pipeline with Airflow including real-time monitoring and alerting",
+  "steps": [
+    {
+      "name": "Deploy Airflow DAG",
+      "type": "cli",
+      "command": "cp airflow/dags/data_pipeline_dag.py $AIRFLOW_HOME/dags/ && airflow dags unpause data_pipeline",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Trigger pipeline execution",
+      "type": "cli",
+      "command": "airflow dags trigger data_pipeline --conf '{\"source_date\": \"2024-01-15\", \"batch_size\": 10000}'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor DAG execution",
+      "type": "cli",
+      "command": "airflow dags state data_pipeline $(date +%Y-%m-%d) && airflow tasks states-for-dag-run data_pipeline data_pipeline__$(date +%Y-%m-%d)",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Check data quality metrics",
+      "type": "cli",
+      "command": "airflow tasks test data_pipeline data_quality_check $(date +%Y-%m-%d) 2>&1 | grep -E 'Quality score:|Records processed:'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Query processed data in BigQuery",
+      "type": "cli",
+      "command": "bq query --use_legacy_sql=false 'SELECT COUNT(*) as total_records, AVG(processing_time) as avg_time, MAX(created_at) as latest_record FROM `project.dataset.processed_data` WHERE DATE(created_at) = CURRENT_DATE()'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Set up Airflow alerts",
+      "type": "cli",
+      "command": "airflow connections add 'slack_alerts' --conn-type 'http' --conn-host 'https://hooks.slack.com' --conn-password '/services/XXX/YYY/ZZZ'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test SLA violation handling",
+      "type": "cli",
+      "command": "airflow dags test data_pipeline --execution-date $(date -d '1 hour ago' +%Y-%m-%dT%H:%M:%S)",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Generate pipeline performance report",
+      "type": "cli",
+      "command": "airflow task_instances list --dag-id data_pipeline --state success --start-date $(date -d '7 days ago' +%Y-%m-%d) | awk '{print $4, $5, $6}' | sort | uniq -c",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

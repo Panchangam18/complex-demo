@@ -1,0 +1,56 @@
+{
+  "goal": "Execute full platform deployment using deploy.sh with custom configurations",
+  "steps": [
+    {
+      "name": "Review deployment script",
+      "type": "prompt",
+      "prompt": "Examine deploy.sh to understand the deployment phases and configuration options available.",
+      "parameters": {},
+      "files": [
+        "complex-demo/deploy.sh"
+      ]
+    },
+    {
+      "name": "Set environment variables",
+      "type": "cli",
+      "command": "export ENV=dev && export REGION=us-east-2 && export SKIP_TERRAFORM=false && export ENABLE_MONITORING=true",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Run pre-deployment validation",
+      "type": "cli",
+      "command": "bash complex-demo/scripts/test-env.sh",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Execute deployment",
+      "type": "cli",
+      "command": "bash complex-demo/deploy.sh --phase all --log-level debug",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor deployment progress",
+      "type": "cli",
+      "command": "tail -f deployment-*.log | grep -E 'STEP|SUCCESS|ERROR|WARNING'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Validate deployment",
+      "type": "cli",
+      "command": "bash complex-demo/scripts/validate-complete-setup.sh",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Extract credentials",
+      "type": "cli",
+      "command": "bash complex-demo/scripts/extract-credentials-to-env.sh > credentials.env",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

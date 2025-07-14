@@ -1,0 +1,193 @@
+{
+  "goal": "Build zero-downtime database migration system with CDC and gradual cutover",
+  "steps": [
+    {
+      "name": "Assess source database",
+      "type": "integration",
+      "integration": "aws",
+      "method": "rds.describe_db_instances",
+      "parameters": {
+        "DBInstanceIdentifier": "legacy-mysql-db"
+      },
+      "files": []
+    },
+    {
+      "name": "Create target Aurora cluster",
+      "type": "prompt",
+      "prompt": "Provision Aurora PostgreSQL cluster with appropriate instance sizes, parameter groups optimized for the workload, and encryption enabled.",
+      "parameters": {},
+      "files": [
+        "terraform/database-migration/aurora-target.tf"
+      ]
+    },
+    {
+      "name": "Set up DMS replication instance",
+      "type": "integration",
+      "integration": "aws",
+      "method": "dms.create_replication_instance",
+      "parameters": {
+        "ReplicationInstanceIdentifier": "migration-instance",
+        "ReplicationInstanceClass": "dms.r5.xlarge",
+        "VpcSecurityGroupIds": [
+          "sg-migration"
+        ],
+        "MultiAZ": true
+      },
+      "files": []
+    },
+    {
+      "name": "Configure source endpoint",
+      "type": "integration",
+      "integration": "aws",
+      "method": "dms.create_endpoint",
+      "parameters": {
+        "EndpointIdentifier": "mysql-source",
+        "EndpointType": "source",
+        "EngineName": "mysql",
+        "ServerName": "legacy-mysql-db.region.rds.amazonaws.com",
+        "Port": 3306,
+        "DatabaseName": "production"
+      },
+      "files": []
+    },
+    {
+      "name": "Configure target endpoint",
+      "type": "integration",
+      "integration": "aws",
+      "method": "dms.create_endpoint",
+      "parameters": {
+        "EndpointIdentifier": "aurora-target",
+        "EndpointType": "target",
+        "EngineName": "aurora-postgresql",
+        "ServerName": "new-aurora-cluster.region.rds.amazonaws.com",
+        "Port": 5432,
+        "DatabaseName": "production"
+      },
+      "files": []
+    },
+    {
+      "name": "Create migration task",
+      "type": "integration",
+      "integration": "aws",
+      "method": "dms.create_replication_task",
+      "parameters": {
+        "ReplicationTaskIdentifier": "full-load-and-cdc",
+        "SourceEndpointArn": "${SOURCE_ENDPOINT_ARN}",
+        "TargetEndpointArn": "${TARGET_ENDPOINT_ARN}",
+        "ReplicationInstanceArn": "${REPLICATION_INSTANCE_ARN}",
+        "MigrationType": "full-load-and-cdc",
+        "TableMappings": "{\"rules\":[{\"rule-type\":\"selection\",\"rule-id\":\"1\",\"rule-name\":\"1\",\"object-locator\":{\"schema-name\":\"%\",\"table-name\":\"%\"},\"rule-action\":\"include\"}]}"
+      },
+      "files": []
+    },
+    {
+      "name": "Start replication task",
+      "type": "cli",
+      "command": "aws dms start-replication-task --replication-task-arn ${TASK_ARN} --start-replication-task-type start-replication",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor replication lag",
+      "type": "integration",
+      "integration": "aws",
+      "method": "cloudwatch.get_metric_statistics",
+      "parameters": {
+        "Namespace": "AWS/DMS",
+        "MetricName": "CDCLatencySource",
+        "Dimensions": [
+          {
+            "Name": "ReplicationTaskIdentifier",
+            "Value": "full-load-and-cdc"
+          }
+        ],
+        "StartTime": "2024-01-15T00:00:00Z",
+        "EndTime": "2024-01-15T01:00:00Z",
+        "Period": 60,
+        "Statistics": [
+          "Average"
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Implement dual-write pattern",
+      "type": "prompt",
+      "prompt": "Modify application to write to both databases during migration. Implement feature flags to control read source and handle consistency between databases.",
+      "parameters": {},
+      "files": [
+        "application/database/dual-write-adapter.py"
+      ]
+    },
+    {
+      "name": "Validate data consistency",
+      "type": "cli",
+      "command": "python scripts/migration/data-validator.py --source mysql://legacy-db --target postgresql://new-db --sample-size 10000",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure traffic shifting",
+      "type": "integration",
+      "integration": "aws",
+      "method": "route53.change_resource_record_sets",
+      "parameters": {
+        "HostedZoneId": "Z123456",
+        "ChangeBatch": {
+          "Changes": [
+            {
+              "Action": "UPSERT",
+              "ResourceRecordSet": {
+                "Name": "db.internal.example.com",
+                "Type": "CNAME",
+                "SetIdentifier": "Primary",
+                "Weight": 90,
+                "TTL": 60,
+                "ResourceRecords": [
+                  {
+                    "Value": "legacy-mysql-db.region.rds.amazonaws.com"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Test application with new database",
+      "type": "cli",
+      "command": "npm run test:integration -- --database-url postgresql://new-aurora-cluster/production",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Complete cutover",
+      "type": "prompt",
+      "prompt": "Execute final cutover by updating Route53 weights to 100% new database, stopping replication task, and updating application configuration. Monitor for any issues.",
+      "parameters": {},
+      "files": [
+        "runbooks/database-cutover.md"
+      ]
+    },
+    {
+      "name": "Verify migration success",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "MetricsApi.query_scalar_data",
+      "parameters": {
+        "body": {
+          "queries": [
+            {
+              "data_source": "metrics",
+              "query": "avg:database.query.time{db:aurora-postgresql}",
+              "name": "query_performance"
+            }
+          ]
+        }
+      },
+      "files": []
+    }
+  ]
+}

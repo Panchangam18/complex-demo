@@ -1,0 +1,103 @@
+{
+  "goal": "Create serverless application infrastructure with AWS Lambda, API Gateway, and DynamoDB",
+  "steps": [
+    {
+      "name": "Design serverless architecture",
+      "type": "prompt",
+      "prompt": "Create architectural design for a serverless microservices application using Lambda functions, API Gateway for REST APIs, and DynamoDB for data storage. Include event-driven patterns.",
+      "parameters": {},
+      "files": [
+        "docs/serverless-architecture.md"
+      ]
+    },
+    {
+      "name": "Write Lambda function code",
+      "type": "prompt",
+      "prompt": "Develop Lambda functions in Python for CRUD operations on a product catalog. Include proper error handling, input validation, and AWS SDK integration for DynamoDB access.",
+      "parameters": {},
+      "files": [
+        "lambda-functions/products/handler.py",
+        "lambda-functions/products/requirements.txt"
+      ]
+    },
+    {
+      "name": "Create SAM template",
+      "type": "prompt",
+      "prompt": "Write AWS SAM (Serverless Application Model) template defining Lambda functions, API Gateway endpoints, DynamoDB tables, and IAM roles with least-privilege permissions.",
+      "parameters": {},
+      "files": [
+        "serverless/template.yaml"
+      ]
+    },
+    {
+      "name": "Configure API Gateway",
+      "type": "prompt",
+      "prompt": "Design API Gateway configuration with request/response models, input validation, CORS settings, and usage plans with API keys for rate limiting.",
+      "parameters": {},
+      "files": [
+        "serverless/api-spec.yaml"
+      ]
+    },
+    {
+      "name": "Add Lambda layers",
+      "type": "prompt",
+      "prompt": "Create Lambda layers for shared dependencies and utilities. Include AWS SDK extensions, common validation functions, and logging utilities.",
+      "parameters": {},
+      "files": [
+        "lambda-layers/shared-utils/python/",
+        "lambda-layers/build-layers.sh"
+      ]
+    },
+    {
+      "name": "Implement caching strategy",
+      "type": "prompt",
+      "prompt": "Configure API Gateway caching and DynamoDB DAX (DynamoDB Accelerator) for improved performance. Set appropriate TTL values and cache key parameters.",
+      "parameters": {},
+      "files": [
+        "serverless/caching-config.yaml"
+      ]
+    },
+    {
+      "name": "Validate SAM template",
+      "type": "cli",
+      "command": "sam validate --template serverless/template.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Build Lambda packages",
+      "type": "cli",
+      "command": "sam build --template serverless/template.yaml --use-container",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Run local testing",
+      "type": "cli",
+      "command": "sam local start-api --template serverless/template.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test API endpoints locally",
+      "type": "cli",
+      "command": "curl -X POST http://localhost:3000/products -H 'Content-Type: application/json' -d '{\"name\":\"Test Product\",\"price\":99.99}'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Run security scanning",
+      "type": "cli",
+      "command": "cfn-lint serverless/template.yaml && safety check -r lambda-functions/products/requirements.txt",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Validate serverless best practices",
+      "type": "prompt",
+      "prompt": "Review the serverless application for best practices: cold start optimization, proper timeout settings, memory allocation, and error handling patterns.",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

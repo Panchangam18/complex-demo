@@ -1,0 +1,28 @@
+{
+  "goal": "Create Helm chart for microservice",
+  "steps": [
+    {
+      "name": "Initialize Helm chart",
+      "type": "cli",
+      "command": "helm create microservice-chart",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Customize values",
+      "type": "prompt",
+      "prompt": "Update Helm chart values.yaml with resource limits, health checks, and ingress configuration.",
+      "parameters": {},
+      "files": [
+        "microservice-chart/values.yaml"
+      ]
+    },
+    {
+      "name": "Lint chart",
+      "type": "cli",
+      "command": "helm lint microservice-chart/",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

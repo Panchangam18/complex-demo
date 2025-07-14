@@ -1,0 +1,111 @@
+{
+  "goal": "Provision GCP infrastructure with automated scaling based on custom metrics",
+  "steps": [
+    {
+      "name": "Create GCP instance template",
+      "type": "integration",
+      "integration_name": "CreateInstanceTemplate",
+      "integration_params": {
+        "adapter_name": "gcp",
+        "method": "compute.instanceTemplates.insert",
+        "parameters": {
+          "project": "devops-demo-prod",
+          "body": {
+            "name": "app-server-template-v2",
+            "properties": {
+              "machineType": "n2-standard-4",
+              "disks": [
+                {
+                  "boot": true,
+                  "initializeParams": {
+                    "sourceImage": "projects/ubuntu-os-cloud/global/images/family/ubuntu-2204-lts"
+                  }
+                }
+              ],
+              "networkInterfaces": [
+                {
+                  "network": "global/networks/prod-vpc",
+                  "subnetwork": "regions/us-central1/subnetworks/app-subnet"
+                }
+              ],
+              "metadata": {
+                "items": [
+                  {
+                    "key": "startup-script",
+                    "value": "#!/bin/bash\ncurl -sSO https://dl.google.com/cloudagents/install-monitoring-agent.sh\nsudo bash install-monitoring-agent.sh"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Create managed instance group",
+      "type": "cli",
+      "command": "gcloud compute instance-groups managed create app-server-mig --template=app-server-template-v2 --size=3 --zone=us-central1-a --health-check=app-health-check --initial-delay=300",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure autoscaling with custom metrics",
+      "type": "cli",
+      "command": "gcloud compute instance-groups managed set-autoscaling app-server-mig --zone=us-central1-a --max-num-replicas=10 --min-num-replicas=3 --custom-metric-utilization metric=custom.googleapis.com/application/request_queue_depth,utilization-target=100",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "List running instances",
+      "type": "integration",
+      "integration_name": "ListInstances",
+      "integration_params": {
+        "adapter_name": "gcp",
+        "method": "compute.instances.list",
+        "parameters": {
+          "project": "devops-demo-prod",
+          "zone": "us-central1-a",
+          "filter": "name:app-server-mig-*"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Generate load to trigger scaling",
+      "type": "cli",
+      "command": "hey -n 10000 -c 100 -q 100 http://$(gcloud compute forwarding-rules describe app-lb-forwarding-rule --global --format='value(IPAddress)')/api/stress",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor autoscaling events",
+      "type": "cli",
+      "command": "gcloud logging read 'resource.type=\"gce_instance_group\" AND jsonPayload.event_subtype=\"compute.autoscalers.update\"' --limit=10 --format=json | jq '.[].jsonPayload'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify new instances are healthy",
+      "type": "integration",
+      "integration_name": "GetInstanceHealth",
+      "integration_params": {
+        "adapter_name": "gcp",
+        "method": "compute.instances.get",
+        "parameters": {
+          "project": "devops-demo-prod",
+          "zone": "us-central1-a",
+          "instance": "app-server-mig-xyz"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Check custom metric values",
+      "type": "cli",
+      "command": "gcloud monitoring time-series list --filter='metric.type=\"custom.googleapis.com/application/request_queue_depth\"' --format='table(metric.labels.instance_name,points[0].value.int64_value,points[0].interval.end_time)'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

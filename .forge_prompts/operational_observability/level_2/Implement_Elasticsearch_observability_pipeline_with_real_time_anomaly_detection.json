@@ -1,0 +1,175 @@
+{
+  "goal": "Implement Elasticsearch observability pipeline with real-time anomaly detection",
+  "steps": [
+    {
+      "name": "Create application log index template",
+      "type": "integration",
+      "integration_name": "indices.put_index_template",
+      "integration_params": {
+        "adapter_name": "elasticsearch",
+        "method": "indices.put_index_template",
+        "parameters": {
+          "name": "logs-app",
+          "index_patterns": [
+            "logs-app-*"
+          ],
+          "template": {
+            "settings": {
+              "number_of_shards": 3,
+              "number_of_replicas": 1,
+              "index.lifecycle.name": "logs-policy"
+            },
+            "mappings": {
+              "properties": {
+                "@timestamp": {
+                  "type": "date"
+                },
+                "level": {
+                  "type": "keyword"
+                },
+                "service": {
+                  "type": "keyword"
+                },
+                "message": {
+                  "type": "text"
+                }
+              }
+            }
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Configure data stream",
+      "type": "integration",
+      "integration_name": "indices.create_data_stream",
+      "integration_params": {
+        "adapter_name": "elasticsearch",
+        "method": "indices.create_data_stream",
+        "parameters": {
+          "name": "logs-app-production"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Set up ML anomaly detection job",
+      "type": "cli",
+      "command": "curl -X PUT 'localhost:9200/_ml/anomaly_detectors/app-error-rate' -H 'Content-Type: application/json' -d '{\"analysis_config\": {\"bucket_span\": \"5m\", \"detectors\": [{\"function\": \"high_count\", \"partition_field_name\": \"service\", \"detector_description\": \"High error rate by service\"}]}, \"data_description\": {\"time_field\": \"@timestamp\"}}'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Start real-time log ingestion test",
+      "type": "cli",
+      "command": "for i in {1..100}; do echo '{\"@timestamp\": \"'$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)'\", \"level\": \"ERROR\", \"service\": \"payment-api\", \"message\": \"Payment processing failed\"}' | curl -X POST 'localhost:9200/logs-app-production/_doc' -H 'Content-Type: application/json' -d @-; sleep 0.1; done",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Execute complex search query",
+      "type": "integration",
+      "integration_name": "msearch",
+      "integration_params": {
+        "adapter_name": "elasticsearch",
+        "method": "msearch",
+        "parameters": {
+          "body": [
+            {
+              "index": "logs-app-*"
+            },
+            {
+              "query": {
+                "bool": {
+                  "must": [
+                    {
+                      "term": {
+                        "level": "ERROR"
+                      }
+                    },
+                    {
+                      "range": {
+                        "@timestamp": {
+                          "gte": "now-1h"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "aggs": {
+                "errors_by_service": {
+                  "terms": {
+                    "field": "service",
+                    "size": 10
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Check index lifecycle status",
+      "type": "integration",
+      "integration_name": "indices.explain_data_lifecycle",
+      "integration_params": {
+        "adapter_name": "elasticsearch",
+        "method": "indices.explain_data_lifecycle",
+        "parameters": {
+          "index": "logs-app-production"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Verify ML job detected anomalies",
+      "type": "cli",
+      "command": "curl -X GET 'localhost:9200/_ml/anomaly_detectors/app-error-rate/results/records?start=now-1h&end=now' | jq '.records[] | select(.record_score > 75)'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Generate observability report",
+      "type": "integration",
+      "integration_name": "search",
+      "integration_params": {
+        "adapter_name": "elasticsearch",
+        "method": "search",
+        "parameters": {
+          "index": "logs-app-*",
+          "body": {
+            "size": 0,
+            "aggs": {
+              "service_stats": {
+                "terms": {
+                  "field": "service"
+                },
+                "aggs": {
+                  "error_rate": {
+                    "filters": {
+                      "filters": {
+                        "errors": {
+                          "term": {
+                            "level": "ERROR"
+                          }
+                        },
+                        "total": {
+                          "match_all": {}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "files": []
+    }
+  ]
+}

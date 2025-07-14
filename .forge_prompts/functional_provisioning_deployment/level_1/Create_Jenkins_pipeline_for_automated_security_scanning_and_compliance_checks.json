@@ -1,0 +1,53 @@
+{
+  "goal": "Create Jenkins pipeline for automated security scanning and compliance checks",
+  "steps": [
+    {
+      "name": "Review Jenkins pipeline patterns",
+      "type": "prompt",
+      "prompt": "Examine existing Jenkinsfile patterns in the codebase to understand shared libraries usage, credential management, and notification strategies.",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Design multi-stage security pipeline",
+      "type": "prompt",
+      "prompt": "Create Jenkinsfile with stages: dependency scanning (OWASP), SAST (SonarQube), container scanning (Trivy), infrastructure scanning (Checkov), and compliance validation (Open Policy Agent).",
+      "parameters": {},
+      "files": [
+        "jenkins/pipelines/security-scan.Jenkinsfile"
+      ]
+    },
+    {
+      "name": "Implement shared library for scanning",
+      "type": "prompt",
+      "prompt": "Create Jenkins shared library with reusable functions for each security tool integration. Include result parsing, threshold checking, and report generation.",
+      "parameters": {},
+      "files": [
+        "jenkins/shared-libraries/vars/securityScan.groovy"
+      ]
+    },
+    {
+      "name": "Configure quality gates",
+      "type": "prompt",
+      "prompt": "Define quality gate policies: critical vulnerabilities = 0, high vulnerabilities < 5, code coverage > 80%, security hotspots < 3. Include override mechanism with approval.",
+      "parameters": {},
+      "files": [
+        "jenkins/config/quality-gates.yaml"
+      ]
+    },
+    {
+      "name": "Validate Jenkinsfile syntax",
+      "type": "cli",
+      "command": "jenkins-cli declarative-linter < jenkins/pipelines/security-scan.Jenkinsfile",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test shared library locally",
+      "type": "cli",
+      "command": "groovy -cp jenkins/shared-libraries/src jenkins/shared-libraries/test/SecurityScanTest.groovy",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

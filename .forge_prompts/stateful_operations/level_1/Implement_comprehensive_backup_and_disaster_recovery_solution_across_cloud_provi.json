@@ -1,0 +1,99 @@
+{
+  "goal": "Implement comprehensive backup and disaster recovery solution across cloud providers",
+  "steps": [
+    {
+      "name": "Assess backup requirements",
+      "type": "prompt",
+      "prompt": "Document RPO (Recovery Point Objective) and RTO (Recovery Time Objective) requirements for different data types: databases, application state, and file storage.",
+      "parameters": {},
+      "files": [
+        "backup-strategy/requirements.md"
+      ]
+    },
+    {
+      "name": "Design backup architecture",
+      "type": "prompt",
+      "prompt": "Create multi-tier backup strategy with local snapshots, cross-region replication, and cross-cloud archival. Include retention policies and cost optimization.",
+      "parameters": {},
+      "files": [
+        "backup-strategy/architecture.md"
+      ]
+    },
+    {
+      "name": "Configure database backups",
+      "type": "prompt",
+      "prompt": "Implement automated database backup scripts for PostgreSQL and MongoDB with point-in-time recovery capability. Include transaction log archival and encrypted backups.",
+      "parameters": {},
+      "files": [
+        "scripts/backup/database-backup.sh",
+        "scripts/backup/restore-database.sh"
+      ]
+    },
+    {
+      "name": "Set up file system snapshots",
+      "type": "prompt",
+      "prompt": "Configure EBS snapshot policies and lifecycle management for application data volumes. Include cross-region copying and AMI creation for full system recovery.",
+      "parameters": {},
+      "files": [
+        "terraform/backup/ebs-snapshots.tf",
+        "terraform/backup/snapshot-lifecycle.tf"
+      ]
+    },
+    {
+      "name": "Implement S3 cross-region replication",
+      "type": "prompt",
+      "prompt": "Configure S3 bucket replication rules for critical data with versioning enabled. Set up lifecycle policies for moving old versions to Glacier for cost optimization.",
+      "parameters": {},
+      "files": [
+        "terraform/backup/s3-replication.tf"
+      ]
+    },
+    {
+      "name": "Create backup orchestration",
+      "type": "prompt",
+      "prompt": "Develop backup orchestration using AWS Backup or custom Lambda functions. Include pre/post backup scripts, notification mechanisms, and backup validation.",
+      "parameters": {},
+      "files": [
+        "backup-orchestration/backup-jobs.yaml",
+        "lambda-functions/backup-validator/"
+      ]
+    },
+    {
+      "name": "Test backup scripts",
+      "type": "cli",
+      "command": "bash scripts/backup/database-backup.sh --dry-run --verbose",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Validate S3 replication configuration",
+      "type": "cli",
+      "command": "aws s3api get-bucket-replication --bucket primary-data-bucket",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Check backup policies syntax",
+      "type": "cli",
+      "command": "aws backup get-backup-plan --backup-plan-id $(aws backup list-backup-plans --query 'BackupPlansList[0].BackupPlanId' --output text)",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Simulate restore process",
+      "type": "cli",
+      "command": "bash scripts/backup/restore-database.sh --point-in-time '2024-01-15T10:00:00Z' --dry-run",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Document recovery procedures",
+      "type": "prompt",
+      "prompt": "Create detailed runbooks for various disaster recovery scenarios including data corruption, region failure, and ransomware recovery with step-by-step procedures.",
+      "parameters": {},
+      "files": [
+        "runbooks/disaster-recovery/"
+      ]
+    }
+  ]
+}

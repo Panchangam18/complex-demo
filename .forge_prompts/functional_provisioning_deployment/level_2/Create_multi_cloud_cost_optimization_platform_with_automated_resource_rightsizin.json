@@ -1,0 +1,226 @@
+{
+  "goal": "Create multi-cloud cost optimization platform with automated resource rightsizing",
+  "steps": [
+    {
+      "name": "Collect AWS cost data",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ce.get_cost_and_usage_with_resources",
+      "parameters": {
+        "TimePeriod": {
+          "Start": "2024-01-01",
+          "End": "2024-01-31"
+        },
+        "Granularity": "DAILY",
+        "Metrics": [
+          "UnblendedCost",
+          "UsageQuantity"
+        ],
+        "GroupBy": [
+          {
+            "Type": "DIMENSION",
+            "Key": "SERVICE"
+          },
+          {
+            "Type": "DIMENSION",
+            "Key": "RESOURCE_ID"
+          }
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Analyze GCP billing data",
+      "type": "integration",
+      "integration": "gcp",
+      "method": "cloudbilling.services.skus.list",
+      "parameters": {
+        "parent": "services/6F81-5844-456A"
+      },
+      "files": []
+    },
+    {
+      "name": "Query Azure cost management",
+      "type": "integration",
+      "integration": "azure",
+      "method": "cost_management.query.usage",
+      "parameters": {
+        "scope": "/subscriptions/{subscription-id}",
+        "parameters": {
+          "type": "Usage",
+          "timeframe": "MonthToDate",
+          "dataset": {
+            "granularity": "Daily",
+            "aggregation": {
+              "totalCost": {
+                "name": "Cost",
+                "function": "Sum"
+              }
+            }
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Deploy cost analysis Lambda",
+      "type": "integration",
+      "integration": "aws",
+      "method": "lambda.CreateFunction",
+      "parameters": {
+        "FunctionName": "cost-optimizer",
+        "Runtime": "python3.9",
+        "Role": "arn:aws:iam::123456789012:role/cost-optimizer-role",
+        "Handler": "optimizer.analyze_costs",
+        "Code": {
+          "S3Bucket": "lambda-code",
+          "S3Key": "cost-optimizer.zip"
+        },
+        "Timeout": 900,
+        "MemorySize": 1024
+      },
+      "files": []
+    },
+    {
+      "name": "Analyze EC2 utilization patterns",
+      "type": "integration",
+      "integration": "aws",
+      "method": "cloudwatch.get_metric_statistics",
+      "parameters": {
+        "Namespace": "AWS/EC2",
+        "MetricName": "CPUUtilization",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": "i-1234567890abcdef0"
+          }
+        ],
+        "StartTime": "2024-01-01T00:00:00Z",
+        "EndTime": "2024-01-31T23:59:59Z",
+        "Period": 3600,
+        "Statistics": [
+          "Average",
+          "Maximum"
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Create rightsizing recommendations",
+      "type": "prompt",
+      "prompt": "Analyze utilization data and generate rightsizing recommendations for EC2 instances, RDS databases, and container resources. Include potential cost savings calculations.",
+      "parameters": {},
+      "files": [
+        "recommendations/rightsizing-report.json"
+      ]
+    },
+    {
+      "name": "Implement automated rightsizing",
+      "type": "prompt",
+      "prompt": "Create automation scripts that can safely resize resources during maintenance windows based on utilization patterns and business rules.",
+      "parameters": {},
+      "files": [
+        "automation/rightsizing/"
+      ]
+    },
+    {
+      "name": "Configure Savings Plans recommendations",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ce.get_savings_plans_purchase_recommendation",
+      "parameters": {
+        "SavingsPlansType": "COMPUTE_SP",
+        "TermInYears": "ONE_YEAR",
+        "PaymentOption": "NO_UPFRONT",
+        "LookbackPeriodInDays": "SIXTY_DAYS"
+      },
+      "files": []
+    },
+    {
+      "name": "Set up automated tagging",
+      "type": "integration",
+      "integration": "aws",
+      "method": "lambda.CreateFunction",
+      "parameters": {
+        "FunctionName": "auto-tagger",
+        "Runtime": "python3.9",
+        "Role": "arn:aws:iam::123456789012:role/auto-tagger-role",
+        "Handler": "tagger.tag_resources",
+        "Code": {
+          "S3Bucket": "lambda-code",
+          "S3Key": "auto-tagger.zip"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Create cost anomaly alerts",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ce.create_anomaly_subscription",
+      "parameters": {
+        "AnomalySubscription": {
+          "SubscriptionName": "CostAnomalyAlerts",
+          "Threshold": 100.0,
+          "Frequency": "DAILY",
+          "MonitorArnList": [
+            "${COST_MONITOR_ARN}"
+          ],
+          "Subscribers": [
+            {
+              "Address": "cost-team@example.com",
+              "Type": "EMAIL"
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Deploy cost dashboard",
+      "type": "integration",
+      "integration": "grafana",
+      "method": "dashboard.create_dashboard",
+      "parameters": {
+        "dashboard": {
+          "title": "Multi-Cloud Cost Optimization",
+          "panels": [
+            {
+              "title": "Monthly Spend Trend",
+              "targets": [
+                {
+                  "expr": "sum(aws_cost_daily) by (service)"
+                }
+              ]
+            },
+            {
+              "title": "Rightsizing Opportunities",
+              "targets": [
+                {
+                  "expr": "cost_optimization_savings_potential"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Test automated rightsizing",
+      "type": "cli",
+      "command": "python automation/rightsizing/test_resize.py --instance-id i-test --target-type t3.small --dry-run",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Validate cost savings",
+      "type": "prompt",
+      "prompt": "Compare costs before and after optimization implementations. Calculate actual savings achieved and ROI of the optimization platform.",
+      "parameters": {},
+      "files": [
+        "reports/cost-savings-validation.md"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,119 @@
+{
+  "goal": "Execute automated compliance validation with evidence collection",
+  "steps": [
+    {
+      "name": "Initialize compliance scan",
+      "type": "cli",
+      "command": "docker run --rm -v $(pwd):/workspace -w /workspace chef/inspec exec compliance/inspec --reporter json:compliance-scan.json html:compliance-report.html",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Collect infrastructure evidence",
+      "type": "cli",
+      "command": "python compliance/scripts/evidence-collector.py --providers aws,gcp,k8s --output evidence/$(date +%Y%m%d)/",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Scan for PII in logs",
+      "type": "integration",
+      "integration_name": "Search",
+      "integration_params": {
+        "adapter_name": "elasticsearch",
+        "method": "search",
+        "parameters": {
+          "index": "logs-*",
+          "body": {
+            "query": {
+              "bool": {
+                "should": [
+                  {
+                    "regexp": {
+                      "message": "[0-9]{3}-[0-9]{2}-[0-9]{4}"
+                    }
+                  },
+                  {
+                    "regexp": {
+                      "message": "[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{4}"
+                    }
+                  },
+                  {
+                    "match": {
+                      "message": "email"
+                    }
+                  }
+                ]
+              }
+            },
+            "size": 100
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Validate encryption at rest",
+      "type": "cli",
+      "command": "aws s3api get-bucket-encryption --bucket prod-data-bucket && aws rds describe-db-instances --query 'DBInstances[*].[DBInstanceIdentifier,StorageEncrypted]' --output table",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Check access control policies",
+      "type": "cli",
+      "command": "aws iam get-account-password-policy && kubectl auth can-i --list --namespace=production | grep -E 'create|delete|update' | wc -l",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Generate compliance dashboard",
+      "type": "integration",
+      "integration_name": "CreateDashboard",
+      "integration_params": {
+        "adapter_name": "grafana",
+        "method": "dashboard.create_dashboard",
+        "parameters": {
+          "dashboard": {
+            "title": "Compliance Status",
+            "panels": [
+              {
+                "title": "SOC2 Control Status",
+                "type": "stat",
+                "targets": [
+                  {
+                    "expr": "compliance_control_status{framework=\"soc2\"}"
+                  }
+                ]
+              },
+              {
+                "title": "GDPR Requirements",
+                "type": "table",
+                "targets": [
+                  {
+                    "expr": "gdpr_requirement_status"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Archive compliance evidence",
+      "type": "cli",
+      "command": "tar -czf evidence/compliance-evidence-$(date +%Y%m%d).tar.gz evidence/$(date +%Y%m%d)/ && gpg --encrypt --recipient compliance@example.com evidence/compliance-evidence-$(date +%Y%m%d).tar.gz",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Send compliance report",
+      "type": "cli",
+      "command": "python compliance/scripts/report-sender.py --recipients 'security-team@example.com,audit@example.com' --report compliance-report.html --evidence evidence/compliance-evidence-$(date +%Y%m%d).tar.gz.gpg",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

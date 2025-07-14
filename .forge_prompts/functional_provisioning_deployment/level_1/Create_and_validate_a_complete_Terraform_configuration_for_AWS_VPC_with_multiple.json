@@ -1,0 +1,105 @@
+{
+  "goal": "Create and validate a complete Terraform configuration for AWS VPC with multiple subnets and security groups",
+  "steps": [
+    {
+      "name": "Analyze existing Terraform project structure",
+      "type": "prompt",
+      "prompt": "Examine the terraform/ directory structure to understand module organization, naming conventions, and existing patterns. Identify the appropriate location for VPC-related configurations.",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create VPC configuration with CIDR block",
+      "type": "prompt",
+      "prompt": "Create a Terraform configuration for a VPC with CIDR block 10.0.0.0/16. Enable DNS support and DNS hostnames. Include appropriate tags for environment='dev' and project='devops-demo'.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/aws/vpc/main.tf"
+      ]
+    },
+    {
+      "name": "Configure public and private subnets",
+      "type": "prompt",
+      "prompt": "Create public subnets (10.0.1.0/24, 10.0.2.0/24, 10.0.3.0/24) and private subnets (10.0.11.0/24, 10.0.12.0/24, 10.0.13.0/24) across 3 availability zones. Include appropriate tags and map_public_ip_on_launch settings.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/aws/vpc/subnets.tf"
+      ]
+    },
+    {
+      "name": "Create Internet Gateway and NAT Gateways",
+      "type": "prompt",
+      "prompt": "Configure an Internet Gateway for the VPC and create NAT Gateways in each public subnet for outbound internet access from private subnets. Include Elastic IPs for NAT Gateways.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/aws/vpc/gateways.tf"
+      ]
+    },
+    {
+      "name": "Configure route tables and associations",
+      "type": "prompt",
+      "prompt": "Create route tables for public subnets (with routes to Internet Gateway) and private subnets (with routes to NAT Gateways). Associate each subnet with its appropriate route table.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/aws/vpc/routes.tf"
+      ]
+    },
+    {
+      "name": "Create security groups for multi-tier architecture",
+      "type": "prompt",
+      "prompt": "Create security groups for: web tier (allow 80/443 from internet), app tier (allow traffic from web tier), database tier (allow 5432 from app tier), and bastion host (allow SSH from specific IPs).",
+      "parameters": {},
+      "files": [
+        "terraform/modules/aws/vpc/security_groups.tf"
+      ]
+    },
+    {
+      "name": "Format all Terraform files",
+      "type": "cli",
+      "command": "terraform fmt -recursive terraform/modules/aws/vpc/",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Initialize Terraform module",
+      "type": "cli",
+      "command": "terraform init",
+      "parameters": {
+        "working_directory": "terraform/modules/aws/vpc/"
+      },
+      "files": []
+    },
+    {
+      "name": "Validate Terraform configuration",
+      "type": "cli",
+      "command": "terraform validate",
+      "parameters": {
+        "working_directory": "terraform/modules/aws/vpc/"
+      },
+      "files": []
+    },
+    {
+      "name": "Run tfsec security scan",
+      "type": "cli",
+      "command": "tfsec terraform/modules/aws/vpc/ --format json",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Generate Terraform plan",
+      "type": "cli",
+      "command": "terraform plan -out=vpc.tfplan",
+      "parameters": {
+        "working_directory": "terraform/modules/aws/vpc/"
+      },
+      "files": []
+    },
+    {
+      "name": "Verify plan creates expected resources",
+      "type": "prompt",
+      "prompt": "Review the terraform plan output and verify it will create exactly: 1 VPC, 6 subnets, 1 Internet Gateway, 3 NAT Gateways, 3 Elastic IPs, 5 route tables, and 4 security groups with proper configurations.",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

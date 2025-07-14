@@ -1,0 +1,89 @@
+{
+  "goal": "Execute disaster recovery drill with automated failover and validation",
+  "steps": [
+    {
+      "name": "Initiate backup of production data",
+      "type": "cli",
+      "command": "bash backup/scripts/database-backup.sh --environment prod --destination s3://dr-backups/$(date +%Y%m%d)/ --encrypt",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify backup integrity",
+      "type": "cli",
+      "command": "aws s3api head-object --bucket dr-backups --key $(date +%Y%m%d)/postgres-backup.sql.gz.enc --query 'Metadata.sha256sum' | xargs -I {} bash -c 'echo {} | sha256sum -c'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Trigger regional failover",
+      "type": "integration",
+      "integration_name": "StartExecution",
+      "integration_params": {
+        "adapter_name": "aws",
+        "method": "stepfunctions.StartExecution",
+        "parameters": {
+          "stateMachineArn": "arn:aws:states:us-east-1:123456789012:stateMachine:disaster-recovery",
+          "input": "{\"sourceRegion\": \"us-west-2\", \"targetRegion\": \"us-east-1\", \"mode\": \"drill\"}"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Promote RDS read replica",
+      "type": "cli",
+      "command": "aws rds promote-read-replica --db-instance-identifier prod-db-replica-east --backup-retention-period 7",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Update DNS for failover",
+      "type": "integration",
+      "integration_name": "ChangeResourceRecordSets",
+      "integration_params": {
+        "adapter_name": "aws",
+        "method": "route53.ChangeResourceRecordSets",
+        "parameters": {
+          "HostedZoneId": "Z123456789",
+          "ChangeBatch": {
+            "Changes": [
+              {
+                "Action": "UPSERT",
+                "ResourceRecordSet": {
+                  "Name": "api.example.com",
+                  "Type": "A",
+                  "AliasTarget": {
+                    "HostedZoneId": "Z2FDTNDATAQYW2",
+                    "DNSName": "dr-alb-east.elb.amazonaws.com"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Validate application health in DR region",
+      "type": "cli",
+      "command": "for i in {1..30}; do curl -s https://api.example.com/health | jq -r '.status' | grep -q 'healthy' && echo 'Health check $i: PASS' || echo 'Health check $i: FAIL'; sleep 10; done",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Run smoke tests on DR environment",
+      "type": "cli",
+      "command": "newman run postman/collections/smoke-tests.json --environment postman/environments/disaster-recovery.json --reporters cli,json --reporter-json-export dr-test-results.json",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Generate DR drill report",
+      "type": "cli",
+      "command": "python disaster-recovery/scripts/generate-report.py --start-time $(date -d '30 minutes ago' +%s) --test-results dr-test-results.json --output dr-drill-report-$(date +%Y%m%d).pdf",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

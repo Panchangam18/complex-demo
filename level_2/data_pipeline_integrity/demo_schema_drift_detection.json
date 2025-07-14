@@ -1,0 +1,265 @@
+{
+  "workflow_name": "schema_drift_detection_and_adaptation",
+  "description": "Real-time schema drift detection and automatic adaptation for data pipelines",
+  "goal": "Detect schema changes in data sources and automatically adapt pipelines to maintain data flow",
+  "trigger": {
+    "type": "scheduled",
+    "schedule": "rate(15 minutes)",
+    "additional_triggers": ["s3:ObjectCreated:*", "kafka:SchemaRegistryUpdate"]
+  },
+  "inputs": {
+    "data_sources": "${config.monitored_data_sources}",
+    "schema_registry_url": "${config.schema_registry_url}",
+    "pipeline_catalog": "${config.pipeline_catalog}"
+  },
+  "steps": [
+    {
+      "step": 1,
+      "action": "fetch_current_schemas",
+      "integration": "confluent.SchemaRegistry.get_latest_version",
+      "parameters": {
+        "subjects": "${inputs.data_sources.kafka_topics}",
+        "registry_url": "${inputs.schema_registry_url}"
+      },
+      "output": "current_schemas"
+    },
+    {
+      "step": 2,
+      "action": "retrieve_cached_schemas",
+      "integration": "aws.dynamodb.BatchGetItem",
+      "parameters": {
+        "RequestItems": {
+          "schema-cache": {
+            "Keys": "${current_schemas.map(s => ({source_id: s.subject, version: 'latest'}))}"
+          }
+        }
+      },
+      "output": "cached_schemas"
+    },
+    {
+      "step": 3,
+      "action": "analyze_s3_data_formats",
+      "integration": "aws.glue.GetTable",
+      "parameters": {
+        "DatabaseName": "${inputs.data_sources.glue_database}",
+        "Name": "${inputs.data_sources.s3_tables}"
+      },
+      "parallel": true,
+      "output": "s3_table_schemas"
+    },
+    {
+      "step": 4,
+      "action": "detect_schema_differences",
+      "integration": "aws.lambda.Invoke",
+      "parameters": {
+        "FunctionName": "schema-drift-analyzer",
+        "Payload": {
+          "current_schemas": "${current_schemas}",
+          "cached_schemas": "${cached_schemas}",
+          "s3_schemas": "${s3_table_schemas}",
+          "detection_rules": {
+            "field_additions": "allowed",
+            "field_removals": "breaking",
+            "type_changes": "breaking",
+            "nullable_changes": "warning"
+          }
+        }
+      },
+      "output": "drift_analysis"
+    },
+    {
+      "step": 5,
+      "action": "classify_impact_severity",
+      "integration": "datadog.MetricsApi.submit_metrics",
+      "parameters": {
+        "body": {
+          "series": [{
+            "metric": "schema.drift.detected",
+            "points": [[${now()}, ${drift_analysis.drift_count}]],
+            "type": "gauge",
+            "tags": [
+              "severity:${drift_analysis.max_severity}",
+              "source_type:${drift_analysis.source_type}"
+            ]
+          }]
+        }
+      },
+      "output": "impact_metrics"
+    },
+    {
+      "step": 6,
+      "action": "identify_affected_pipelines",
+      "integration": "aws.dynamodb.Query",
+      "parameters": {
+        "TableName": "pipeline-dependencies",
+        "IndexName": "source-index",
+        "KeyConditionExpression": "data_source IN :sources",
+        "ExpressionAttributeValues": {
+          ":sources": "${drift_analysis.affected_sources}"
+        }
+      },
+      "output": "affected_pipelines"
+    },
+    {
+      "step": 7,
+      "action": "generate_migration_plan",
+      "integration": "aws.bedrock.InvokeModel",
+      "parameters": {
+        "modelId": "anthropic.claude-v2",
+        "body": {
+          "prompt": "Generate a schema migration plan for the following changes:\n${JSON.stringify(drift_analysis.changes)}\nConsider backward compatibility and data type conversions.",
+          "max_tokens": 2000
+        }
+      },
+      "output": "migration_plan"
+    },
+    {
+      "step": 8,
+      "action": "create_schema_evolution_branch",
+      "integration": "github.repos.createBranch",
+      "parameters": {
+        "owner": "${config.github_org}",
+        "repo": "data-pipeline-schemas",
+        "ref": "refs/heads/schema-evolution-${timestamp()}",
+        "sha": "${github.head_sha}"
+      },
+      "output": "evolution_branch"
+    },
+    {
+      "step": 9,
+      "action": "generate_adapter_transformations",
+      "integration": "aws.glue.CreateScript",
+      "parameters": {
+        "DagNodes": "${migration_plan.transformation_dag}",
+        "DagEdges": "${migration_plan.transformation_edges}",
+        "Language": "PYTHON"
+      },
+      "output": "adapter_script"
+    },
+    {
+      "step": 10,
+      "action": "deploy_schema_adapters",
+      "integration": "aws.lambda.UpdateFunctionCode",
+      "condition": "${drift_analysis.requires_adaptation}",
+      "parameters": {
+        "FunctionName": "schema-adapter-${pipeline_id}",
+        "ZipFile": "${adapter_script.encoded}",
+        "Environment": {
+          "Variables": {
+            "SCHEMA_VERSION": "${current_schemas.version}",
+            "MIGRATION_RULES": "${JSON.stringify(migration_plan.rules)}"
+          }
+        }
+      },
+      "parallel": true,
+      "output": "adapter_deployment_results"
+    },
+    {
+      "step": 11,
+      "action": "test_schema_compatibility",
+      "integration": "aws.stepfunctions.StartExecution",
+      "parameters": {
+        "stateMachineArn": "arn:aws:states:${region}:${account}:stateMachine:schema-compatibility-tester",
+        "input": {
+          "test_data_samples": "${drift_analysis.test_samples}",
+          "old_schema": "${cached_schemas}",
+          "new_schema": "${current_schemas}",
+          "adapter_functions": "${adapter_deployment_results.function_arns}"
+        }
+      },
+      "output": "compatibility_test_execution"
+    },
+    {
+      "step": 12,
+      "action": "update_data_catalog",
+      "integration": "aws.glue.UpdateTable",
+      "condition": "${compatibility_test_execution.status == 'SUCCEEDED'}",
+      "parameters": {
+        "DatabaseName": "${inputs.data_sources.glue_database}",
+        "TableInput": {
+          "Name": "${table_name}",
+          "StorageDescriptor": {
+            "Columns": "${current_schemas.fields}",
+            "SerdeInfo": {
+              "Parameters": {
+                "serialization.format": "1",
+                "schema.evolution.enabled": "true"
+              }
+            }
+          }
+        }
+      },
+      "parallel": true,
+      "output": "catalog_update_results"
+    },
+    {
+      "step": 13,
+      "action": "notify_pipeline_owners",
+      "integration": "aws.sns.Publish",
+      "parameters": {
+        "TopicArn": "arn:aws:sns:${region}:${account}:schema-drift-notifications",
+        "Subject": "Schema Drift Detected - Action Required",
+        "Message": {
+          "drift_summary": "${drift_analysis.summary}",
+          "affected_pipelines": "${affected_pipelines}",
+          "migration_plan": "${migration_plan.summary}",
+          "compatibility_results": "${compatibility_test_execution.output}",
+          "action_required": "${drift_analysis.max_severity == 'breaking'}"
+        }
+      },
+      "output": "notification_result"
+    },
+    {
+      "step": 14,
+      "action": "create_rollback_plan",
+      "integration": "aws.backup.StartBackupJob",
+      "parameters": {
+        "BackupVaultName": "schema-rollback-vault",
+        "ResourceArn": "arn:aws:glue:${region}:${account}:catalog",
+        "IamRoleArn": "${config.backup_role_arn}",
+        "BackupOptions": {
+          "schemas": "${current_schemas.subjects}",
+          "timestamp": "${now()}"
+        }
+      },
+      "output": "rollback_backup_id"
+    },
+    {
+      "step": 15,
+      "action": "update_schema_lineage",
+      "integration": "aws.datazone.CreateDataLineage",
+      "parameters": {
+        "domainIdentifier": "${config.datazone_domain}",
+        "source": {
+          "identifier": "${cached_schemas.id}",
+          "type": "SCHEMA_VERSION"
+        },
+        "target": {
+          "identifier": "${current_schemas.id}",
+          "type": "SCHEMA_VERSION"
+        },
+        "relationship": {
+          "type": "EVOLVED_FROM",
+          "properties": {
+            "migration_plan": "${migration_plan.id}",
+            "compatibility": "${compatibility_test_execution.output.compatibility_score}",
+            "timestamp": "${now()}"
+          }
+        }
+      },
+      "output": "lineage_record"
+    }
+  ],
+  "error_handling": {
+    "strategy": "circuit_breaker",
+    "on_failure": "preserve_existing_schemas",
+    "alert_threshold": 3,
+    "cooldown_period": 300
+  },
+  "outputs": {
+    "drift_detected": "${drift_analysis.drift_count > 0}",
+    "affected_pipelines": "${affected_pipelines}",
+    "migration_success": "${adapter_deployment_results.all_succeeded}",
+    "compatibility_score": "${compatibility_test_execution.output.compatibility_score}"
+  }
+}

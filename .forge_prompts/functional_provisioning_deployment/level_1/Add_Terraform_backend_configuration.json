@@ -1,0 +1,21 @@
+{
+  "goal": "Add Terraform backend configuration",
+  "steps": [
+    {
+      "name": "Update backend config",
+      "type": "prompt",
+      "prompt": "Modify the backend configuration JSON to use the correct S3 bucket and DynamoDB table for state locking.",
+      "parameters": {},
+      "files": [
+        "complex-demo/terraform/bootstrap/generated/backend-config.json"
+      ]
+    },
+    {
+      "name": "Initialize backend",
+      "type": "cli",
+      "command": "cd complex-demo/terraform && terraform init -backend-config=bootstrap/generated/backend-config.json",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

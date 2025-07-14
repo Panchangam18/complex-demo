@@ -1,0 +1,187 @@
+{
+  "goal": "Build comprehensive data pipeline with real-time streaming and batch processing",
+  "steps": [
+    {
+      "name": "Design data architecture",
+      "type": "prompt",
+      "prompt": "Create architecture design for hybrid data pipeline supporting both real-time streaming (Kafka/Kinesis) and batch processing (Spark/EMR) with data lake storage.",
+      "parameters": {},
+      "files": [
+        "docs/data-pipeline-architecture.md"
+      ]
+    },
+    {
+      "name": "Deploy Kafka cluster",
+      "type": "prompt",
+      "prompt": "Configure a production-ready Kafka cluster with 3 brokers, ZooKeeper ensemble, and topic configurations for different data streams with appropriate retention policies.",
+      "parameters": {},
+      "files": [
+        "k8s/kafka/kafka-cluster.yaml",
+        "k8s/kafka/topics.yaml"
+      ]
+    },
+    {
+      "name": "Create Kinesis data streams",
+      "type": "integration",
+      "integration": "aws",
+      "method": "kinesis.create_stream",
+      "parameters": {
+        "StreamName": "real-time-events",
+        "ShardCount": 10,
+        "StreamModeDetails": {
+          "StreamMode": "ON_DEMAND"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Set up S3 data lake",
+      "type": "integration",
+      "integration": "aws",
+      "method": "s3.CreateBucket",
+      "parameters": {
+        "Bucket": "company-data-lake-prod",
+        "CreateBucketConfiguration": {
+          "LocationConstraint": "us-east-2"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Configure data lake partitioning",
+      "type": "cli",
+      "command": "aws s3api put-bucket-lifecycle-configuration --bucket company-data-lake-prod --lifecycle-configuration file://s3-lifecycle-policy.json",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy stream processing jobs",
+      "type": "prompt",
+      "prompt": "Create Flink/Spark Streaming jobs for real-time data transformation, aggregation, and enrichment. Include windowing functions and state management.",
+      "parameters": {},
+      "files": [
+        "streaming-jobs/event-processor/src/main/scala/EventProcessor.scala"
+      ]
+    },
+    {
+      "name": "Set up EMR cluster",
+      "type": "integration",
+      "integration": "aws",
+      "method": "emr.run_job_flow",
+      "parameters": {
+        "Name": "batch-processing-cluster",
+        "ReleaseLabel": "emr-6.10.0",
+        "Instances": {
+          "InstanceGroups": [
+            {
+              "Name": "Master",
+              "Market": "ON_DEMAND",
+              "InstanceRole": "MASTER",
+              "InstanceType": "m5.xlarge",
+              "InstanceCount": 1
+            },
+            {
+              "Name": "Worker",
+              "Market": "SPOT",
+              "InstanceRole": "CORE",
+              "InstanceType": "m5.2xlarge",
+              "InstanceCount": 5
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Create batch ETL jobs",
+      "type": "prompt",
+      "prompt": "Develop PySpark ETL jobs for daily batch processing including data validation, deduplication, transformation, and loading into data warehouse.",
+      "parameters": {},
+      "files": [
+        "batch-jobs/daily-etl/main.py",
+        "batch-jobs/daily-etl/transformations.py"
+      ]
+    },
+    {
+      "name": "Configure data catalog",
+      "type": "integration",
+      "integration": "aws",
+      "method": "glue.create_database",
+      "parameters": {
+        "DatabaseInput": {
+          "Name": "data_lake_catalog",
+          "Description": "Central metadata catalog for data lake"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Set up data quality monitoring",
+      "type": "prompt",
+      "prompt": "Implement data quality checks using Great Expectations or Deequ. Create validation rules for schema compliance, null checks, and business logic validation.",
+      "parameters": {},
+      "files": [
+        "data-quality/expectations/event_data_suite.json"
+      ]
+    },
+    {
+      "name": "Deploy Apache Airflow",
+      "type": "cli",
+      "command": "helm install airflow apache-airflow/airflow -f airflow-values.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create orchestration DAGs",
+      "type": "prompt",
+      "prompt": "Write Airflow DAGs for orchestrating the entire data pipeline including dependencies between streaming and batch jobs, data quality checks, and alerting.",
+      "parameters": {},
+      "files": [
+        "airflow/dags/data_pipeline_dag.py"
+      ]
+    },
+    {
+      "name": "Test end-to-end pipeline",
+      "type": "cli",
+      "command": "python3 tests/pipeline_integration_test.py --source kafka --sink s3 --validate",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor pipeline metrics",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "MetricsApi.submit_metrics",
+      "parameters": {
+        "body": {
+          "series": [
+            {
+              "metric": "data.pipeline.throughput",
+              "points": [
+                [
+                  1234567890,
+                  1000
+                ]
+              ],
+              "type": "rate",
+              "tags": [
+                "pipeline:streaming",
+                "env:prod"
+              ]
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Validate data completeness",
+      "type": "prompt",
+      "prompt": "Run data reconciliation checks comparing source system counts with data lake records. Generate completeness report and investigate any discrepancies.",
+      "parameters": {},
+      "files": [
+        "reports/data-completeness-report.md"
+      ]
+    }
+  ]
+}

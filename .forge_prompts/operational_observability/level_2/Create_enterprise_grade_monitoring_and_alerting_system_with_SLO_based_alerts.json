@@ -1,0 +1,175 @@
+{
+  "goal": "Create enterprise-grade monitoring and alerting system with SLO-based alerts",
+  "steps": [
+    {
+      "name": "Define SLIs and SLOs",
+      "type": "prompt",
+      "prompt": "Define Service Level Indicators (availability, latency, error rate) and corresponding SLOs (99.9% availability, p99 latency < 200ms) for all critical services.",
+      "parameters": {},
+      "files": [
+        "monitoring/slo-definitions.yaml"
+      ]
+    },
+    {
+      "name": "Deploy Prometheus Operator",
+      "type": "cli",
+      "command": "helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack -f monitoring/prometheus-values.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure service monitors",
+      "type": "prompt",
+      "prompt": "Create ServiceMonitor CRDs for all microservices to enable automatic Prometheus scraping with appropriate labels and endpoints.",
+      "parameters": {},
+      "files": [
+        "monitoring/service-monitors/"
+      ]
+    },
+    {
+      "name": "Set up recording rules",
+      "type": "prompt",
+      "prompt": "Define Prometheus recording rules for pre-computing complex queries, SLI calculations, and aggregations to optimize query performance.",
+      "parameters": {},
+      "files": [
+        "monitoring/prometheus-rules/recording-rules.yaml"
+      ]
+    },
+    {
+      "name": "Create SLO-based alerts",
+      "type": "prompt",
+      "prompt": "Implement multi-window, multi-burn-rate alerts for SLOs using the error budget approach. Include both fast-burn and slow-burn alert conditions.",
+      "parameters": {},
+      "files": [
+        "monitoring/prometheus-rules/slo-alerts.yaml"
+      ]
+    },
+    {
+      "name": "Deploy Thanos for HA",
+      "type": "cli",
+      "command": "helm install thanos bitnami/thanos -f monitoring/thanos-values.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure Grafana dashboards",
+      "type": "integration",
+      "integration": "grafana",
+      "method": "dashboard.create_dashboard",
+      "parameters": {
+        "dashboard": {
+          "title": "SLO Overview",
+          "panels": [
+            {
+              "title": "Service Availability",
+              "targets": [
+                {
+                  "expr": "sum(rate(http_requests_total{status!~\"5..\"}[5m])) / sum(rate(http_requests_total[5m]))"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Set up alert routing",
+      "type": "prompt",
+      "prompt": "Configure AlertManager with routing rules based on severity, team ownership, and time-based escalations. Include PagerDuty and Slack integrations.",
+      "parameters": {},
+      "files": [
+        "monitoring/alertmanager-config.yaml"
+      ]
+    },
+    {
+      "name": "Deploy custom exporters",
+      "type": "prompt",
+      "prompt": "Create custom Prometheus exporters for business metrics (orders per minute, payment success rate) and deploy them as Kubernetes deployments.",
+      "parameters": {},
+      "files": [
+        "monitoring/custom-exporters/business-metrics-exporter/"
+      ]
+    },
+    {
+      "name": "Configure log-based alerts",
+      "type": "integration",
+      "integration": "elasticsearch",
+      "method": "watcher.put_watch",
+      "parameters": {
+        "id": "error-spike-alert",
+        "body": {
+          "trigger": {
+            "schedule": {
+              "interval": "1m"
+            }
+          },
+          "input": {
+            "search": {
+              "request": {
+                "indices": [
+                  "logs-*"
+                ],
+                "body": {
+                  "query": {
+                    "match": {
+                      "level": "ERROR"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Test alert notifications",
+      "type": "cli",
+      "command": "amtool alert add alertname=test severity=critical service=api --alertmanager.url=http://alertmanager:9093",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create runbook automation",
+      "type": "prompt",
+      "prompt": "Develop automated runbooks triggered by specific alerts for common issues like pod restarts, disk cleanup, and cache clearing.",
+      "parameters": {},
+      "files": [
+        "monitoring/runbooks/automated-remediation.yaml"
+      ]
+    },
+    {
+      "name": "Set up SLO reporting",
+      "type": "integration",
+      "integration": "grafana",
+      "method": "dashboard.create_dashboard",
+      "parameters": {
+        "dashboard": {
+          "title": "Monthly SLO Report",
+          "panels": [
+            {
+              "title": "Error Budget Burn Rate",
+              "targets": [
+                {
+                  "expr": "(1 - slo_availability) / (1 - 0.999) * 100"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Validate monitoring coverage",
+      "type": "prompt",
+      "prompt": "Audit all services to ensure complete monitoring coverage. Verify each service has metrics, logs, traces, and appropriate alerts configured.",
+      "parameters": {},
+      "files": [
+        "monitoring/coverage-report.md"
+      ]
+    }
+  ]
+}

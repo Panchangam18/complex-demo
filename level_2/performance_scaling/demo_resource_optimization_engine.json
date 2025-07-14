@@ -1,0 +1,295 @@
+{
+  "workflow_name": "intelligent_resource_optimization_engine",
+  "description": "Continuously optimize resource allocation across services using ML-driven insights and cost analysis",
+  "goal": "Maximize resource efficiency while maintaining performance SLAs and minimizing costs",
+  "trigger": {
+    "type": "event",
+    "source": "cloudwatch:CompositeAlarm",
+    "conditions": ["ResourceWasteDetected", "PerformanceDegradation", "CostAnomalyDetected"]
+  },
+  "inputs": {
+    "trigger_event": "${event}",
+    "optimization_scope": "${event.scope || 'cluster-wide'}",
+    "cost_threshold": "${config.monthly_budget * 0.1}"
+  },
+  "steps": [
+    {
+      "step": 1,
+      "action": "inventory_resources",
+      "integration": "aws.resourcegroupstaggingapi.GetResources",
+      "parameters": {
+        "TagFilters": [
+          {"Key": "Environment", "Values": ["${inputs.trigger_event.environment}"]},
+          {"Key": "Optimizable", "Values": ["true"]}
+        ],
+        "ResourceTypeFilters": [
+          "ec2:instance",
+          "rds:db",
+          "elasticache:cluster",
+          "ecs:service",
+          "lambda:function"
+        ]
+      },
+      "output": "resource_inventory"
+    },
+    {
+      "step": 2,
+      "action": "collect_utilization_metrics",
+      "integration": "datadog.MetricsApi.query_timeseries_data",
+      "parallel": true,
+      "for_each": "${resource_inventory.resources}",
+      "parameters": {
+        "query": "avg:aws.ec2.cpuutilization{instance-id:${resource.id}}, avg:aws.ec2.network_in{instance-id:${resource.id}}, avg:aws.ec2.disk_read_ops{instance-id:${resource.id}}",
+        "from": "${now() - 604800}",
+        "to": "${now()}"
+      },
+      "output": "utilization_metrics"
+    },
+    {
+      "step": 3,
+      "action": "analyze_cost_patterns",
+      "integration": "aws.ce.GetCostAndUsageWithResources",
+      "parameters": {
+        "TimePeriod": {
+          "Start": "${now() - 2592000}",
+          "End": "${now()}"
+        },
+        "Granularity": "DAILY",
+        "Metrics": ["BlendedCost", "UnblendedCost", "UsageQuantity"],
+        "GroupBy": [
+          {"Type": "DIMENSION", "Key": "RESOURCE_ID"},
+          {"Type": "TAG", "Key": "Service"}
+        ],
+        "Filter": {
+          "Dimensions": {
+            "Key": "RESOURCE_ID",
+            "Values": "${resource_inventory.resource_ids}"
+          }
+        }
+      },
+      "output": "cost_analysis"
+    },
+    {
+      "step": 4,
+      "action": "identify_optimization_opportunities",
+      "integration": "aws.computeoptimizer.GetEC2InstanceRecommendations",
+      "parameters": {
+        "instanceArns": "${resource_inventory.ec2_instance_arns}",
+        "recommendationPreferences": {
+          "cpuVendorArchitectures": ["AWS_ARM64", "CURRENT"],
+          "enhancedInfrastructureMetrics": "Active"
+        }
+      },
+      "output": "compute_recommendations"
+    },
+    {
+      "step": 5,
+      "action": "predict_workload_patterns",
+      "integration": "aws.forecast.QueryForecast",
+      "parameters": {
+        "ForecastArn": "${config.workload_forecast_arn}",
+        "Filters": {
+          "item_id": "${resource_inventory.service_names}",
+          "metric_name": ["cpu_utilization", "request_count", "memory_usage"]
+        },
+        "EndDate": "${now() + 604800}"
+      },
+      "output": "workload_forecast"
+    },
+    {
+      "step": 6,
+      "action": "generate_optimization_plan",
+      "integration": "aws.lambda.Invoke",
+      "parameters": {
+        "FunctionName": "resource-optimization-planner",
+        "Payload": {
+          "current_utilization": "${utilization_metrics}",
+          "cost_data": "${cost_analysis}",
+          "recommendations": "${compute_recommendations}",
+          "workload_forecast": "${workload_forecast}",
+          "constraints": {
+            "max_downtime_minutes": 5,
+            "budget_limit": "${inputs.cost_threshold}",
+            "performance_buffer": 0.2
+          }
+        }
+      },
+      "output": "optimization_plan"
+    },
+    {
+      "step": 7,
+      "action": "validate_optimization_safety",
+      "integration": "aws.sagemaker.InvokeEndpoint",
+      "parameters": {
+        "EndpointName": "optimization-risk-assessor",
+        "Body": {
+          "optimization_plan": "${optimization_plan}",
+          "historical_incidents": "${getIncidentHistory()}",
+          "dependency_graph": "${getServiceDependencies()}",
+          "business_criticality": "${getBusinessCriticality()}"
+        }
+      },
+      "output": "risk_assessment"
+    },
+    {
+      "step": 8,
+      "action": "create_optimization_changeset",
+      "integration": "aws.cloudformation.CreateChangeSet",
+      "condition": "${risk_assessment.risk_level != 'high'}",
+      "parameters": {
+        "StackName": "resource-optimization-${timestamp()}",
+        "ChangeSetName": "optimization-${timestamp()}",
+        "TemplateBody": "${optimization_plan.cloudformation_template}",
+        "Parameters": "${optimization_plan.parameters}",
+        "Capabilities": ["CAPABILITY_IAM"],
+        "ChangeSetType": "UPDATE"
+      },
+      "output": "changeset"
+    },
+    {
+      "step": 9,
+      "action": "implement_immediate_optimizations",
+      "integration": "aws.lambda.InvokeAsync",
+      "condition": "${optimization_plan.has_immediate_actions}",
+      "parameters": {
+        "FunctionName": "immediate-optimizer",
+        "InvokeArgs": {
+          "actions": "${optimization_plan.immediate_actions}",
+          "safety_checks": true,
+          "rollback_enabled": true
+        }
+      },
+      "output": "immediate_results"
+    },
+    {
+      "step": 10,
+      "action": "schedule_resource_migrations",
+      "integration": "aws.eventbridge.PutRule",
+      "condition": "${optimization_plan.requires_migration}",
+      "for_each": "${optimization_plan.migrations}",
+      "parameters": {
+        "Name": "migrate-${migration.resource_id}",
+        "ScheduleExpression": "at(${migration.scheduled_time})",
+        "State": "ENABLED",
+        "Targets": [{
+          "Arn": "arn:aws:states:${region}:${account}:stateMachine:resource-migration",
+          "RoleArn": "${config.eventbridge_role}",
+          "Input": "${JSON.stringify(migration)}"
+        }]
+      },
+      "output": "migration_schedules"
+    },
+    {
+      "step": 11,
+      "action": "update_auto_scaling_groups",
+      "integration": "aws.autoscaling.UpdateAutoScalingGroup",
+      "parallel": true,
+      "for_each": "${optimization_plan.asg_updates}",
+      "parameters": {
+        "AutoScalingGroupName": "${asg.name}",
+        "MinSize": "${asg.new_min_size}",
+        "MaxSize": "${asg.new_max_size}",
+        "DesiredCapacity": "${asg.new_desired_capacity}",
+        "MixedInstancesPolicy": "${asg.new_instance_mix}"
+      },
+      "output": "asg_updates"
+    },
+    {
+      "step": 12,
+      "action": "optimize_container_resources",
+      "integration": "kubernetes.AppsV1Api.patch_namespaced_deployment",
+      "parallel": true,
+      "for_each": "${optimization_plan.container_optimizations}",
+      "parameters": {
+        "name": "${container.deployment_name}",
+        "namespace": "${container.namespace}",
+        "body": {
+          "spec": {
+            "template": {
+              "spec": {
+                "containers": [{
+                  "name": "${container.name}",
+                  "resources": {
+                    "requests": "${container.new_requests}",
+                    "limits": "${container.new_limits}"
+                  }
+                }]
+              }
+            }
+          }
+        }
+      },
+      "output": "container_updates"
+    },
+    {
+      "step": 13,
+      "action": "monitor_optimization_impact",
+      "integration": "datadog.MetricsApi.submit_metrics",
+      "parameters": {
+        "body": {
+          "series": [{
+            "metric": "optimization.impact.cost_savings",
+            "points": [[${now()}, ${optimization_plan.estimated_savings}]],
+            "type": "gauge",
+            "tags": ["optimization_run:${execution_id}"]
+          }, {
+            "metric": "optimization.impact.performance_change",
+            "points": [[${now()}, ${immediate_results.performance_delta}]],
+            "type": "gauge",
+            "tags": ["optimization_run:${execution_id}"]
+          }]
+        }
+      },
+      "output": "impact_metrics"
+    },
+    {
+      "step": 14,
+      "action": "create_rollback_plan",
+      "integration": "aws.backup.StartBackupJob",
+      "parameters": {
+        "BackupVaultName": "optimization-rollback-vault",
+        "ResourceArn": "${resource_inventory.critical_resources}",
+        "IamRoleArn": "${config.backup_role}",
+        "BackupOptions": {
+          "optimization_state": "${JSON.stringify(optimization_plan)}",
+          "pre_optimization_config": "${JSON.stringify(resource_inventory)}"
+        }
+      },
+      "output": "rollback_backup"
+    },
+    {
+      "step": 15,
+      "action": "report_optimization_results",
+      "integration": "aws.ses.SendEmail",
+      "parameters": {
+        "Source": "optimization-engine@company.com",
+        "Destination": {
+          "ToAddresses": "${config.optimization_stakeholders}"
+        },
+        "Message": {
+          "Subject": {
+            "Data": "Resource Optimization Report - ${execution_id}"
+          },
+          "Body": {
+            "Html": {
+              "Data": "<h1>Optimization Summary</h1><ul><li>Resources Optimized: ${optimization_plan.resource_count}</li><li>Estimated Monthly Savings: $${optimization_plan.estimated_savings}</li><li>Performance Impact: ${immediate_results.performance_summary}</li><li>Risk Level: ${risk_assessment.risk_level}</li></ul><h2>Detailed Actions</h2>${optimization_plan.detailed_report_html}"
+            }
+          }
+        }
+      },
+      "output": "report_sent"
+    }
+  ],
+  "error_handling": {
+    "strategy": "progressive_rollback",
+    "checkpoints": ["after_immediate_optimizations", "after_migrations"],
+    "rollback_trigger": "performance_degradation > 10%",
+    "manual_intervention_required": "${risk_assessment.risk_level == 'high'}"
+  },
+  "outputs": {
+    "optimized_resources": "${optimization_plan.resource_count}",
+    "cost_savings": "${optimization_plan.estimated_savings}",
+    "performance_impact": "${immediate_results.performance_delta}",
+    "next_optimization_window": "${migration_schedules.earliest_schedule}"
+  }
+}

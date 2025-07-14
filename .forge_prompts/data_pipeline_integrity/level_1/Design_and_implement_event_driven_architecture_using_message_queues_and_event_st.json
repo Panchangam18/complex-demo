@@ -1,0 +1,100 @@
+{
+  "goal": "Design and implement event-driven architecture using message queues and event streaming",
+  "steps": [
+    {
+      "name": "Design event-driven architecture",
+      "type": "prompt",
+      "prompt": "Create architecture design for event-driven microservices using SQS, SNS, and Kinesis. Define event schemas, routing patterns, and error handling strategies.",
+      "parameters": {},
+      "files": [
+        "architecture/event-driven-design.md"
+      ]
+    },
+    {
+      "name": "Define event schemas",
+      "type": "prompt",
+      "prompt": "Create JSON Schema definitions for all event types in the system. Include versioning strategy, required fields, and validation rules for each event type.",
+      "parameters": {},
+      "files": [
+        "event-schemas/",
+        "event-schemas/order-events.json",
+        "event-schemas/user-events.json"
+      ]
+    },
+    {
+      "name": "Configure SQS queues",
+      "type": "prompt",
+      "prompt": "Set up SQS queues with appropriate configurations: standard vs FIFO, message retention, dead letter queues, and visibility timeout settings.",
+      "parameters": {},
+      "files": [
+        "terraform/messaging/sqs-queues.tf"
+      ]
+    },
+    {
+      "name": "Implement SNS topics",
+      "type": "prompt",
+      "prompt": "Create SNS topics for event fanout with subscription filters. Configure topic policies, delivery retry policies, and cross-account access where needed.",
+      "parameters": {},
+      "files": [
+        "terraform/messaging/sns-topics.tf"
+      ]
+    },
+    {
+      "name": "Design message processors",
+      "type": "prompt",
+      "prompt": "Develop message processor applications with proper error handling, idempotency, and batch processing capabilities. Include circuit breaker patterns for downstream services.",
+      "parameters": {},
+      "files": [
+        "message-processors/order-processor/",
+        "message-processors/notification-processor/"
+      ]
+    },
+    {
+      "name": "Create event store",
+      "type": "prompt",
+      "prompt": "Implement event sourcing pattern with DynamoDB or EventStore for maintaining event history. Include event replay capabilities and snapshot mechanisms.",
+      "parameters": {},
+      "files": [
+        "event-store/schema.sql",
+        "event-store/event-store-client.py"
+      ]
+    },
+    {
+      "name": "Validate queue configurations",
+      "type": "cli",
+      "command": "aws sqs get-queue-attributes --queue-url https://sqs.us-east-2.amazonaws.com/123456789012/order-processing-queue --attribute-names All",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test message flow",
+      "type": "cli",
+      "command": "aws sqs send-message --queue-url https://sqs.us-east-2.amazonaws.com/123456789012/test-queue --message-body '{\"event\":\"test\",\"timestamp\":\"2024-01-15T10:00:00Z\"}'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify SNS subscriptions",
+      "type": "cli",
+      "command": "aws sns list-subscriptions-by-topic --topic-arn arn:aws:sns:us-east-2:123456789012:order-events",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Validate event schemas",
+      "type": "cli",
+      "command": "ajv validate -s event-schemas/order-events.json -d test-events/sample-order.json",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Document event flow",
+      "type": "prompt",
+      "prompt": "Create comprehensive documentation of event flows, including sequence diagrams, event catalog, and troubleshooting guides for common issues.",
+      "parameters": {},
+      "files": [
+        "docs/event-driven-architecture.md"
+      ]
+    }
+  ]
+}

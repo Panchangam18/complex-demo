@@ -1,0 +1,56 @@
+{
+  "goal": "Set up GitOps with ArgoCD for continuous deployment",
+  "steps": [
+    {
+      "name": "Deploy ArgoCD using Terraform",
+      "type": "cli",
+      "command": "cd terraform/modules/k8s/argocd && terraform init && terraform apply -auto-approve",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Get ArgoCD admin password",
+      "type": "cli",
+      "command": "kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath=\"{.data.password}\" | base64 -d",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create application manifest",
+      "type": "prompt",
+      "prompt": "Create an ArgoCD Application manifest to deploy the backend and frontend from the Git repository based on patterns in k8s/argocd/",
+      "parameters": {},
+      "files": [
+        "k8s/argocd/application.yaml"
+      ]
+    },
+    {
+      "name": "Deploy ArgoCD application",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/argocd/application.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Sync application",
+      "type": "cli",
+      "command": "argocd app sync complex-demo-app --revision main",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor sync status",
+      "type": "cli",
+      "command": "argocd app get complex-demo-app --refresh",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify deployment",
+      "type": "cli",
+      "command": "kubectl get all -l app.kubernetes.io/managed-by=argocd",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

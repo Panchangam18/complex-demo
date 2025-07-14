@@ -1,0 +1,21 @@
+{
+  "goal": "Configure log rotation with logrotate",
+  "steps": [
+    {
+      "name": "Create logrotate config",
+      "type": "prompt",
+      "prompt": "Write logrotate configuration for application logs: daily rotation, 7 days retention, compression.",
+      "parameters": {},
+      "files": [
+        "/etc/logrotate.d/app-logs"
+      ]
+    },
+    {
+      "name": "Test rotation",
+      "type": "cli",
+      "command": "logrotate -d /etc/logrotate.d/app-logs",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

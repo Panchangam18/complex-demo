@@ -1,0 +1,75 @@
+{
+  "goal": "Deploy multi-tenant platform with isolated environments and resource quotas",
+  "steps": [
+    {
+      "name": "Create tenant namespaces",
+      "type": "cli",
+      "command": "for tenant in alpha beta gamma; do kubectl create namespace tenant-$tenant && kubectl label namespace tenant-$tenant tenant=$tenant environment=production; done",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Apply resource quotas",
+      "type": "cli",
+      "command": "kubectl apply -f - <<EOF\napiVersion: v1\nkind: ResourceQuota\nmetadata:\n  name: tenant-quota\n  namespace: tenant-alpha\nspec:\n  hard:\n    requests.cpu: \"10\"\n    requests.memory: \"20Gi\"\n    persistentvolumeclaims: \"5\"\n    services.loadbalancers: \"2\"\nEOF",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure network isolation",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/multi-tenant/network-policies/ && kubectl get networkpolicies -A | grep tenant",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy tenant-specific ingress",
+      "type": "cli",
+      "command": "helm install nginx-tenant-alpha ingress-nginx/ingress-nginx --namespace tenant-alpha --set controller.ingressClass=nginx-alpha --set controller.scope.enabled=true --set controller.scope.namespace=tenant-alpha",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create tenant service accounts",
+      "type": "cli",
+      "command": "for tenant in alpha beta gamma; do kubectl create serviceaccount tenant-admin -n tenant-$tenant && kubectl create rolebinding tenant-admin-binding --clusterrole=edit --serviceaccount=tenant-$tenant:tenant-admin -n tenant-$tenant; done",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Set up tenant monitoring",
+      "type": "integration",
+      "integration_name": "CreateFolder",
+      "integration_params": {
+        "adapter_name": "grafana",
+        "method": "folder.create_folder",
+        "parameters": {
+          "title": "Tenant Alpha Dashboards",
+          "uid": "tenant-alpha"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Configure cost allocation",
+      "type": "cli",
+      "command": "kubectl label nodes node1 node2 node3 tenant-pool=shared && kubectl apply -f k8s/multi-tenant/kubecost-config.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Validate tenant isolation",
+      "type": "cli",
+      "command": "kubectl auth can-i --list --as=system:serviceaccount:tenant-alpha:tenant-admin -n tenant-beta | grep -c 'no' | xargs -I {} test {} -gt 10 && echo 'Isolation verified'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Generate tenant usage report",
+      "type": "cli",
+      "command": "kubectl top pods -A | grep tenant- | awk '{tenant=$1; cpu+=$2; mem+=$3} END {for (t in tenant) print t, cpu[t], mem[t]}' > tenant-usage.txt",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

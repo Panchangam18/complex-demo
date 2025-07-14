@@ -1,0 +1,59 @@
+{
+  "goal": "Create edge computing deployment strategy with IoT device management",
+  "steps": [
+    {
+      "name": "Design edge architecture",
+      "type": "prompt",
+      "prompt": "Plan edge computing architecture with: K3s clusters at edge locations, MQTT brokers for IoT communication, local data processing, and cloud synchronization strategies.",
+      "parameters": {},
+      "files": [
+        "edge/architecture/edge-deployment.md",
+        "edge/k3s/cluster-config.yaml"
+      ]
+    },
+    {
+      "name": "Configure IoT device provisioning",
+      "type": "prompt",
+      "prompt": "Create device provisioning workflow using AWS IoT Core: certificate generation, thing registration, policy attachment, and OTA update capabilities.",
+      "parameters": {},
+      "files": [
+        "iot/provisioning/device-template.json",
+        "iot/scripts/bulk-provisioning.py"
+      ]
+    },
+    {
+      "name": "Implement edge data pipeline",
+      "type": "prompt",
+      "prompt": "Design local data processing pipeline with: Apache NiFi for data flow, TimescaleDB for time-series storage, and selective sync to cloud based on bandwidth availability.",
+      "parameters": {},
+      "files": [
+        "edge/nifi/data-flow-template.xml",
+        "edge/timescale/schema.sql"
+      ]
+    },
+    {
+      "name": "Create offline operation mode",
+      "type": "prompt",
+      "prompt": "Implement resilient edge operations for network outages: local caching, store-and-forward messaging, conflict resolution for data sync, and autonomous decision making.",
+      "parameters": {},
+      "files": [
+        "edge/resilience/offline-handler.py",
+        "edge/resilience/sync-queue.yaml"
+      ]
+    },
+    {
+      "name": "Validate edge deployment",
+      "type": "cli",
+      "command": "k3s kubectl apply --dry-run=client -f edge/k3s/ && echo 'Edge configs valid'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test IoT provisioning",
+      "type": "cli",
+      "command": "python iot/scripts/bulk-provisioning.py --test --devices 10 --dry-run",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

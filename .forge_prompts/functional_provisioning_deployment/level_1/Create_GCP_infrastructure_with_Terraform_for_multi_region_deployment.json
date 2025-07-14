@@ -1,0 +1,64 @@
+{
+  "goal": "Create GCP infrastructure with Terraform for multi-region deployment",
+  "steps": [
+    {
+      "name": "Design GCP project structure",
+      "type": "prompt",
+      "prompt": "Plan GCP resource organization with separate projects for dev/staging/prod, shared VPC architecture, and proper IAM boundaries. Include folder hierarchy and billing account structure.",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create GKE cluster configuration",
+      "type": "prompt",
+      "prompt": "Design Terraform configuration for regional GKE cluster with: 3 zones, auto-scaling node pools, workload identity, binary authorization, and private cluster settings.",
+      "parameters": {},
+      "files": [
+        "terraform/gcp/gke-cluster.tf"
+      ]
+    },
+    {
+      "name": "Configure Cloud SQL with high availability",
+      "type": "prompt",
+      "prompt": "Set up Cloud SQL PostgreSQL instance with: automatic failover, point-in-time recovery, private IP only, automated backups, and read replicas in different regions.",
+      "parameters": {},
+      "files": [
+        "terraform/gcp/cloud-sql.tf"
+      ]
+    },
+    {
+      "name": "Implement Cloud Load Balancer",
+      "type": "prompt",
+      "prompt": "Configure global HTTP(S) load balancer with: CDN enablement, SSL certificates, backend services across regions, health checks, and Cloud Armor security policies.",
+      "parameters": {},
+      "files": [
+        "terraform/gcp/load-balancer.tf"
+      ]
+    },
+    {
+      "name": "Set up monitoring and logging",
+      "type": "prompt",
+      "prompt": "Configure Cloud Monitoring workspaces, log sinks to BigQuery for analysis, custom metrics, and alert policies for SLO tracking. Include log-based metrics for security events.",
+      "parameters": {},
+      "files": [
+        "terraform/gcp/monitoring.tf"
+      ]
+    },
+    {
+      "name": "Validate Terraform configuration",
+      "type": "cli",
+      "command": "terraform init -backend=false && terraform validate",
+      "parameters": {
+        "working_directory": "terraform/gcp/"
+      },
+      "files": []
+    },
+    {
+      "name": "Run security scanner",
+      "type": "cli",
+      "command": "gcloud beta terraform vet terraform/gcp/ --policy-library=policy-library/",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

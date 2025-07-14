@@ -1,0 +1,179 @@
+{
+  "goal": "Build high-performance caching layer with Redis cluster and cache warming strategies",
+  "steps": [
+    {
+      "name": "Deploy Redis cluster",
+      "type": "integration",
+      "integration": "aws",
+      "method": "elasticache.create_cache_cluster",
+      "parameters": {
+        "CacheClusterId": "prod-redis-cluster",
+        "CacheNodeType": "cache.r6g.xlarge",
+        "Engine": "redis",
+        "NumCacheNodes": 3,
+        "CacheSubnetGroupName": "redis-subnet-group",
+        "SecurityGroupIds": [
+          "sg-redis"
+        ],
+        "SnapshotRetentionLimit": 7
+      },
+      "files": []
+    },
+    {
+      "name": "Configure Redis Sentinel",
+      "type": "prompt",
+      "prompt": "Set up Redis Sentinel for high availability with automatic failover. Configure quorum settings, down-after-milliseconds, and failover timeout parameters.",
+      "parameters": {},
+      "files": [
+        "redis/sentinel.conf"
+      ]
+    },
+    {
+      "name": "Implement cache client library",
+      "type": "prompt",
+      "prompt": "Create cache client library with connection pooling, circuit breaker pattern, retry logic, and support for cache-aside, write-through, and write-behind patterns.",
+      "parameters": {},
+      "files": [
+        "libraries/cache-client/"
+      ]
+    },
+    {
+      "name": "Deploy cache warming Lambda",
+      "type": "integration",
+      "integration": "aws",
+      "method": "lambda.CreateFunction",
+      "parameters": {
+        "FunctionName": "cache-warmer",
+        "Runtime": "python3.9",
+        "Role": "arn:aws:iam::123456789012:role/cache-warmer-role",
+        "Handler": "warmer.warm_cache",
+        "Code": {
+          "S3Bucket": "lambda-code",
+          "S3Key": "cache-warmer.zip"
+        },
+        "Environment": {
+          "Variables": {
+            "REDIS_ENDPOINT": "prod-redis-cluster.cache.amazonaws.com",
+            "DATABASE_ENDPOINT": "aurora-cluster.rds.amazonaws.com"
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Configure cache warming schedule",
+      "type": "integration",
+      "integration": "aws",
+      "method": "events.put_rule",
+      "parameters": {
+        "Name": "cache-warming-schedule",
+        "ScheduleExpression": "rate(30 minutes)",
+        "State": "ENABLED",
+        "Targets": [
+          {
+            "Arn": "arn:aws:lambda:us-east-2:123456789012:function:cache-warmer",
+            "Id": "1"
+          }
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Test Redis connectivity",
+      "type": "cli",
+      "command": "redis-cli -h prod-redis-cluster.cache.amazonaws.com -p 6379 ping",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Load test cache performance",
+      "type": "cli",
+      "command": "redis-benchmark -h prod-redis-cluster.cache.amazonaws.com -p 6379 -c 100 -n 100000 -d 1024",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor cache hit rates",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "MetricsApi.query_scalar_data",
+      "parameters": {
+        "body": {
+          "queries": [
+            {
+              "data_source": "metrics",
+              "query": "avg:redis.cache.hit_rate{cluster:prod-redis-cluster}",
+              "name": "cache_hit_rate"
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Implement cache invalidation",
+      "type": "prompt",
+      "prompt": "Create cache invalidation service that handles cache consistency across the cluster using pub/sub patterns and supports targeted and bulk invalidation.",
+      "parameters": {},
+      "files": [
+        "services/cache-invalidator/"
+      ]
+    },
+    {
+      "name": "Configure memory optimization",
+      "type": "cli",
+      "command": "redis-cli -h prod-redis-cluster.cache.amazonaws.com CONFIG SET maxmemory-policy allkeys-lru",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test failover scenario",
+      "type": "cli",
+      "command": "redis-cli -h prod-redis-cluster.cache.amazonaws.com SENTINEL failover mymaster",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor memory usage",
+      "type": "integration",
+      "integration": "aws",
+      "method": "cloudwatch.get_metric_statistics",
+      "parameters": {
+        "Namespace": "AWS/ElastiCache",
+        "MetricName": "DatabaseMemoryUsagePercentage",
+        "Dimensions": [
+          {
+            "Name": "CacheClusterId",
+            "Value": "prod-redis-cluster"
+          }
+        ],
+        "StartTime": "2024-01-15T00:00:00Z",
+        "EndTime": "2024-01-15T01:00:00Z",
+        "Period": 300,
+        "Statistics": [
+          "Average",
+          "Maximum"
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Optimize cache warming strategy",
+      "type": "prompt",
+      "prompt": "Analyze cache access patterns and optimize warming strategy to pre-load frequently accessed data during off-peak hours. Document cache eviction patterns.",
+      "parameters": {},
+      "files": [
+        "reports/cache-optimization.md"
+      ]
+    },
+    {
+      "name": "Validate performance improvements",
+      "type": "prompt",
+      "prompt": "Compare application performance metrics before and after cache implementation. Document response time improvements and database load reduction.",
+      "parameters": {},
+      "files": [
+        "reports/cache-performance-impact.md"
+      ]
+    }
+  ]
+}

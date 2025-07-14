@@ -1,0 +1,162 @@
+{
+  "goal": "Implement comprehensive CI/CD pipeline with security scanning and automated deployments",
+  "steps": [
+    {
+      "name": "Configure Jenkins instance",
+      "type": "cli",
+      "command": "terraform output jenkins_url",
+      "parameters": {
+        "working_directory": "terraform/envs/dev/us-east-2/"
+      },
+      "files": []
+    },
+    {
+      "name": "Setup Jenkins credentials",
+      "type": "prompt",
+      "prompt": "Configure Jenkins with credentials for AWS, Docker registry, Kubernetes cluster, and source code repository access using Jenkins credentials management.",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create multibranch pipeline",
+      "type": "prompt",
+      "prompt": "Create a Jenkins multibranch pipeline configuration that discovers branches from the Git repository and automatically creates build jobs for each branch with different deployment strategies.",
+      "parameters": {},
+      "files": [
+        "ci-cd/jenkins/pipelines/multibranch-pipeline.groovy"
+      ]
+    },
+    {
+      "name": "Configure build stage with caching",
+      "type": "prompt",
+      "prompt": "Implement build stage in Jenkinsfile with Docker layer caching, dependency caching, and parallel builds for frontend and backend components.",
+      "parameters": {},
+      "files": [
+        "Jenkinsfile"
+      ]
+    },
+    {
+      "name": "Add security scanning stages",
+      "type": "prompt",
+      "prompt": "Add pipeline stages for SAST (SonarQube), dependency scanning (OWASP), container scanning (Trivy), and infrastructure as code scanning (Checkov).",
+      "parameters": {},
+      "files": [
+        "Jenkinsfile"
+      ]
+    },
+    {
+      "name": "Deploy pipeline to Jenkins",
+      "type": "cli",
+      "command": "jenkins-cli create-job devops-demo-pipeline < ci-cd/jenkins/pipelines/config.xml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Trigger initial pipeline run",
+      "type": "integration",
+      "integration": "jenkins",
+      "method": "build_job",
+      "parameters": {
+        "name": "devops-demo-pipeline",
+        "parameters": {
+          "BRANCH": "main"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Monitor build progress",
+      "type": "integration",
+      "integration": "jenkins",
+      "method": "get_build_info",
+      "parameters": {
+        "name": "devops-demo-pipeline",
+        "number": "lastBuild"
+      },
+      "files": []
+    },
+    {
+      "name": "Verify security scan results",
+      "type": "cli",
+      "command": "curl -s http://sonarqube.local/api/measures/component?component=devops-demo&metricKeys=security_rating,vulnerabilities",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Push images to registry",
+      "type": "cli",
+      "command": "docker push $(terraform output ecr_repository_url):latest",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy to Kubernetes staging",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "AppsV1Api.patch_namespaced_deployment",
+      "parameters": {
+        "name": "frontend",
+        "namespace": "staging",
+        "body": {
+          "spec": {
+            "template": {
+              "spec": {
+                "containers": [
+                  {
+                    "name": "frontend",
+                    "image": "${ECR_REPO}:${BUILD_NUMBER}"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Run integration tests",
+      "type": "cli",
+      "command": "npm run test:integration -- --reporter json --output test-results.json",
+      "parameters": {
+        "working_directory": "Code/server"
+      },
+      "files": []
+    },
+    {
+      "name": "Promote to production",
+      "type": "integration",
+      "integration": "argocd",
+      "method": "sync_application",
+      "parameters": {
+        "name": "devops-demo-prod",
+        "revision": "main",
+        "prune": true
+      },
+      "files": []
+    },
+    {
+      "name": "Verify production deployment",
+      "type": "cli",
+      "command": "kubectl rollout status deployment/frontend -n production --timeout=600s",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure deployment notifications",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "events.create_event",
+      "parameters": {
+        "title": "Production Deployment Complete",
+        "text": "DevOps Demo application deployed to production",
+        "tags": [
+          "deployment",
+          "production",
+          "ci-cd"
+        ]
+      },
+      "files": []
+    }
+  ]
+}

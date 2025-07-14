@@ -1,0 +1,61 @@
+{
+  "goal": "Deploy multi-cloud Consul federation across AWS and GCP",
+  "steps": [
+    {
+      "name": "Deploy Consul server cluster on AWS",
+      "type": "cli",
+      "command": "cd complex-demo/terraform/modules/consul/ec2-cluster && terraform apply -auto-approve -var='datacenter=aws-east'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure Consul K8s client for EKS",
+      "type": "prompt",
+      "prompt": "Review and update the Consul K8s client configuration to connect to the EC2-based Consul servers.",
+      "parameters": {},
+      "files": [
+        "complex-demo/terraform/modules/consul/k8s-client/main.tf",
+        "complex-demo/terraform/modules/consul/k8s-client/variables.tf"
+      ]
+    },
+    {
+      "name": "Deploy Consul on EKS",
+      "type": "cli",
+      "command": "cd complex-demo/terraform/modules/consul/k8s-client && terraform apply -auto-approve -var='cluster_name=eks-cluster'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure GKE Consul client",
+      "type": "cli",
+      "command": "kubectl config use-context gke-cluster && cd complex-demo/terraform/modules/consul/k8s-client && terraform apply -auto-approve -var='cluster_name=gke-cluster' -var='datacenter=gcp-central'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Join Consul datacenters",
+      "type": "cli",
+      "command": "consul join -wan $(terraform output -raw consul_server_wan_ip)",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify federation status",
+      "type": "integration",
+      "integration_name": "ListDatacenters",
+      "integration_params": {
+        "adapter_name": "consul",
+        "method": "catalog.datacenters",
+        "parameters": {}
+      },
+      "files": []
+    },
+    {
+      "name": "Test cross-datacenter service discovery",
+      "type": "cli",
+      "command": "consul catalog services -datacenter=gcp-central",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

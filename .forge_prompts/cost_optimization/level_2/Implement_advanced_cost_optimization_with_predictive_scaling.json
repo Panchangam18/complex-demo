@@ -1,0 +1,88 @@
+{
+  "goal": "Implement advanced cost optimization with predictive scaling",
+  "steps": [
+    {
+      "name": "Analyze historical usage patterns",
+      "type": "cli",
+      "command": "bq query --use_legacy_sql=false 'SELECT EXTRACT(HOUR FROM usage_start_time) as hour, EXTRACT(DAYOFWEEK FROM usage_start_time) as day, AVG(cost) as avg_cost, MAX(cost) as max_cost FROM `billing_dataset.gcp_billing_export_v1` WHERE DATE(_PARTITIONTIME) >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY) GROUP BY 1,2 ORDER BY 1,2'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create predictive scaling model",
+      "type": "prompt",
+      "prompt": "Implement machine learning model using historical metrics to predict resource needs. Use Prophet or ARIMA for time-series forecasting of CPU, memory, and request rates.",
+      "parameters": {},
+      "files": [
+        "ml/cost-optimization/scaling-predictor.py"
+      ]
+    },
+    {
+      "name": "Deploy predictive scaler",
+      "type": "cli",
+      "command": "kubectl apply -f ml/cost-optimization/predictive-scaler-cronjob.yaml && kubectl create configmap scaling-model --from-file=ml/cost-optimization/model.pkl",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure preemptible instances",
+      "type": "integration",
+      "integration_name": "CreateInstanceTemplate",
+      "integration_params": {
+        "adapter_name": "gcp",
+        "method": "compute.instanceTemplates.insert",
+        "parameters": {
+          "project": "devops-demo-prod",
+          "body": {
+            "name": "batch-processing-preemptible",
+            "properties": {
+              "machineType": "n2-highmem-4",
+              "scheduling": {
+                "preemptible": true,
+                "automaticRestart": false,
+                "onHostMaintenance": "TERMINATE"
+              }
+            }
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Implement spot instance fallback",
+      "type": "cli",
+      "command": "aws ec2 request-spot-fleet --spot-fleet-request-config file://spot-fleet-config.json --query 'SpotFleetRequestId' --output text",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Schedule resource optimization",
+      "type": "cli",
+      "command": "kubectl apply -f - <<EOF\napiVersion: batch/v1\nkind: CronJob\nmetadata:\n  name: resource-optimizer\nspec:\n  schedule: \"0 */4 * * *\"\n  jobTemplate:\n    spec:\n      template:\n        spec:\n          containers:\n          - name: optimizer\n            image: cost-optimizer:latest\n            command: [\"python\", \"/app/optimize.py\"]\nEOF",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Apply recommendations",
+      "type": "cli",
+      "command": "python ml/cost-optimization/apply-recommendations.py --dry-run=false --threshold=0.8 --action=scale-down",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor cost savings",
+      "type": "integration",
+      "integration_name": "Query",
+      "integration_params": {
+        "adapter_name": "datadog",
+        "method": "metrics.Query",
+        "parameters": {
+          "query": "avg:gcp.billing.cost{service:compute} by {project}.rollup(sum, 86400)",
+          "from": "now-7d",
+          "to": "now"
+        }
+      },
+      "files": []
+    }
+  ]
+}

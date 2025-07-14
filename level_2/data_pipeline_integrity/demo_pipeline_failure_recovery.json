@@ -1,0 +1,257 @@
+{
+  "workflow_name": "data_pipeline_failure_recovery",
+  "description": "Automated recovery workflow for data pipeline failures with intelligent retry logic and data validation",
+  "goal": "Detect and recover from data pipeline failures automatically, ensuring data integrity and minimal downtime",
+  "trigger": {
+    "type": "event",
+    "source": "aws.cloudwatch.alarm",
+    "condition": "DataPipelineFailureAlarm triggered"
+  },
+  "inputs": {
+    "pipeline_id": "${event.pipeline_id}",
+    "failure_type": "${event.failure_type}",
+    "timestamp": "${event.timestamp}",
+    "affected_data_range": "${event.data_range}"
+  },
+  "steps": [
+    {
+      "step": 1,
+      "action": "retrieve_pipeline_metadata",
+      "integration": "aws.dynamodb.GetItem",
+      "parameters": {
+        "TableName": "pipeline-metadata",
+        "Key": {
+          "pipeline_id": "${inputs.pipeline_id}"
+        }
+      },
+      "output": "pipeline_config"
+    },
+    {
+      "step": 2,
+      "action": "analyze_failure_logs",
+      "integration": "datadog.LogsApi.list_logs",
+      "parameters": {
+        "filter_from": "${inputs.timestamp - 3600}",
+        "filter_to": "${inputs.timestamp}",
+        "filter_query": "service:${pipeline_config.service_name} AND (status:error OR status:failed)",
+        "sort": "timestamp",
+        "limit": 100
+      },
+      "output": "error_logs"
+    },
+    {
+      "step": 3,
+      "action": "check_upstream_dependencies",
+      "integration": "aws.s3.HeadObject",
+      "parameters": {
+        "Bucket": "${pipeline_config.input_bucket}",
+        "Key": "${pipeline_config.input_prefix}/${inputs.affected_data_range}/manifest.json"
+      },
+      "error_handling": {
+        "on_error": "mark_upstream_failure"
+      },
+      "output": "upstream_status"
+    },
+    {
+      "step": 4,
+      "action": "validate_data_quality",
+      "integration": "aws.athena.StartQueryExecution",
+      "parameters": {
+        "QueryString": "SELECT COUNT(*) as total_records, COUNT(DISTINCT partition_date) as partitions, MIN(created_at) as min_date, MAX(created_at) as max_date FROM ${pipeline_config.database}.${pipeline_config.table} WHERE partition_date = '${inputs.affected_data_range}'",
+        "ResultConfiguration": {
+          "OutputLocation": "s3://pipeline-validation-results/"
+        }
+      },
+      "output": "data_validation_query_id"
+    },
+    {
+      "step": 5,
+      "action": "wait_for_validation_results",
+      "integration": "aws.athena.GetQueryResults",
+      "parameters": {
+        "QueryExecutionId": "${data_validation_query_id}"
+      },
+      "retry": {
+        "max_attempts": 10,
+        "interval": 5
+      },
+      "output": "validation_results"
+    },
+    {
+      "step": 6,
+      "action": "determine_recovery_strategy",
+      "integration": "aws.lambda.Invoke",
+      "parameters": {
+        "FunctionName": "pipeline-recovery-strategy-engine",
+        "Payload": {
+          "failure_type": "${inputs.failure_type}",
+          "error_logs": "${error_logs}",
+          "validation_results": "${validation_results}",
+          "pipeline_config": "${pipeline_config}"
+        }
+      },
+      "output": "recovery_strategy"
+    },
+    {
+      "step": 7,
+      "action": "create_recovery_checkpoint",
+      "integration": "aws.dynamodb.PutItem",
+      "parameters": {
+        "TableName": "pipeline-recovery-checkpoints",
+        "Item": {
+          "checkpoint_id": "${uuid()}",
+          "pipeline_id": "${inputs.pipeline_id}",
+          "timestamp": "${now()}",
+          "recovery_strategy": "${recovery_strategy}",
+          "status": "in_progress"
+        }
+      },
+      "output": "checkpoint_id"
+    },
+    {
+      "step": 8,
+      "action": "execute_data_reprocessing",
+      "integration": "aws.emr.AddJobFlowSteps",
+      "condition": "${recovery_strategy.type == 'reprocess'}",
+      "parameters": {
+        "JobFlowId": "${pipeline_config.emr_cluster_id}",
+        "Steps": [{
+          "Name": "Reprocess Failed Data",
+          "ActionOnFailure": "CONTINUE",
+          "HadoopJarStep": {
+            "Jar": "${pipeline_config.jar_location}",
+            "Args": [
+              "--mode", "recovery",
+              "--input", "${recovery_strategy.input_path}",
+              "--output", "${recovery_strategy.output_path}",
+              "--date-range", "${inputs.affected_data_range}",
+              "--checkpoint", "${checkpoint_id}"
+            ]
+          }
+        }]
+      },
+      "output": "reprocessing_job_id"
+    },
+    {
+      "step": 9,
+      "action": "monitor_recovery_progress",
+      "integration": "datadog.MetricsApi.query_timeseries_data",
+      "parameters": {
+        "query": "avg:pipeline.recovery.progress{pipeline_id:${inputs.pipeline_id}}",
+        "from": "${now() - 300}",
+        "to": "${now()}"
+      },
+      "retry": {
+        "max_attempts": 20,
+        "interval": 30
+      },
+      "output": "recovery_metrics"
+    },
+    {
+      "step": 10,
+      "action": "validate_recovered_data",
+      "integration": "aws.glue.StartJobRun",
+      "parameters": {
+        "JobName": "data-quality-validator",
+        "Arguments": {
+          "--pipeline_id": "${inputs.pipeline_id}",
+          "--data_range": "${inputs.affected_data_range}",
+          "--validation_rules": "${pipeline_config.validation_rules}",
+          "--output_path": "s3://pipeline-validation/${checkpoint_id}/"
+        }
+      },
+      "output": "validation_job_id"
+    },
+    {
+      "step": 11,
+      "action": "check_downstream_impact",
+      "integration": "aws.dynamodb.Query",
+      "parameters": {
+        "TableName": "pipeline-dependencies",
+        "KeyConditionExpression": "upstream_pipeline_id = :pipeline_id",
+        "ExpressionAttributeValues": {
+          ":pipeline_id": "${inputs.pipeline_id}"
+        }
+      },
+      "output": "downstream_pipelines"
+    },
+    {
+      "step": 12,
+      "action": "trigger_downstream_reprocessing",
+      "integration": "aws.sns.Publish",
+      "condition": "${downstream_pipelines.Count > 0}",
+      "parameters": {
+        "TopicArn": "arn:aws:sns:${region}:${account}:pipeline-cascade-recovery",
+        "Message": {
+          "upstream_pipeline": "${inputs.pipeline_id}",
+          "recovered_data_range": "${inputs.affected_data_range}",
+          "downstream_pipelines": "${downstream_pipelines.Items}",
+          "checkpoint_id": "${checkpoint_id}"
+        }
+      },
+      "output": "cascade_notification_id"
+    },
+    {
+      "step": 13,
+      "action": "update_data_lineage",
+      "integration": "aws.neptune.ExecuteOpenCypherQuery",
+      "parameters": {
+        "query": "MATCH (p:Pipeline {id: $pipeline_id}) CREATE (r:Recovery {checkpoint_id: $checkpoint_id, timestamp: $timestamp, data_range: $data_range})-[:RECOVERED]->(p)",
+        "parameters": {
+          "pipeline_id": "${inputs.pipeline_id}",
+          "checkpoint_id": "${checkpoint_id}",
+          "timestamp": "${now()}",
+          "data_range": "${inputs.affected_data_range}"
+        }
+      },
+      "output": "lineage_update_result"
+    },
+    {
+      "step": 14,
+      "action": "send_recovery_notification",
+      "integration": "slack.WebhookClient.send",
+      "parameters": {
+        "webhook_url": "${secrets.slack_webhook_url}",
+        "blocks": [{
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "*Pipeline Recovery Completed*\n• Pipeline: `${inputs.pipeline_id}`\n• Data Range: `${inputs.affected_data_range}`\n• Recovery Strategy: `${recovery_strategy.type}`\n• Duration: `${duration_minutes}` minutes\n• Status: ✅ Success"
+          }
+        }]
+      },
+      "output": "notification_result"
+    },
+    {
+      "step": 15,
+      "action": "update_recovery_metrics",
+      "integration": "datadog.MetricsApi.submit_metrics",
+      "parameters": {
+        "body": {
+          "series": [{
+            "metric": "pipeline.recovery.success",
+            "points": [[${now()}, 1]],
+            "type": "count",
+            "tags": [
+              "pipeline_id:${inputs.pipeline_id}",
+              "failure_type:${inputs.failure_type}",
+              "recovery_strategy:${recovery_strategy.type}"
+            ]
+          }]
+        }
+      },
+      "output": "metrics_submission_result"
+    }
+  ],
+  "error_handling": {
+    "strategy": "compensate",
+    "on_failure": "rollback_to_checkpoint",
+    "notification": "pagerduty"
+  },
+  "outputs": {
+    "recovery_checkpoint_id": "${checkpoint_id}",
+    "recovered_data_range": "${inputs.affected_data_range}",
+    "downstream_impact": "${downstream_pipelines}",
+    "recovery_duration": "${duration_minutes}"
+  }
+}

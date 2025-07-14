@@ -1,0 +1,41 @@
+{
+  "goal": "Deploy Elasticsearch single-node cluster",
+  "steps": [
+    {
+      "name": "Deploy Elasticsearch",
+      "type": "cli",
+      "command": "docker run -d --name elasticsearch -p 9200:9200 -e 'discovery.type=single-node' -e 'xpack.security.enabled=false' elasticsearch:8.11.0",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create index template",
+      "type": "integration",
+      "integration_name": "put_index_template",
+      "integration_params": {
+        "adapter_name": "elasticsearch",
+        "method": "indices.put_index_template",
+        "parameters": {
+          "name": "logs",
+          "index_patterns": [
+            "logs-*"
+          ],
+          "template": {
+            "settings": {
+              "number_of_shards": 1,
+              "number_of_replicas": 0
+            }
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Verify cluster health",
+      "type": "cli",
+      "command": "curl -s localhost:9200/_cluster/health | jq '.status'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

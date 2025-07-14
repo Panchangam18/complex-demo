@@ -1,0 +1,42 @@
+{
+  "goal": "Execute comprehensive platform destruction",
+  "steps": [
+    {
+      "name": "Backup critical data",
+      "type": "cli",
+      "command": "kubectl get all -A -o yaml > backup-all-resources-$(date +%Y%m%d).yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Review destroy script",
+      "type": "prompt",
+      "prompt": "Examine destroy.sh to understand the destruction order and safety checks.",
+      "parameters": {},
+      "files": [
+        "complex-demo/destroy.sh"
+      ]
+    },
+    {
+      "name": "Run pre-destroy cleanup",
+      "type": "cli",
+      "command": "bash complex-demo/terraform/scripts/pre-destroy-cleanup.sh",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Execute destroy with confirmation",
+      "type": "cli",
+      "command": "bash complex-demo/destroy.sh --confirm --retain-backups",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify resource cleanup",
+      "type": "cli",
+      "command": "aws ec2 describe-instances --filters Name=tag:Project,Values=complex-demo --query 'Reservations[].Instances[].InstanceId' && echo 'No instances should be listed'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

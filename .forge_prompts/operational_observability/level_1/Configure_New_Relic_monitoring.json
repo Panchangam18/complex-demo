@@ -1,0 +1,21 @@
+{
+  "goal": "Configure New Relic monitoring",
+  "steps": [
+    {
+      "name": "Update New Relic config",
+      "type": "prompt",
+      "prompt": "Update the New Relic integration YAML with proper license key and app name configuration.",
+      "parameters": {},
+      "files": [
+        "complex-demo/k8s/envs/dev/monitoring/newrelic-integration.yaml"
+      ]
+    },
+    {
+      "name": "Deploy New Relic",
+      "type": "cli",
+      "command": "bash complex-demo/k8s/envs/dev/monitoring/deploy-newrelic.sh",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,100 @@
+{
+  "goal": "Implement ECS blue-green deployment with automated canary testing",
+  "steps": [
+    {
+      "name": "Create ECS service with blue-green configuration",
+      "type": "prompt",
+      "prompt": "Configure ECS service for blue-green deployments using CodeDeploy. Set up target groups, load balancer rules, and deployment configuration with 10% traffic shifting.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/ecs/blue-green-service.tf"
+      ]
+    },
+    {
+      "name": "Deploy initial blue environment",
+      "type": "integration",
+      "integration_name": "CreateService",
+      "integration_params": {
+        "adapter_name": "aws",
+        "method": "ecs.CreateService",
+        "parameters": {
+          "cluster": "production-cluster",
+          "serviceName": "api-service-blue",
+          "taskDefinition": "api:blue",
+          "desiredCount": 4,
+          "deploymentController": {
+            "type": "CODE_DEPLOY"
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Create canary test Lambda",
+      "type": "prompt",
+      "prompt": "Implement Lambda function that performs synthetic monitoring during deployments: API health checks, performance tests, and error rate monitoring. Return pass/fail for CodeDeploy hooks.",
+      "parameters": {},
+      "files": [
+        "lambda/deployment-validation/canary-tests.py"
+      ]
+    },
+    {
+      "name": "Update task definition for green deployment",
+      "type": "integration",
+      "integration_name": "RegisterTaskDefinition",
+      "integration_params": {
+        "adapter_name": "aws",
+        "method": "ecs.RegisterTaskDefinition",
+        "parameters": {
+          "family": "api",
+          "taskRoleArn": "arn:aws:iam::123456789012:role/ecsTaskRole",
+          "containerDefinitions": [
+            {
+              "name": "api",
+              "image": "123456789012.dkr.ecr.us-west-2.amazonaws.com/api:green",
+              "memory": 2048,
+              "cpu": 1024
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Start blue-green deployment",
+      "type": "cli",
+      "command": "aws deploy create-deployment --application-name ecs-api-app --deployment-group-name production-api --revision '{\"revisionType\": \"AppSpecContent\", \"appSpecContent\": {\"content\": \"{...}\"}}' --description 'Deploy green version'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor canary traffic shift",
+      "type": "cli",
+      "command": "watch -n 5 'aws elbv2 describe-target-health --target-group-arn arn:aws:elasticloadbalancing:us-west-2:123456789012:targetgroup/api-green/abc123'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify application metrics during deployment",
+      "type": "integration",
+      "integration_name": "Query",
+      "integration_params": {
+        "adapter_name": "datadog",
+        "method": "metrics.Query",
+        "parameters": {
+          "query": "avg:ecs.service.running{service:api-service-blue} by {container_name}",
+          "from": "now-30m",
+          "to": "now"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Validate green environment is healthy",
+      "type": "cli",
+      "command": "for i in {1..10}; do curl -s https://api-green.example.com/health | jq '.status' | grep -q 'healthy' || exit 1; sleep 3; done",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

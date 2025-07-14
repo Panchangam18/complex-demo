@@ -1,0 +1,28 @@
+{
+  "goal": "Configure AWS S3 bucket with lifecycle policies",
+  "steps": [
+    {
+      "name": "Create S3 bucket config",
+      "type": "prompt",
+      "prompt": "Design Terraform for S3 bucket with: versioning enabled, lifecycle rule to move to Glacier after 90 days, and server-side encryption.",
+      "parameters": {},
+      "files": [
+        "terraform/s3-archive.tf"
+      ]
+    },
+    {
+      "name": "Validate configuration",
+      "type": "cli",
+      "command": "terraform fmt terraform/s3-archive.tf && terraform validate",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Generate plan",
+      "type": "cli",
+      "command": "terraform plan -out=s3.tfplan",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

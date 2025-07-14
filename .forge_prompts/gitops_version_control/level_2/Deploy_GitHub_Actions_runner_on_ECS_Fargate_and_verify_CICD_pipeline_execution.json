@@ -1,0 +1,97 @@
+{
+  "goal": "Deploy GitHub Actions runner on ECS Fargate and verify CI/CD pipeline execution",
+  "steps": [
+    {
+      "name": "Create self-hosted runner configuration",
+      "type": "prompt",
+      "prompt": "Design ECS task definition for GitHub Actions self-hosted runner with Docker-in-Docker support, proper IAM roles, and secure token management via Secrets Manager.",
+      "parameters": {},
+      "files": [
+        "ecs/github-runner/task-definition.json"
+      ]
+    },
+    {
+      "name": "Deploy runner to ECS cluster",
+      "type": "integration",
+      "integration_name": "RunTask",
+      "integration_params": {
+        "adapter_name": "aws",
+        "method": "ecs.RunTask",
+        "parameters": {
+          "cluster": "devops-cluster",
+          "taskDefinition": "github-runner:latest",
+          "launchType": "FARGATE",
+          "count": 2,
+          "networkConfiguration": {
+            "awsvpcConfiguration": {
+              "subnets": [
+                "subnet-123",
+                "subnet-456"
+              ],
+              "securityGroups": [
+                "sg-runner"
+              ],
+              "assignPublicIp": "DISABLED"
+            }
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Verify runners registered with GitHub",
+      "type": "integration",
+      "integration_name": "ListSelfHostedRunnersForRepo",
+      "integration_params": {
+        "adapter_name": "github",
+        "method": "actions.ListSelfHostedRunnersForRepo",
+        "parameters": {
+          "owner": "example-org",
+          "repo": "devops-demo"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Trigger workflow on self-hosted runner",
+      "type": "integration",
+      "integration_name": "CreateWorkflowDispatch",
+      "integration_params": {
+        "adapter_name": "github",
+        "method": "actions.CreateWorkflowDispatch",
+        "parameters": {
+          "owner": "example-org",
+          "repo": "devops-demo",
+          "workflow_id": "ci-cd.yml",
+          "ref": "main",
+          "inputs": {
+            "runner_type": "self-hosted"
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Monitor runner task health",
+      "type": "integration",
+      "integration_name": "ListTasks",
+      "integration_params": {
+        "adapter_name": "aws",
+        "method": "ecs.ListTasks",
+        "parameters": {
+          "cluster": "devops-cluster",
+          "family": "github-runner",
+          "desiredStatus": "RUNNING"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Check workflow execution logs",
+      "type": "cli",
+      "command": "gh run list --workflow=ci-cd.yml --limit 1 --json status,conclusion,databaseId | jq -r '.[0]' && gh run view $(gh run list --workflow=ci-cd.yml --limit 1 --json databaseId -q '.[0].databaseId') --log",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

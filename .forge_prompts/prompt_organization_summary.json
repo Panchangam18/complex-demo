@@ -1,0 +1,694 @@
+{
+  "level_1": {
+    "functional_provisioning_deployment": [
+      {
+        "goal": "Create and validate a complete Terraform configuration for AWS VPC with multiple subnets and security groups",
+        "file": "functional_provisioning_deployment/level_1/Create_and_validate_a_complete_Terraform_configuration_for_AWS_VPC_with_multiple.json"
+      },
+      {
+        "goal": "Write Kubernetes manifests for a microservices application with service mesh integration",
+        "file": "functional_provisioning_deployment/level_1/Write_Kubernetes_manifests_for_a_microservices_application_with_service_mesh_int.json"
+      },
+      {
+        "goal": "Create serverless application infrastructure with AWS Lambda, API Gateway, and DynamoDB",
+        "file": "functional_provisioning_deployment/level_1/Create_serverless_application_infrastructure_with_AWS_Lambda_API_Gateway_and_Dyn.json"
+      },
+      {
+        "goal": "Implement infrastructure compliance and policy as code using Open Policy Agent",
+        "file": "functional_provisioning_deployment/level_1/Implement_infrastructure_compliance_and_policy_as_code_using_Open_Policy_Agent.json"
+      },
+      {
+        "goal": "Design Azure AKS cluster configuration with advanced networking and security features",
+        "file": "functional_provisioning_deployment/level_1/Design_Azure_AKS_cluster_configuration_with_advanced_networking_and_security_fea.json"
+      },
+      {
+        "goal": "Create Jenkins pipeline for automated security scanning and compliance checks",
+        "file": "functional_provisioning_deployment/level_1/Create_Jenkins_pipeline_for_automated_security_scanning_and_compliance_checks.json"
+      },
+      {
+        "goal": "Create GCP infrastructure with Terraform for multi-region deployment",
+        "file": "functional_provisioning_deployment/level_1/Create_GCP_infrastructure_with_Terraform_for_multi_region_deployment.json"
+      },
+      {
+        "goal": "Create comprehensive API gateway configuration with rate limiting and authentication",
+        "file": "functional_provisioning_deployment/level_1/Create_comprehensive_API_gateway_configuration_with_rate_limiting_and_authentica.json"
+      },
+      {
+        "goal": "Create edge computing deployment strategy with IoT device management",
+        "file": "functional_provisioning_deployment/level_1/Create_edge_computing_deployment_strategy_with_IoT_device_management.json"
+      },
+      {
+        "goal": "Create CircleCI pipeline for Node.js microservice",
+        "file": "functional_provisioning_deployment/level_1/Create_CircleCI_pipeline_for_Nodejs_microservice.json"
+      },
+      {
+        "goal": "Set up basic Kubernetes service with health checks",
+        "file": "functional_provisioning_deployment/level_1/Set_up_basic_Kubernetes_service_with_health_checks.json"
+      },
+      {
+        "goal": "Configure AWS S3 bucket with lifecycle policies",
+        "file": "functional_provisioning_deployment/level_1/Configure_AWS_S3_bucket_with_lifecycle_policies.json"
+      },
+      {
+        "goal": "Create Docker multi-stage build for Go application",
+        "file": "functional_provisioning_deployment/level_1/Create_Docker_multi_stage_build_for_Go_application.json"
+      },
+      {
+        "goal": "Configure log rotation with logrotate",
+        "file": "functional_provisioning_deployment/level_1/Configure_log_rotation_with_logrotate.json"
+      },
+      {
+        "goal": "Configure Terraform to deploy the application to AWS EKS",
+        "file": "functional_provisioning_deployment/level_1/Configure_Terraform_to_deploy_the_application_to_AWS_EKS.json"
+      },
+      {
+        "goal": "Set up Consul service mesh for the Node.js backend",
+        "file": "functional_provisioning_deployment/level_1/Set_up_Consul_service_mesh_for_the_Nodejs_backend.json"
+      },
+      {
+        "goal": "Update CircleCI pipeline for the full-stack application",
+        "file": "functional_provisioning_deployment/level_1/Update_CircleCI_pipeline_for_the_full_stack_application.json"
+      },
+      {
+        "goal": "Update Makefile to add new deployment target",
+        "file": "functional_provisioning_deployment/level_1/Update_Makefile_to_add_new_deployment_target.json"
+      },
+      {
+        "goal": "Add authentication middleware to the Node.js backend API",
+        "file": "functional_provisioning_deployment/level_1/Add_authentication_middleware_to_the_Nodejs_backend_API.json"
+      },
+      {
+        "goal": "Update Kubernetes deployment to use ConfigMap for environment variables",
+        "file": "functional_provisioning_deployment/level_1/Update_Kubernetes_deployment_to_use_ConfigMap_for_environment_variables.json"
+      },
+      {
+        "goal": "Configure Terraform AWS VPC module for production environment",
+        "file": "functional_provisioning_deployment/level_1/Configure_Terraform_AWS_VPC_module_for_production_environment.json"
+      },
+      {
+        "goal": "Add new API endpoint to Vue.js REST service client",
+        "file": "functional_provisioning_deployment/level_1/Add_new_API_endpoint_to_Vuejs_REST_service_client.json"
+      },
+      {
+        "goal": "Add CORS configuration to Express app",
+        "file": "functional_provisioning_deployment/level_1/Add_CORS_configuration_to_Express_app.json"
+      },
+      {
+        "goal": "Configure S3 bucket in Terraform",
+        "file": "functional_provisioning_deployment/level_1/Configure_S3_bucket_in_Terraform.json"
+      },
+      {
+        "goal": "Update backend deployment resources",
+        "file": "functional_provisioning_deployment/level_1/Update_backend_deployment_resources.json"
+      },
+      {
+        "goal": "Configure CircleCI for multi-stage deployment pipeline",
+        "file": "functional_provisioning_deployment/level_1/Configure_CircleCI_for_multi_stage_deployment_pipeline.json"
+      },
+      {
+        "goal": "Set up Ansible playbook for Node.js application deployment",
+        "file": "functional_provisioning_deployment/level_1/Set_up_Ansible_playbook_for_Nodejs_application_deployment.json"
+      },
+      {
+        "goal": "Configure Nexus repository for npm package caching",
+        "file": "functional_provisioning_deployment/level_1/Configure_Nexus_repository_for_npm_package_caching.json"
+      },
+      {
+        "goal": "Implement security hardening for Kubernetes deployments",
+        "file": "functional_provisioning_deployment/level_1/Implement_security_hardening_for_Kubernetes_deployments.json"
+      },
+      {
+        "goal": "Update Makefile with new deployment target",
+        "file": "functional_provisioning_deployment/level_1/Update_Makefile_with_new_deployment_target.json"
+      },
+      {
+        "goal": "Configure JFrog image pull secret",
+        "file": "functional_provisioning_deployment/level_1/Configure_JFrog_image_pull_secret.json"
+      },
+      {
+        "goal": "Update frontend Docker build",
+        "file": "functional_provisioning_deployment/level_1/Update_frontend_Docker_build.json"
+      },
+      {
+        "goal": "Add Terraform backend configuration",
+        "file": "functional_provisioning_deployment/level_1/Add_Terraform_backend_configuration.json"
+      }
+    ],
+    "stateful_operations": [
+      {
+        "goal": "Create comprehensive Docker Compose configuration for local development environment",
+        "file": "stateful_operations/level_1/Create_comprehensive_Docker_Compose_configuration_for_local_development_environm.json"
+      },
+      {
+        "goal": "Create Helm charts for microservices with advanced templating and dependency management",
+        "file": "stateful_operations/level_1/Create_Helm_charts_for_microservices_with_advanced_templating_and_dependency_man.json"
+      },
+      {
+        "goal": "Create Helm charts for microservices with advanced templating and dependency management",
+        "file": "stateful_operations/level_1/Create_Helm_charts_for_microservices_with_advanced_templating_and_dependency_man.json"
+      },
+      {
+        "goal": "Implement comprehensive backup and disaster recovery solution across cloud providers",
+        "file": "stateful_operations/level_1/Implement_comprehensive_backup_and_disaster_recovery_solution_across_cloud_provi.json"
+      },
+      {
+        "goal": "Build multi-region active-active architecture with global load balancing",
+        "file": "stateful_operations/level_1/Build_multi_region_active_active_architecture_with_global_load_balancing.json"
+      },
+      {
+        "goal": "Set up PostgreSQL backup script",
+        "file": "stateful_operations/level_1/Set_up_PostgreSQL_backup_script.json"
+      }
+    ],
+    "operational_observability": [
+      {
+        "goal": "Design and implement Ansible playbooks for configuration management across multiple environments",
+        "file": "operational_observability/level_1/Design_and_implement_Ansible_playbooks_for_configuration_management_across_multi.json"
+      },
+      {
+        "goal": "Implement comprehensive logging and tracing solution with ELK stack and OpenTelemetry",
+        "file": "operational_observability/level_1/Implement_comprehensive_logging_and_tracing_solution_with_ELK_stack_and_OpenTele.json"
+      },
+      {
+        "goal": "Implement comprehensive logging and tracing solution with ELK stack and OpenTelemetry",
+        "file": "operational_observability/level_1/Implement_comprehensive_logging_and_tracing_solution_with_ELK_stack_and_OpenTele.json"
+      },
+      {
+        "goal": "Create comprehensive API management solution with rate limiting and authentication",
+        "file": "operational_observability/level_1/Create_comprehensive_API_management_solution_with_rate_limiting_and_authenticati.json"
+      },
+      {
+        "goal": "Create comprehensive ECS Fargate task definitions with advanced configurations",
+        "file": "operational_observability/level_1/Create_comprehensive_ECS_Fargate_task_definitions_with_advanced_configurations.json"
+      },
+      {
+        "goal": "Design comprehensive Grafana monitoring dashboard with alerts for microservices architecture",
+        "file": "operational_observability/level_1/Design_comprehensive_Grafana_monitoring_dashboard_with_alerts_for_microservices_.json"
+      },
+      {
+        "goal": "Create advanced Kubernetes network policies and service mesh security",
+        "file": "operational_observability/level_1/Create_advanced_Kubernetes_network_policies_and_service_mesh_security.json"
+      },
+      {
+        "goal": "Set up Prometheus monitoring for Kubernetes pod",
+        "file": "operational_observability/level_1/Set_up_Prometheus_monitoring_for_Kubernetes_pod.json"
+      },
+      {
+        "goal": "Update the Vue.js client application to add a new dashboard feature",
+        "file": "operational_observability/level_1/Update_the_Vuejs_client_application_to_add_a_new_dashboard_feature.json"
+      },
+      {
+        "goal": "Create monitoring dashboards for the application using existing Grafana setup",
+        "file": "operational_observability/level_1/Create_monitoring_dashboards_for_the_application_using_existing_Grafana_setup.json"
+      },
+      {
+        "goal": "Configure Prometheus monitoring for the backend service",
+        "file": "operational_observability/level_1/Configure_Prometheus_monitoring_for_the_backend_service.json"
+      },
+      {
+        "goal": "Update Vue router for new route",
+        "file": "operational_observability/level_1/Update_Vue_router_for_new_route.json"
+      },
+      {
+        "goal": "Set up comprehensive monitoring with Datadog integration",
+        "file": "operational_observability/level_1/Set_up_comprehensive_monitoring_with_Datadog_integration.json"
+      },
+      {
+        "goal": "Configure New Relic monitoring",
+        "file": "operational_observability/level_1/Configure_New_Relic_monitoring.json"
+      }
+    ],
+    "security_isolation": [
+      {
+        "goal": "Create comprehensive IAM policies and security configurations for multi-account AWS organization",
+        "file": "security_isolation/level_1/Create_comprehensive_IAM_policies_and_security_configurations_for_multi_account_.json"
+      },
+      {
+        "goal": "Create comprehensive IAM policies and security configurations for multi-account AWS organization",
+        "file": "security_isolation/level_1/Create_comprehensive_IAM_policies_and_security_configurations_for_multi_account_.json"
+      },
+      {
+        "goal": "Design comprehensive compliance automation for SOC2 and GDPR requirements",
+        "file": "security_isolation/level_1/Design_comprehensive_compliance_automation_for_SOC2_and_GDPR_requirements.json"
+      }
+    ],
+    "gitops_version_control": [
+      {
+        "goal": "Design and implement GitOps workflow with ArgoCD for multi-environment deployments",
+        "file": "gitops_version_control/level_1/Design_and_implement_GitOps_workflow_with_ArgoCD_for_multi_environment_deploymen.json"
+      },
+      {
+        "goal": "Design and implement GitOps workflow with ArgoCD for multi-environment deployments",
+        "file": "gitops_version_control/level_1/Design_and_implement_GitOps_workflow_with_ArgoCD_for_multi_environment_deploymen.json"
+      },
+      {
+        "goal": "Create and validate GitHub Actions workflow for multi-environment deployment with approval gates",
+        "file": "gitops_version_control/level_1/Create_and_validate_GitHub_Actions_workflow_for_multi_environment_deployment_wit.json"
+      },
+      {
+        "goal": "Configure GitHub Actions for security scanning",
+        "file": "gitops_version_control/level_1/Configure_GitHub_Actions_for_security_scanning.json"
+      }
+    ],
+    "data_pipeline_integrity": [
+      {
+        "goal": "Design and implement event-driven architecture using message queues and event streaming",
+        "file": "data_pipeline_integrity/level_1/Design_and_implement_event_driven_architecture_using_message_queues_and_event_st.json"
+      },
+      {
+        "goal": "Design and validate a Step Functions workflow for multi-stage data processing pipeline",
+        "file": "data_pipeline_integrity/level_1/Design_and_validate_a_Step_Functions_workflow_for_multi_stage_data_processing_pi.json"
+      },
+      {
+        "goal": "Design comprehensive data pipeline with Apache Airflow and cloud storage",
+        "file": "data_pipeline_integrity/level_1/Design_comprehensive_data_pipeline_with_Apache_Airflow_and_cloud_storage.json"
+      }
+    ],
+    "compliance_drift_management": [
+      {
+        "goal": "Design Elasticsearch index lifecycle management for log retention and optimization",
+        "file": "compliance_drift_management/level_1/Design_Elasticsearch_index_lifecycle_management_for_log_retention_and_optimizati.json"
+      }
+    ],
+    "reliability_chaos_engineering": [
+      {
+        "goal": "Create comprehensive chaos engineering scenarios using Litmus and validation framework",
+        "file": "reliability_chaos_engineering/level_1/Create_comprehensive_chaos_engineering_scenarios_using_Litmus_and_validation_fra.json"
+      },
+      {
+        "goal": "Design comprehensive backup and disaster recovery strategy for multi-cloud deployment",
+        "file": "reliability_chaos_engineering/level_1/Design_comprehensive_backup_and_disaster_recovery_strategy_for_multi_cloud_deplo.json"
+      },
+      {
+        "goal": "Configure nginx reverse proxy",
+        "file": "reliability_chaos_engineering/level_1/Configure_nginx_reverse_proxy.json"
+      },
+      {
+        "goal": "Create Helm chart for microservice",
+        "file": "reliability_chaos_engineering/level_1/Create_Helm_chart_for_microservice.json"
+      },
+      {
+        "goal": "Add health check endpoint to Node.js server",
+        "file": "reliability_chaos_engineering/level_1/Add_health_check_endpoint_to_Nodejs_server.json"
+      }
+    ],
+    "performance_scaling": [
+      {
+        "goal": "Design Consul service mesh configuration with health checking and traffic management",
+        "file": "performance_scaling/level_1/Design_Consul_service_mesh_configuration_with_health_checking_and_traffic_manage.json"
+      },
+      {
+        "goal": "Optimize Docker build for Node.js backend with multi-stage caching",
+        "file": "performance_scaling/level_1/Optimize_Docker_build_for_Nodejs_backend_with_multi_stage_caching.json"
+      }
+    ],
+    "platform_engineering": [
+      {
+        "goal": "Create Kubernetes ConfigMap for app configuration",
+        "file": "platform_engineering/level_1/Create_Kubernetes_ConfigMap_for_app_configuration.json"
+      }
+    ]
+  },
+  "level_2": {
+    "functional_provisioning_deployment": [
+      {
+        "goal": "Deploy a highly available RDS PostgreSQL cluster with read replicas and comprehensive monitoring",
+        "file": "functional_provisioning_deployment/level_2/Deploy_a_highly_available_RDS_PostgreSQL_cluster_with_read_replicas_and_comprehe.json"
+      },
+      {
+        "goal": "Implement comprehensive CI/CD pipeline with security scanning and automated deployments",
+        "file": "functional_provisioning_deployment/level_2/Implement_comprehensive_CICD_pipeline_with_security_scanning_and_automated_deplo.json"
+      },
+      {
+        "goal": "Implement zero-trust security architecture with AWS IAM, service mesh policies, and network segmentation",
+        "file": "functional_provisioning_deployment/level_2/Implement_zero_trust_security_architecture_with_AWS_IAM_service_mesh_policies_an.json"
+      },
+      {
+        "goal": "Create multi-cloud cost optimization platform with automated resource rightsizing",
+        "file": "functional_provisioning_deployment/level_2/Create_multi_cloud_cost_optimization_platform_with_automated_resource_rightsizin.json"
+      },
+      {
+        "goal": "Deploy Azure AKS cluster with GitOps using Flux and verify application deployment",
+        "file": "functional_provisioning_deployment/level_2/Deploy_Azure_AKS_cluster_with_GitOps_using_Flux_and_verify_application_deploymen.json"
+      },
+      {
+        "goal": "Implement ECS blue-green deployment with automated canary testing",
+        "file": "functional_provisioning_deployment/level_2/Implement_ECS_blue_green_deployment_with_automated_canary_testing.json"
+      },
+      {
+        "goal": "Deploy multi-region disaster recovery setup with automated failover testing",
+        "file": "functional_provisioning_deployment/level_2/Deploy_multi_region_disaster_recovery_setup_with_automated_failover_testing.json"
+      },
+      {
+        "goal": "Implement progressive canary deployment for serverless application with automated rollback",
+        "file": "functional_provisioning_deployment/level_2/Implement_progressive_canary_deployment_for_serverless_application_with_automate.json"
+      },
+      {
+        "goal": "Deploy Consul service mesh with zero-downtime migration of microservices",
+        "file": "functional_provisioning_deployment/level_2/Deploy_Consul_service_mesh_with_zero_downtime_migration_of_microservices.json"
+      },
+      {
+        "goal": "Provision GCP infrastructure with automated scaling based on custom metrics",
+        "file": "functional_provisioning_deployment/level_2/Provision_GCP_infrastructure_with_automated_scaling_based_on_custom_metrics.json"
+      },
+      {
+        "goal": "Implement edge computing infrastructure with real-time data processing",
+        "file": "functional_provisioning_deployment/level_2/Implement_edge_computing_infrastructure_with_real_time_data_processing.json"
+      },
+      {
+        "goal": "Deploy multi-tenant platform with isolated environments and resource quotas",
+        "file": "functional_provisioning_deployment/level_2/Deploy_multi_tenant_platform_with_isolated_environments_and_resource_quotas.json"
+      },
+      {
+        "goal": "Deploy CircleCI pipeline with automated testing",
+        "file": "functional_provisioning_deployment/level_2/Deploy_CircleCI_pipeline_with_automated_testing.json"
+      },
+      {
+        "goal": "Quick Kubernetes deployment with auto-scaling",
+        "file": "functional_provisioning_deployment/level_2/Quick_Kubernetes_deployment_with_auto_scaling.json"
+      },
+      {
+        "goal": "Quick Redis deployment with persistence",
+        "file": "functional_provisioning_deployment/level_2/Quick_Redis_deployment_with_persistence.json"
+      },
+      {
+        "goal": "Set up basic Jenkins job with email notification",
+        "file": "functional_provisioning_deployment/level_2/Set_up_basic_Jenkins_job_with_email_notification.json"
+      },
+      {
+        "goal": "Quick GCP VM provisioning with startup script",
+        "file": "functional_provisioning_deployment/level_2/Quick_GCP_VM_provisioning_with_startup_script.json"
+      },
+      {
+        "goal": "Deploy simple Lambda function with API Gateway",
+        "file": "functional_provisioning_deployment/level_2/Deploy_simple_Lambda_function_with_API_Gateway.json"
+      },
+      {
+        "goal": "Deploy the complete application stack to multi-cloud Kubernetes clusters",
+        "file": "functional_provisioning_deployment/level_2/Deploy_the_complete_application_stack_to_multi_cloud_Kubernetes_clusters.json"
+      },
+      {
+        "goal": "Execute the full deployment pipeline using the deploy.sh script",
+        "file": "functional_provisioning_deployment/level_2/Execute_the_full_deployment_pipeline_using_the_deploysh_script.json"
+      },
+      {
+        "goal": "Set up GitOps with ArgoCD for continuous deployment",
+        "file": "functional_provisioning_deployment/level_2/Set_up_GitOps_with_ArgoCD_for_continuous_deployment.json"
+      },
+      {
+        "goal": "Configure Ansible automation for Day-2 operations",
+        "file": "functional_provisioning_deployment/level_2/Configure_Ansible_automation_for_Day_2_operations.json"
+      },
+      {
+        "goal": "Implement security scanning in the CI/CD pipeline",
+        "file": "functional_provisioning_deployment/level_2/Implement_security_scanning_in_the_CICD_pipeline.json"
+      },
+      {
+        "goal": "Quick deployment of backend to local Kubernetes",
+        "file": "functional_provisioning_deployment/level_2/Quick_deployment_of_backend_to_local_Kubernetes.json"
+      },
+      {
+        "goal": "Run Terraform for GCP VPC setup",
+        "file": "functional_provisioning_deployment/level_2/Run_Terraform_for_GCP_VPC_setup.json"
+      },
+      {
+        "goal": "Quick Consul deployment check",
+        "file": "functional_provisioning_deployment/level_2/Quick_Consul_deployment_check.json"
+      },
+      {
+        "goal": "Deploy updated backend application with database migrations",
+        "file": "functional_provisioning_deployment/level_2/Deploy_updated_backend_application_with_database_migrations.json"
+      },
+      {
+        "goal": "Set up complete EKS cluster with networking and add-ons",
+        "file": "functional_provisioning_deployment/level_2/Set_up_complete_EKS_cluster_with_networking_and_add_ons.json"
+      },
+      {
+        "goal": "Deploy multi-cloud Consul federation across AWS and GCP",
+        "file": "functional_provisioning_deployment/level_2/Deploy_multi_cloud_Consul_federation_across_AWS_and_GCP.json"
+      },
+      {
+        "goal": "Quick RDS deployment with Terraform",
+        "file": "functional_provisioning_deployment/level_2/Quick_RDS_deployment_with_Terraform.json"
+      },
+      {
+        "goal": "Deploy frontend with updated image",
+        "file": "functional_provisioning_deployment/level_2/Deploy_frontend_with_updated_image.json"
+      },
+      {
+        "goal": "Quick ECR repository setup",
+        "file": "functional_provisioning_deployment/level_2/Quick_ECR_repository_setup.json"
+      },
+      {
+        "goal": "Execute full platform deployment using deploy.sh with custom configurations",
+        "file": "functional_provisioning_deployment/level_2/Execute_full_platform_deployment_using_deploysh_with_custom_configurations.json"
+      },
+      {
+        "goal": "Execute comprehensive platform destruction",
+        "file": "functional_provisioning_deployment/level_2/Execute_comprehensive_platform_destruction.json"
+      },
+      {
+        "goal": "Set up advanced security with threat detection",
+        "file": "functional_provisioning_deployment/level_2/Set_up_advanced_security_with_threat_detection.json"
+      },
+      {
+        "goal": "Quick stress test deployment",
+        "file": "functional_provisioning_deployment/level_2/Quick_stress_test_deployment.json"
+      },
+      {
+        "goal": "Bootstrap Terraform backend",
+        "file": "functional_provisioning_deployment/level_2/Bootstrap_Terraform_backend.json"
+      },
+      {
+        "goal": "Configure Consul status monitoring",
+        "file": "functional_provisioning_deployment/level_2/Configure_Consul_status_monitoring.json"
+      }
+    ],
+    "operational_observability": [
+      {
+        "goal": "Deploy and configure a production-ready Kubernetes cluster with service mesh and observability",
+        "file": "operational_observability/level_2/Deploy_and_configure_a_production_ready_Kubernetes_cluster_with_service_mesh_and.json"
+      },
+      {
+        "goal": "Create enterprise-grade monitoring and alerting system with SLO-based alerts",
+        "file": "operational_observability/level_2/Create_enterprise_grade_monitoring_and_alerting_system_with_SLO_based_alerts.json"
+      },
+      {
+        "goal": "Deploy and manage multi-cluster service mesh with Istio across hybrid cloud environments",
+        "file": "operational_observability/level_2/Deploy_and_manage_multi_cluster_service_mesh_with_Istio_across_hybrid_cloud_envi.json"
+      },
+      {
+        "goal": "Deploy Grafana monitoring stack with automated dashboard provisioning and alert routing",
+        "file": "operational_observability/level_2/Deploy_Grafana_monitoring_stack_with_automated_dashboard_provisioning_and_alert_.json"
+      },
+      {
+        "goal": "Implement Elasticsearch observability pipeline with real-time anomaly detection",
+        "file": "operational_observability/level_2/Implement_Elasticsearch_observability_pipeline_with_real_time_anomaly_detection.json"
+      },
+      {
+        "goal": "Deploy Grafana team-based access control with automated onboarding",
+        "file": "operational_observability/level_2/Deploy_Grafana_team_based_access_control_with_automated_onboarding.json"
+      },
+      {
+        "goal": "Implement data pipeline with Airflow including real-time monitoring and alerting",
+        "file": "operational_observability/level_2/Implement_data_pipeline_with_Airflow_including_real_time_monitoring_and_alerting.json"
+      },
+      {
+        "goal": "Deploy service mesh observability with distributed tracing and custom dashboards",
+        "file": "operational_observability/level_2/Deploy_service_mesh_observability_with_distributed_tracing_and_custom_dashboards.json"
+      },
+      {
+        "goal": "Deploy Grafana alert with Slack notification",
+        "file": "operational_observability/level_2/Deploy_Grafana_alert_with_Slack_notification.json"
+      },
+      {
+        "goal": "Deploy Elasticsearch single-node cluster",
+        "file": "operational_observability/level_2/Deploy_Elasticsearch_single_node_cluster.json"
+      },
+      {
+        "goal": "Quick Datadog monitoring setup",
+        "file": "operational_observability/level_2/Quick_Datadog_monitoring_setup.json"
+      },
+      {
+        "goal": "Quick EFK stack deployment",
+        "file": "operational_observability/level_2/Quick_EFK_stack_deployment.json"
+      },
+      {
+        "goal": "Implement end-to-end monitoring for the application using the existing observability stack",
+        "file": "operational_observability/level_2/Implement_end_to_end_monitoring_for_the_application_using_the_existing_observabi.json"
+      },
+      {
+        "goal": "Deploy monitoring stack using existing scripts",
+        "file": "operational_observability/level_2/Deploy_monitoring_stack_using_existing_scripts.json"
+      },
+      {
+        "goal": "Implement Fluent Bit logging pipeline with Elasticsearch",
+        "file": "operational_observability/level_2/Implement_Fluent_Bit_logging_pipeline_with_Elasticsearch.json"
+      },
+      {
+        "goal": "Configure Datadog monitoring across all environments",
+        "file": "operational_observability/level_2/Configure_Datadog_monitoring_across_all_environments.json"
+      },
+      {
+        "goal": "Enable Prometheus monitoring",
+        "file": "operational_observability/level_2/Enable_Prometheus_monitoring.json"
+      },
+      {
+        "goal": "Build and deploy full stack application with monitoring",
+        "file": "operational_observability/level_2/Build_and_deploy_full_stack_application_with_monitoring.json"
+      },
+      {
+        "goal": "Implement configuration management with Ansible Tower",
+        "file": "operational_observability/level_2/Implement_configuration_management_with_Ansible_Tower.json"
+      },
+      {
+        "goal": "Deploy lightweight monitoring",
+        "file": "operational_observability/level_2/Deploy_lightweight_monitoring.json"
+      }
+    ],
+    "cost_optimization": [
+      {
+        "goal": "Perform comprehensive AWS cost optimization analysis and implement savings recommendations",
+        "file": "cost_optimization/level_2/Perform_comprehensive_AWS_cost_optimization_analysis_and_implement_savings_recom.json"
+      },
+      {
+        "goal": "Implement cost optimization with automated GCP resource management",
+        "file": "cost_optimization/level_2/Implement_cost_optimization_with_automated_GCP_resource_management.json"
+      },
+      {
+        "goal": "Implement advanced cost optimization with predictive scaling",
+        "file": "cost_optimization/level_2/Implement_advanced_cost_optimization_with_predictive_scaling.json"
+      }
+    ],
+    "reliability_chaos_engineering": [
+      {
+        "goal": "Set up multi-cloud disaster recovery with automated failover between AWS and Azure",
+        "file": "reliability_chaos_engineering/level_2/Set_up_multi_cloud_disaster_recovery_with_automated_failover_between_AWS_and_Azu.json"
+      },
+      {
+        "goal": "Build high-performance caching layer with Redis cluster and cache warming strategies",
+        "file": "reliability_chaos_engineering/level_2/Build_high_performance_caching_layer_with_Redis_cluster_and_cache_warming_strate.json"
+      },
+      {
+        "goal": "Deploy and verify Step Functions state machine for automated disaster recovery workflow",
+        "file": "reliability_chaos_engineering/level_2/Deploy_and_verify_Step_Functions_state_machine_for_automated_disaster_recovery_w.json"
+      },
+      {
+        "goal": "Execute chaos engineering experiments with automated recovery validation",
+        "file": "reliability_chaos_engineering/level_2/Execute_chaos_engineering_experiments_with_automated_recovery_validation.json"
+      },
+      {
+        "goal": "Execute disaster recovery drill with automated failover and validation",
+        "file": "reliability_chaos_engineering/level_2/Execute_disaster_recovery_drill_with_automated_failover_and_validation.json"
+      },
+      {
+        "goal": "Implement disaster recovery using the existing runbooks",
+        "file": "reliability_chaos_engineering/level_2/Implement_disaster_recovery_using_the_existing_runbooks.json"
+      },
+      {
+        "goal": "Set up disaster recovery with automated runbooks",
+        "file": "reliability_chaos_engineering/level_2/Set_up_disaster_recovery_with_automated_runbooks.json"
+      }
+    ],
+    "data_pipeline_integrity": [
+      {
+        "goal": "Build comprehensive data pipeline with real-time streaming and batch processing",
+        "file": "data_pipeline_integrity/level_2/Build_comprehensive_data_pipeline_with_real_time_streaming_and_batch_processing.json"
+      },
+      {
+        "goal": "Implement serverless data processing pipeline with AWS Lambda, Kinesis, and Athena",
+        "file": "data_pipeline_integrity/level_2/Implement_serverless_data_processing_pipeline_with_AWS_Lambda_Kinesis_and_Athena.json"
+      }
+    ],
+    "performance_scaling": [
+      {
+        "goal": "Implement chaos engineering experiments to validate system resilience",
+        "file": "performance_scaling/level_2/Implement_chaos_engineering_experiments_to_validate_system_resilience.json"
+      },
+      {
+        "goal": "Implement progressive canary deployment with automated rollback based on metrics",
+        "file": "performance_scaling/level_2/Implement_progressive_canary_deployment_with_automated_rollback_based_on_metrics.json"
+      },
+      {
+        "goal": "Deploy API gateway with dynamic routing and real-time configuration updates",
+        "file": "performance_scaling/level_2/Deploy_API_gateway_with_dynamic_routing_and_real_time_configuration_updates.json"
+      },
+      {
+        "goal": "Create S3 bucket with CloudFront distribution",
+        "file": "performance_scaling/level_2/Create_S3_bucket_with_CloudFront_distribution.json"
+      }
+    ],
+    "gitops_version_control": [
+      {
+        "goal": "Implement GitLab CI/CD pipeline with security scanning and compliance checks",
+        "file": "gitops_version_control/level_2/Implement_GitLab_CICD_pipeline_with_security_scanning_and_compliance_checks.json"
+      },
+      {
+        "goal": "Deploy GitHub Actions runner on ECS Fargate and verify CI/CD pipeline execution",
+        "file": "gitops_version_control/level_2/Deploy_GitHub_Actions_runner_on_ECS_Fargate_and_verify_CICD_pipeline_execution.json"
+      },
+      {
+        "goal": "Orchestrate multi-stage Jenkins pipeline for microservices deployment with canary analysis",
+        "file": "gitops_version_control/level_2/Orchestrate_multi_stage_Jenkins_pipeline_for_microservices_deployment_with_canar.json"
+      },
+      {
+        "goal": "Implement GitOps-based progressive delivery with automated rollback",
+        "file": "gitops_version_control/level_2/Implement_GitOps_based_progressive_delivery_with_automated_rollback.json"
+      },
+      {
+        "goal": "Deploy GitLab CI runner",
+        "file": "gitops_version_control/level_2/Deploy_GitLab_CI_runner.json"
+      },
+      {
+        "goal": "Set up complete CI/CD pipeline with ArgoCD GitOps",
+        "file": "gitops_version_control/level_2/Set_up_complete_CICD_pipeline_with_ArgoCD_GitOps.json"
+      },
+      {
+        "goal": "Configure Jenkins and Nexus CI/CD integration",
+        "file": "gitops_version_control/level_2/Configure_Jenkins_and_Nexus_CICD_integration.json"
+      },
+      {
+        "goal": "Deploy ArgoCD applications",
+        "file": "gitops_version_control/level_2/Deploy_ArgoCD_applications.json"
+      }
+    ],
+    "stateful_operations": [
+      {
+        "goal": "Build zero-downtime database migration system with CDC and gradual cutover",
+        "file": "stateful_operations/level_2/Build_zero_downtime_database_migration_system_with_CDC_and_gradual_cutover.json"
+      },
+      {
+        "goal": "Set up Consul key-value store",
+        "file": "stateful_operations/level_2/Set_up_Consul_key_value_store.json"
+      },
+      {
+        "goal": "Deploy MongoDB replica set",
+        "file": "stateful_operations/level_2/Deploy_MongoDB_replica_set.json"
+      },
+      {
+        "goal": "Create Azure Storage account with CDN",
+        "file": "stateful_operations/level_2/Create_Azure_Storage_account_with_CDN.json"
+      }
+    ],
+    "security_isolation": [
+      {
+        "goal": "Execute Jenkins security pipeline with automated remediation and compliance reporting",
+        "file": "security_isolation/level_2/Execute_Jenkins_security_pipeline_with_automated_remediation_and_compliance_repo.json"
+      },
+      {
+        "goal": "Execute automated compliance validation with evidence collection",
+        "file": "security_isolation/level_2/Execute_automated_compliance_validation_with_evidence_collection.json"
+      },
+      {
+        "goal": "Deploy production-ready service mesh with SSL",
+        "file": "security_isolation/level_2/Deploy_production_ready_service_mesh_with_SSL.json"
+      }
+    ],
+    "compliance_drift_management": [
+      {
+        "goal": "Deploy zero-trust network architecture with continuous security validation",
+        "file": "compliance_drift_management/level_2/Deploy_zero_trust_network_architecture_with_continuous_security_validation.json"
+      }
+    ]
+  }
+}

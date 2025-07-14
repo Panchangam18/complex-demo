@@ -1,0 +1,54 @@
+{
+  "goal": "Create comprehensive API gateway configuration with rate limiting and authentication",
+  "steps": [
+    {
+      "name": "Design API gateway architecture",
+      "type": "prompt",
+      "prompt": "Plan API gateway setup with Kong or AWS API Gateway including: route definitions, authentication methods (OAuth2, API keys, JWT), and backend service mappings.",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure rate limiting policies",
+      "type": "prompt",
+      "prompt": "Create rate limiting configurations with: tiered limits by API key, global rate limits, per-endpoint limits, and burst handling. Include Redis backend for distributed rate limiting.",
+      "parameters": {},
+      "files": [
+        "api-gateway/policies/rate-limiting.yaml"
+      ]
+    },
+    {
+      "name": "Implement request/response transformations",
+      "type": "prompt",
+      "prompt": "Design request/response transformation rules for: header manipulation, body transformation, protocol translation (REST to GraphQL), and response caching strategies.",
+      "parameters": {},
+      "files": [
+        "api-gateway/transformations/request-transform.lua",
+        "api-gateway/transformations/response-transform.lua"
+      ]
+    },
+    {
+      "name": "Set up API versioning strategy",
+      "type": "prompt",
+      "prompt": "Implement API versioning with: URL path versioning, header-based routing, canary deployments for new versions, and deprecation policies with sunset headers.",
+      "parameters": {},
+      "files": [
+        "api-gateway/routing/version-routes.yaml"
+      ]
+    },
+    {
+      "name": "Validate gateway configuration",
+      "type": "cli",
+      "command": "kong config parse api-gateway/kong.yaml && kong config db_export --yes",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test rate limiting rules",
+      "type": "cli",
+      "command": "ab -n 1000 -c 10 -H 'X-API-Key: test-key' http://localhost:8000/api/v1/test | grep 'Failed requests'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

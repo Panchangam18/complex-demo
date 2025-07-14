@@ -1,0 +1,40 @@
+{
+  "goal": "Configure Nexus repository for npm package caching",
+  "steps": [
+    {
+      "name": "Review Nexus configuration script",
+      "type": "prompt",
+      "prompt": "Examine the configure-nexus.sh script to understand how Nexus repositories are set up.",
+      "parameters": {},
+      "files": [
+        "complex-demo/scripts/configure-nexus.sh"
+      ]
+    },
+    {
+      "name": "Update script for npm proxy",
+      "type": "prompt",
+      "prompt": "Modify configure-nexus.sh to add npm proxy repository configuration pointing to npmjs.org.",
+      "parameters": {},
+      "files": [
+        "complex-demo/scripts/configure-nexus.sh"
+      ]
+    },
+    {
+      "name": "Configure npm client",
+      "type": "prompt",
+      "prompt": "Update the backend package.json to include npmrc configuration for using Nexus as npm registry.",
+      "parameters": {},
+      "files": [
+        "complex-demo/Code/server/package.json",
+        "complex-demo/Code/server/.npmrc"
+      ]
+    },
+    {
+      "name": "Test Nexus npm repository",
+      "type": "cli",
+      "command": "cd complex-demo/Code/server && npm config set registry http://nexus:8081/repository/npm-proxy/ && npm install --dry-run",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

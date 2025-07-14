@@ -1,0 +1,88 @@
+{
+  "goal": "Create comprehensive IAM policies and security configurations for multi-account AWS organization",
+  "steps": [
+    {
+      "name": "Analyze organization structure",
+      "type": "prompt",
+      "prompt": "Review the AWS organization structure to understand account hierarchy, organizational units (OUs), and existing permission boundaries. Identify cross-account access requirements.",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Design least-privilege IAM policies",
+      "type": "prompt",
+      "prompt": "Create IAM policy documents following least-privilege principles for: developers (read-only prod, full dev), DevOps engineers (limited prod, full dev/staging), and security team (audit access across all accounts).",
+      "parameters": {},
+      "files": [
+        "terraform/modules/aws/iam/policies/developer-policy.json",
+        "terraform/modules/aws/iam/policies/devops-policy.json",
+        "terraform/modules/aws/iam/policies/security-policy.json"
+      ]
+    },
+    {
+      "name": "Configure permission boundaries",
+      "type": "prompt",
+      "prompt": "Create permission boundary policies to prevent privilege escalation. Define boundaries that restrict IAM role creation, prevent deletion of audit trails, and limit resource creation to specific regions.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/aws/iam/permission-boundaries.tf"
+      ]
+    },
+    {
+      "name": "Implement service control policies",
+      "type": "prompt",
+      "prompt": "Write AWS Organizations SCPs to enforce security standards: require MFA for sensitive operations, prevent disabling of CloudTrail, enforce encryption, and restrict root account usage.",
+      "parameters": {},
+      "files": [
+        "organizations/scps/security-baseline.json",
+        "organizations/scps/data-protection.json"
+      ]
+    },
+    {
+      "name": "Create cross-account roles",
+      "type": "prompt",
+      "prompt": "Design Terraform configurations for cross-account roles enabling: centralized logging access, security audit access, and emergency break-glass access with proper trust relationships.",
+      "parameters": {},
+      "files": [
+        "terraform/modules/aws/iam/cross-account-roles.tf"
+      ]
+    },
+    {
+      "name": "Validate IAM policies syntax",
+      "type": "cli",
+      "command": "aws iam simulate-principal-policy --policy-source-arn arn:aws:iam::123456789012:user/test-user --action-names s3:GetObject --resource-arns arn:aws:s3:::example-bucket/*",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Run IAM policy validator",
+      "type": "cli",
+      "command": "aws accessanalyzer validate-policy --policy-document file://terraform/modules/aws/iam/policies/developer-policy.json --policy-type IDENTITY_POLICY",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Check for overly permissive policies",
+      "type": "cli",
+      "command": "checkov -f terraform/modules/aws/iam/ --framework terraform --check CKV_AWS_109,CKV_AWS_110,CKV_AWS_111",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Generate IAM documentation",
+      "type": "prompt",
+      "prompt": "Create comprehensive documentation of all IAM policies, including use cases, permission mappings, and approval workflows for privilege escalation requests.",
+      "parameters": {},
+      "files": [
+        "docs/iam-policy-documentation.md"
+      ]
+    },
+    {
+      "name": "Validate compliance requirements",
+      "type": "prompt",
+      "prompt": "Review all created IAM configurations to ensure they meet compliance requirements for SOC2, PCI-DSS, and HIPAA. Verify audit logging and access review processes are in place.",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "goal": "Deploy updated backend application with database migrations",
+  "steps": [
+    {
+      "name": "Build backend Docker image",
+      "type": "cli",
+      "command": "cd complex-demo/Code/server && docker build -t backend:latest -f Dockerfile .",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Tag and push to JFrog registry",
+      "type": "cli",
+      "command": "docker tag backend:latest forgea37.jfrog.io/complex-demo-docker-local/dev-backend:latest && docker push forgea37.jfrog.io/complex-demo-docker-local/dev-backend:latest",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Update deployment image tag",
+      "type": "prompt",
+      "prompt": "Update the deployment.yaml to use the new image tag with current timestamp for the backend container.",
+      "parameters": {},
+      "files": [
+        "complex-demo/k8s/envs/dev/backend/deployment.yaml"
+      ]
+    },
+    {
+      "name": "Apply deployment update",
+      "type": "cli",
+      "command": "kubectl apply -f complex-demo/k8s/envs/dev/backend/deployment.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Run database migrations",
+      "type": "cli",
+      "command": "kubectl exec -it deployment/backend -n backend-dev -- npm run migrate",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify deployment health",
+      "type": "cli",
+      "command": "kubectl rollout status deployment/backend -n backend-dev && kubectl get pods -n backend-dev -l app=backend",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test API endpoints",
+      "type": "cli",
+      "command": "kubectl port-forward -n backend-dev svc/backend-service 3001:80 & sleep 3 && curl http://localhost:3001/status && curl http://localhost:3001/api/getAllProducts",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "goal": "Create S3 bucket with CloudFront distribution",
+  "steps": [
+    {
+      "name": "Create S3 bucket",
+      "type": "integration",
+      "integration_name": "CreateBucket",
+      "integration_params": {
+        "adapter_name": "aws",
+        "method": "s3.CreateBucket",
+        "parameters": {
+          "Bucket": "static-assets-prod-2024",
+          "CreateBucketConfiguration": {
+            "LocationConstraint": "us-west-2"
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Enable static hosting",
+      "type": "cli",
+      "command": "aws s3 website s3://static-assets-prod-2024 --index-document index.html --error-document error.html",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create CloudFront distribution",
+      "type": "cli",
+      "command": "aws cloudfront create-distribution --distribution-config file://cloudfront-config.json --query 'Distribution.DomainName'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Upload test file",
+      "type": "cli",
+      "command": "echo '<h1>Hello CDN</h1>' > index.html && aws s3 cp index.html s3://static-assets-prod-2024/",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

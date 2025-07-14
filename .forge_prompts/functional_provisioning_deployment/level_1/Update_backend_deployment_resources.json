@@ -1,0 +1,21 @@
+{
+  "goal": "Update backend deployment resources",
+  "steps": [
+    {
+      "name": "Increase resource limits",
+      "type": "prompt",
+      "prompt": "Update the backend deployment to increase memory limits to 1Gi and CPU limits to 1000m for production workloads.",
+      "parameters": {},
+      "files": [
+        "complex-demo/k8s/envs/dev/backend/deployment.yaml"
+      ]
+    },
+    {
+      "name": "Apply changes",
+      "type": "cli",
+      "command": "kubectl apply -f complex-demo/k8s/envs/dev/backend/deployment.yaml --dry-run=client",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

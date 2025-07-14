@@ -1,0 +1,47 @@
+{
+  "goal": "Deploy production-ready service mesh with SSL",
+  "steps": [
+    {
+      "name": "Configure SSL certificates",
+      "type": "cli",
+      "command": "bash complex-demo/scripts/configure-ssl-certificates.sh --domain example.com --email admin@example.com",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Set up service mesh",
+      "type": "cli",
+      "command": "bash complex-demo/scripts/configure-service-mesh.sh --enable-mtls --enable-tracing",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure security policies",
+      "type": "cli",
+      "command": "bash complex-demo/scripts/configure-security-policies.sh --enforce-mtls --enable-rbac",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Fix load balancer access",
+      "type": "cli",
+      "command": "bash complex-demo/scripts/fix-load-balancer-access.sh",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create image pull secrets",
+      "type": "cli",
+      "command": "bash complex-demo/scripts/create-image-pull-secrets.sh --registry jfrog --namespace default",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify service mesh",
+      "type": "cli",
+      "command": "istioctl analyze && istioctl proxy-status",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

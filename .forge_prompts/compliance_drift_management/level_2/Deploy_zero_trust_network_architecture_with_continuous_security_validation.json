@@ -1,0 +1,80 @@
+{
+  "goal": "Deploy zero-trust network architecture with continuous security validation",
+  "steps": [
+    {
+      "name": "Deploy network policies",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/network-policies/ && kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=network-policy-controller --timeout=120s",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Enable Istio strict mTLS",
+      "type": "cli",
+      "command": "kubectl apply -f - <<EOF\napiVersion: security.istio.io/v1beta1\nkind: PeerAuthentication\nmetadata:\n  name: default\n  namespace: istio-system\nspec:\n  mtls:\n    mode: STRICT\nEOF",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create authorization policies",
+      "type": "cli",
+      "command": "kubectl apply -f istio/security/authorization-policies/ && kubectl get authorizationpolicies -A",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy Falco for runtime security",
+      "type": "cli",
+      "command": "helm install falco falcosecurity/falco --set falco.grpc.enabled=true --set falco.grpc_output.enabled=true --namespace falco-system --create-namespace",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test network isolation",
+      "type": "cli",
+      "command": "kubectl run test-isolation --image=nicolaka/netshoot --rm -it --restart=Never -- bash -c 'for svc in payment-api auth-api notification-api; do echo \"Testing $svc:\"; curl -m 2 http://$svc:8080/health 2>&1 | grep -E \"refused|timeout|200\" || echo \"BLOCKED\"; done'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor security events",
+      "type": "cli",
+      "command": "kubectl logs -n falco-system -l app=falco --tail=50 | grep -E 'Warning|Error|Critical' | jq -R 'fromjson? | select(.priority==\"Warning\" or .priority==\"Error\")'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Run compliance validation",
+      "type": "cli",
+      "command": "kubectl apply -f compliance/validation-job.yaml && kubectl wait --for=condition=complete job/compliance-validator --timeout=600s && kubectl logs job/compliance-validator",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Generate security posture report",
+      "type": "integration",
+      "integration_name": "CreateDashboard",
+      "integration_params": {
+        "adapter_name": "grafana",
+        "method": "dashboard.create_dashboard",
+        "parameters": {
+          "dashboard": {
+            "title": "Security Posture",
+            "panels": [
+              {
+                "title": "Network Policy Violations",
+                "type": "graph",
+                "targets": [
+                  {
+                    "expr": "sum(rate(network_policy_violations_total[5m])) by (source_pod, destination_pod)"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "files": []
+    }
+  ]
+}

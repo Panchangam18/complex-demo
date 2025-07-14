@@ -1,0 +1,69 @@
+{
+  "goal": "Create comprehensive Docker Compose configuration for local development environment",
+  "steps": [
+    {
+      "name": "Review existing Docker configurations",
+      "type": "prompt",
+      "prompt": "Analyze the existing Dockerfiles and any docker-compose files in the codebase. Understand the application architecture and service dependencies.",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create multi-service Docker Compose file",
+      "type": "prompt",
+      "prompt": "Write a docker-compose.yml with services for: frontend (Vue.js), backend (Node.js), PostgreSQL database, Redis cache, and Nginx reverse proxy. Include proper networking and volume configurations.",
+      "parameters": {},
+      "files": [
+        "docker-compose.yml"
+      ]
+    },
+    {
+      "name": "Configure environment variables",
+      "type": "prompt",
+      "prompt": "Create a .env.example file with all required environment variables for database connections, API keys, service URLs, and feature flags. Include detailed comments for each variable.",
+      "parameters": {},
+      "files": [
+        ".env.example"
+      ]
+    },
+    {
+      "name": "Add development overrides",
+      "type": "prompt",
+      "prompt": "Create docker-compose.override.yml for development-specific settings including volume mounts for hot reloading, exposed ports for debugging, and development environment variables.",
+      "parameters": {},
+      "files": [
+        "docker-compose.override.yml"
+      ]
+    },
+    {
+      "name": "Create health check configurations",
+      "type": "prompt",
+      "prompt": "Add health check definitions for each service in docker-compose.yml including appropriate intervals, timeouts, retries, and start periods based on service startup times.",
+      "parameters": {},
+      "files": [
+        "docker-compose.yml"
+      ]
+    },
+    {
+      "name": "Validate Docker Compose syntax",
+      "type": "cli",
+      "command": "docker-compose config",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Check for security issues",
+      "type": "cli",
+      "command": "docker-compose config | docker run --rm -i hadolint/hadolint:latest-alpine hadolint --ignore DL3008 --ignore DL3009 -",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify service dependencies",
+      "type": "prompt",
+      "prompt": "Review the docker-compose configuration to ensure proper service dependencies, startup order, and that all required environment variables are defined.",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

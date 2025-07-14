@@ -1,0 +1,210 @@
+{
+  "goal": "Implement serverless data processing pipeline with AWS Lambda, Kinesis, and Athena",
+  "steps": [
+    {
+      "name": "Create Kinesis data streams",
+      "type": "integration",
+      "integration": "aws",
+      "method": "kinesis.create_stream",
+      "parameters": {
+        "StreamName": "real-time-analytics",
+        "ShardCount": 5,
+        "StreamModeDetails": {
+          "StreamMode": "PROVISIONED"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Deploy Lambda processors",
+      "type": "integration",
+      "integration": "aws",
+      "method": "lambda.CreateFunction",
+      "parameters": {
+        "FunctionName": "kinesis-processor",
+        "Runtime": "python3.9",
+        "Role": "arn:aws:iam::123456789012:role/lambda-kinesis-role",
+        "Handler": "handler.process_records",
+        "Code": {
+          "S3Bucket": "lambda-code-bucket",
+          "S3Key": "kinesis-processor.zip"
+        },
+        "Environment": {
+          "Variables": {
+            "OUTPUT_BUCKET": "processed-data-bucket"
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Configure event source mapping",
+      "type": "integration",
+      "integration": "aws",
+      "method": "lambda.create_event_source_mapping",
+      "parameters": {
+        "FunctionName": "kinesis-processor",
+        "EventSourceArn": "arn:aws:kinesis:us-east-2:123456789012:stream/real-time-analytics",
+        "StartingPosition": "LATEST",
+        "ParallelizationFactor": 10,
+        "MaximumBatchingWindowInSeconds": 5
+      },
+      "files": []
+    },
+    {
+      "name": "Set up Kinesis Firehose",
+      "type": "prompt",
+      "prompt": "Configure Kinesis Firehose delivery stream to batch and compress data, transform records using Lambda, and deliver to S3 with proper partitioning for Athena queries.",
+      "parameters": {},
+      "files": [
+        "terraform/kinesis/firehose-delivery-stream.tf"
+      ]
+    },
+    {
+      "name": "Create Glue data catalog",
+      "type": "integration",
+      "integration": "aws",
+      "method": "glue.create_table",
+      "parameters": {
+        "DatabaseName": "analytics_db",
+        "TableInput": {
+          "Name": "processed_events",
+          "StorageDescriptor": {
+            "Columns": [
+              {
+                "Name": "event_id",
+                "Type": "string"
+              },
+              {
+                "Name": "timestamp",
+                "Type": "timestamp"
+              },
+              {
+                "Name": "user_id",
+                "Type": "string"
+              },
+              {
+                "Name": "event_data",
+                "Type": "string"
+              }
+            ],
+            "Location": "s3://processed-data-bucket/events/",
+            "InputFormat": "org.apache.hadoop.mapred.TextInputFormat",
+            "OutputFormat": "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
+            "SerdeInfo": {
+              "SerializationLibrary": "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"
+            }
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Configure Athena workgroup",
+      "type": "cli",
+      "command": "aws athena create-work-group --name analytics-workgroup --configuration ResultConfigurationUpdates={OutputLocation=s3://athena-query-results/} --description 'Workgroup for analytics queries'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy data quality Lambda",
+      "type": "prompt",
+      "prompt": "Create Lambda function for data quality validation including schema validation, anomaly detection, and alerting for data quality issues.",
+      "parameters": {},
+      "files": [
+        "lambda-functions/data-quality-validator/"
+      ]
+    },
+    {
+      "name": "Test data ingestion",
+      "type": "cli",
+      "command": "aws kinesis put-records --stream-name real-time-analytics --records file://test-data/sample-events.json",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor Lambda performance",
+      "type": "integration",
+      "integration": "aws",
+      "method": "cloudwatch.get_metric_statistics",
+      "parameters": {
+        "Namespace": "AWS/Lambda",
+        "MetricName": "Duration",
+        "Dimensions": [
+          {
+            "Name": "FunctionName",
+            "Value": "kinesis-processor"
+          }
+        ],
+        "StartTime": "2024-01-15T00:00:00Z",
+        "EndTime": "2024-01-15T01:00:00Z",
+        "Period": 300,
+        "Statistics": [
+          "Average",
+          "Maximum"
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Query processed data",
+      "type": "cli",
+      "command": "aws athena start-query-execution --query-string 'SELECT COUNT(*) FROM analytics_db.processed_events WHERE timestamp > current_timestamp - interval 1 hour' --work-group analytics-workgroup",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure auto-scaling",
+      "type": "integration",
+      "integration": "aws",
+      "method": "application-autoscaling.put_scaling_policy",
+      "parameters": {
+        "ServiceNamespace": "lambda",
+        "ResourceId": "function:kinesis-processor:provisioned-concurrency:BLUE",
+        "ScalableDimension": "lambda:function:ProvisionedConcurrency",
+        "PolicyType": "TargetTrackingScaling",
+        "TargetTrackingScalingPolicyConfiguration": {
+          "TargetValue": 0.7,
+          "PredefinedMetricSpecification": {
+            "PredefinedMetricType": "LambdaProvisionedConcurrencyUtilization"
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Set up cost monitoring",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ce.create_cost_category_definition",
+      "parameters": {
+        "Name": "ServerlessDataPipeline",
+        "Rules": [
+          {
+            "Value": "DataProcessing",
+            "Rule": {
+              "Dimensions": {
+                "Key": "SERVICE",
+                "Values": [
+                  "Lambda",
+                  "Kinesis",
+                  "Athena"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Validate end-to-end pipeline",
+      "type": "prompt",
+      "prompt": "Run end-to-end tests verifying data flows from Kinesis through Lambda processing to S3 storage and is queryable via Athena. Document performance metrics and costs.",
+      "parameters": {},
+      "files": [
+        "reports/pipeline-validation.md"
+      ]
+    }
+  ]
+}

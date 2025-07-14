@@ -1,0 +1,325 @@
+{
+  "workflow_name": "adaptive_performance_baseline_tuning",
+  "description": "Continuously tune performance baselines based on real-world usage patterns and automatically adjust thresholds",
+  "goal": "Maintain accurate performance baselines that adapt to changing usage patterns and prevent alert fatigue",
+  "trigger": {
+    "type": "scheduled",
+    "schedule": "rate(1 hour)",
+    "additional_triggers": ["anomaly_detection", "manual_review_request"]
+  },
+  "inputs": {
+    "service_catalog": "${config.monitored_services}",
+    "baseline_window_days": 30,
+    "sensitivity_threshold": 0.15
+  },
+  "steps": [
+    {
+      "step": 1,
+      "action": "collect_service_metrics",
+      "integration": "datadog.MetricsApi.query_timeseries_data",
+      "parallel": true,
+      "for_each": "${inputs.service_catalog}",
+      "parameters": {
+        "query": "avg:trace.${service}.request.duration{env:${service.env}} by {resource_name}, p95:trace.${service}.request.duration{env:${service.env}} by {resource_name}, count:trace.${service}.request.hits{env:${service.env}} by {resource_name}",
+        "from": "${now() - (inputs.baseline_window_days * 86400)}",
+        "to": "${now()}"
+      },
+      "output": "service_metrics"
+    },
+    {
+      "step": 2,
+      "action": "retrieve_current_baselines",
+      "integration": "aws.dynamodb.BatchGetItem",
+      "parameters": {
+        "RequestItems": {
+          "performance-baselines": {
+            "Keys": "${inputs.service_catalog.map(s => ({service_id: s.id, metric_type: 'composite'}))}"
+          }
+        }
+      },
+      "output": "current_baselines"
+    },
+    {
+      "step": 3,
+      "action": "analyze_usage_patterns",
+      "integration": "aws.lambda.Invoke",
+      "parameters": {
+        "FunctionName": "usage-pattern-analyzer",
+        "Payload": {
+          "metrics": "${service_metrics}",
+          "analysis_config": {
+            "seasonality_detection": true,
+            "trend_analysis": true,
+            "anomaly_detection": true,
+            "business_hours_segmentation": true,
+            "peak_period_identification": true
+          }
+        }
+      },
+      "output": "usage_patterns"
+    },
+    {
+      "step": 4,
+      "action": "identify_baseline_drift",
+      "integration": "aws.sagemaker.InvokeEndpoint",
+      "parameters": {
+        "EndpointName": "baseline-drift-detector",
+        "Body": {
+          "current_baselines": "${current_baselines}",
+          "recent_metrics": "${service_metrics}",
+          "usage_patterns": "${usage_patterns}",
+          "drift_sensitivity": "${inputs.sensitivity_threshold}"
+        }
+      },
+      "output": "drift_analysis"
+    },
+    {
+      "step": 5,
+      "action": "calculate_new_baselines",
+      "integration": "databricks.jobs.RunNow",
+      "parameters": {
+        "job_id": "${config.baseline_calculation_job_id}",
+        "notebook_params": {
+          "service_metrics": "${JSON.stringify(service_metrics)}",
+          "usage_patterns": "${JSON.stringify(usage_patterns)}",
+          "calculation_method": "adaptive_percentile",
+          "confidence_interval": 0.95,
+          "outlier_removal": "iqr_method"
+        }
+      },
+      "output": "new_baselines"
+    },
+    {
+      "step": 6,
+      "action": "simulate_alert_impact",
+      "integration": "aws.lambda.Invoke",
+      "parameters": {
+        "FunctionName": "alert-impact-simulator",
+        "Payload": {
+          "current_baselines": "${current_baselines}",
+          "proposed_baselines": "${new_baselines}",
+          "historical_data": "${service_metrics}",
+          "simulation_config": {
+            "lookback_days": 7,
+            "alert_rules": "${config.alert_configurations}"
+          }
+        }
+      },
+      "output": "alert_simulation"
+    },
+    {
+      "step": 7,
+      "action": "review_baseline_changes",
+      "integration": "aws.bedrock.InvokeModel",
+      "condition": "${alert_simulation.significant_change}",
+      "parameters": {
+        "modelId": "anthropic.claude-v2",
+        "body": {
+          "prompt": "Review these baseline changes:\n${JSON.stringify(new_baselines)}\nCurrent alert impact: ${alert_simulation.current_alert_rate}\nProjected alert impact: ${alert_simulation.projected_alert_rate}\nProvide recommendations for baseline adjustments.",
+          "max_tokens": 1000
+        }
+      },
+      "output": "ai_recommendations"
+    },
+    {
+      "step": 8,
+      "action": "create_baseline_change_request",
+      "integration": "github.pulls.create",
+      "condition": "${drift_analysis.requires_update}",
+      "parameters": {
+        "owner": "${config.github_org}",
+        "repo": "performance-baselines",
+        "title": "Auto-tuned baselines for ${drift_analysis.affected_services.join(', ')}",
+        "body": "## Baseline Updates\n\n${new_baselines.summary}\n\n### Alert Impact Analysis\n- Current alert rate: ${alert_simulation.current_alert_rate}/day\n- Projected alert rate: ${alert_simulation.projected_alert_rate}/day\n\n### AI Recommendations\n${ai_recommendations.text}",
+        "head": "baseline-update-${timestamp()}",
+        "base": "main"
+      },
+      "output": "change_request"
+    },
+    {
+      "step": 9,
+      "action": "update_monitoring_thresholds",
+      "integration": "datadog.MonitorsApi.update_monitor",
+      "condition": "${change_request.auto_approved || change_request.manually_approved}",
+      "parallel": true,
+      "for_each": "${new_baselines.monitors}",
+      "parameters": {
+        "monitor_id": "${monitor.id}",
+        "body": {
+          "options": {
+            "thresholds": {
+              "critical": "${monitor.new_critical_threshold}",
+              "warning": "${monitor.new_warning_threshold}",
+              "ok": "${monitor.new_ok_threshold}"
+            },
+            "threshold_windows": {
+              "trigger_window": "${monitor.optimal_trigger_window}",
+              "recovery_window": "${monitor.optimal_recovery_window}"
+            }
+          },
+          "message": "${monitor.message}\n\n_Baseline auto-tuned on ${now()}_"
+        }
+      },
+      "output": "monitor_updates"
+    },
+    {
+      "step": 10,
+      "action": "deploy_baseline_validators",
+      "integration": "kubernetes.AppsV1Api.patch_namespaced_deployment",
+      "parameters": {
+        "name": "baseline-validator",
+        "namespace": "monitoring",
+        "body": {
+          "spec": {
+            "template": {
+              "spec": {
+                "containers": [{
+                  "name": "validator",
+                  "env": [
+                    {"name": "NEW_BASELINES", "value": "${JSON.stringify(new_baselines)}"},
+                    {"name": "VALIDATION_MODE", "value": "shadow"},
+                    {"name": "COMPARISON_WINDOW", "value": "1h"}
+                  ]
+                }]
+              }
+            }
+          }
+        }
+      },
+      "output": "validator_deployment"
+    },
+    {
+      "step": 11,
+      "action": "create_performance_dashboards",
+      "integration": "grafana.dashboards.create",
+      "parameters": {
+        "dashboard": {
+          "title": "Performance Baselines - ${timestamp()}",
+          "panels": "${new_baselines.services.map(s => createPanelConfig(s))}",
+          "annotations": {
+            "list": [{
+              "datasource": "Prometheus",
+              "enable": true,
+              "expr": "baseline_change{service=\"$service\"}",
+              "tagKeys": "change_type,old_value,new_value"
+            }]
+          },
+          "variables": [{
+            "name": "service",
+            "type": "query",
+            "query": "label_values(service)",
+            "multi": true
+          }]
+        }
+      },
+      "output": "dashboard_url"
+    },
+    {
+      "step": 12,
+      "action": "schedule_baseline_validation",
+      "integration": "aws.eventbridge.PutRule",
+      "parameters": {
+        "Name": "baseline-validation-${timestamp()}",
+        "ScheduleExpression": "rate(6 hours)",
+        "State": "ENABLED",
+        "Targets": [{
+          "Arn": "arn:aws:lambda:${region}:${account}:function:baseline-effectiveness-checker",
+          "Input": {
+            "baselines": "${new_baselines}",
+            "deployment_time": "${now()}",
+            "expected_metrics": {
+              "alert_reduction": "${alert_simulation.expected_reduction}",
+              "false_positive_rate": "${alert_simulation.target_false_positive_rate}"
+            }
+          }
+        }]
+      },
+      "output": "validation_schedule"
+    },
+    {
+      "step": 13,
+      "action": "notify_stakeholders",
+      "integration": "slack.WebhookClient.send",
+      "parameters": {
+        "webhook_url": "${secrets.slack_webhook_url}",
+        "blocks": [{
+          "type": "header",
+          "text": {
+            "type": "plain_text",
+            "text": "Performance Baselines Updated"
+          }
+        }, {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "*Services Updated:* ${new_baselines.services.length}\n*Alert Impact:* ${alert_simulation.impact_summary}\n*Dashboard:* <${dashboard_url}|View Performance Dashboard>"
+          }
+        }, {
+          "type": "actions",
+          "elements": [{
+            "type": "button",
+            "text": {"type": "plain_text", "text": "Review Changes"},
+            "url": "${change_request.html_url}"
+          }]
+        }]
+      },
+      "output": "notification_result"
+    },
+    {
+      "step": 14,
+      "action": "update_ml_training_data",
+      "integration": "aws.s3.PutObject",
+      "parameters": {
+        "Bucket": "ml-training-data",
+        "Key": "baseline-tuning/training-data-${timestamp()}.json",
+        "Body": {
+          "input_metrics": "${service_metrics}",
+          "usage_patterns": "${usage_patterns}",
+          "baseline_decisions": "${new_baselines}",
+          "validation_results": "${alert_simulation}",
+          "human_feedback": "${change_request.review_comments}"
+        }
+      },
+      "output": "training_data_location"
+    },
+    {
+      "step": 15,
+      "action": "trigger_ml_model_retraining",
+      "integration": "aws.sagemaker.CreateTrainingJob",
+      "condition": "${training_data_location.record_count > 1000}",
+      "parameters": {
+        "TrainingJobName": "baseline-tuner-${timestamp()}",
+        "RoleArn": "${config.sagemaker_role}",
+        "AlgorithmSpecification": {
+          "TrainingImage": "${config.baseline_tuner_image}",
+          "TrainingInputMode": "File"
+        },
+        "InputDataConfig": [{
+          "ChannelName": "training",
+          "DataSource": {
+            "S3DataSource": {
+              "S3DataType": "S3Prefix",
+              "S3Uri": "s3://ml-training-data/baseline-tuning/"
+            }
+          }
+        }],
+        "OutputDataConfig": {
+          "S3OutputPath": "s3://ml-models/baseline-tuner/"
+        }
+      },
+      "output": "retraining_job"
+    }
+  ],
+  "error_handling": {
+    "strategy": "preserve_current_baselines",
+    "rollback_window": 3600,
+    "notification_channels": ["slack", "pagerduty"],
+    "require_manual_approval_on_error": true
+  },
+  "outputs": {
+    "updated_services": "${new_baselines.services}",
+    "alert_impact": "${alert_simulation.summary}",
+    "dashboard_url": "${dashboard_url}",
+    "next_review_scheduled": "${validation_schedule.next_execution}"
+  }
+}

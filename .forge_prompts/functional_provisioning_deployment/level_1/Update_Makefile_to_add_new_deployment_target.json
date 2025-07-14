@@ -1,0 +1,21 @@
+{
+  "goal": "Update Makefile to add new deployment target",
+  "steps": [
+    {
+      "name": "Add staging target",
+      "type": "prompt",
+      "prompt": "Add a 'deploy-staging' target to the Makefile that deploys to the staging environment.",
+      "parameters": {},
+      "files": [
+        "Makefile"
+      ]
+    },
+    {
+      "name": "Test make target",
+      "type": "cli",
+      "command": "make deploy-staging --dry-run",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

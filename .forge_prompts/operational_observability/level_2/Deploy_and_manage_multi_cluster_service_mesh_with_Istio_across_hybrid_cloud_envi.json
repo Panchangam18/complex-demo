@@ -1,0 +1,164 @@
+{
+  "goal": "Deploy and manage multi-cluster service mesh with Istio across hybrid cloud environments",
+  "steps": [
+    {
+      "name": "Assess cluster environments",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "CoreV1Api.list_node",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Install Istio control plane",
+      "type": "cli",
+      "command": "istioctl install --set values.pilot.env.EXTERNAL_ISTIOD=true --set values.global.meshID=mesh1 --set values.global.multiCluster.clusterName=cluster1 --set values.global.network=network1",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure multi-cluster setup",
+      "type": "prompt",
+      "prompt": "Create Istio multi-cluster configuration connecting EKS, GKE, and on-premise clusters. Set up east-west gateways and cross-cluster service discovery.",
+      "parameters": {},
+      "files": [
+        "istio/multicluster-config.yaml"
+      ]
+    },
+    {
+      "name": "Create cluster secrets",
+      "type": "cli",
+      "command": "istioctl x create-remote-secret --context=cluster2 --name=cluster2 | kubectl apply -f - --context=cluster1",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy east-west gateway",
+      "type": "cli",
+      "command": "kubectl apply -f istio/eastwest-gateway.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure service discovery",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "CoreV1Api.create_namespaced_service",
+      "parameters": {
+        "namespace": "istio-system",
+        "body": {
+          "metadata": {
+            "name": "cross-cluster-gateway"
+          },
+          "spec": {
+            "type": "LoadBalancer",
+            "selector": {
+              "istio": "eastwestgateway"
+            },
+            "ports": [
+              {
+                "port": 15443,
+                "targetPort": 15443
+              }
+            ]
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Apply traffic management policies",
+      "type": "cli",
+      "command": "kubectl apply -f istio/traffic-policies/ --recursive",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure observability",
+      "type": "prompt",
+      "prompt": "Set up distributed tracing across clusters with Jaeger, configure Prometheus federation for metrics aggregation, and implement Kiali for service mesh visualization.",
+      "parameters": {},
+      "files": [
+        "istio/observability/"
+      ]
+    },
+    {
+      "name": "Test cross-cluster communication",
+      "type": "cli",
+      "command": "kubectl exec -it $(kubectl get pod -l app=test-client -o jsonpath='{.items[0].metadata.name}') --context=cluster1 -- curl http://remote-service.default.cluster2.local:8080",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify service mesh configuration",
+      "type": "cli",
+      "command": "istioctl proxy-config cluster $(kubectl get pod -l app=productpage -o jsonpath='{.items[0].metadata.name}') --context=cluster1",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure security policies",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "CustomObjectsApi.create_namespaced_custom_object",
+      "parameters": {
+        "group": "security.istio.io",
+        "version": "v1beta1",
+        "namespace": "default",
+        "plural": "authorizationpolicies",
+        "body": {
+          "metadata": {
+            "name": "cross-cluster-auth"
+          },
+          "spec": {
+            "selector": {
+              "matchLabels": {
+                "app": "productpage"
+              }
+            },
+            "rules": [
+              {
+                "from": [
+                  {
+                    "source": {
+                      "principals": [
+                        "cluster.local/ns/default/sa/bookinfo-productpage"
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Test failover scenarios",
+      "type": "cli",
+      "command": "kubectl scale deployment productpage-v1 --replicas=0 --context=cluster1",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor service mesh health",
+      "type": "integration",
+      "integration": "prometheus",
+      "method": "query",
+      "parameters": {
+        "query": "istio_request_duration_milliseconds_bucket{destination_service_name=\"productpage\"}"
+      },
+      "files": []
+    },
+    {
+      "name": "Validate multi-cluster setup",
+      "type": "prompt",
+      "prompt": "Verify all clusters are connected, services are discoverable across clusters, and traffic policies are properly enforced. Document the final topology.",
+      "parameters": {},
+      "files": [
+        "docs/multicluster-service-mesh.md"
+      ]
+    }
+  ]
+}

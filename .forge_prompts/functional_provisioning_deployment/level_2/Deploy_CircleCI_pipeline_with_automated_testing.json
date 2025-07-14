@@ -1,0 +1,56 @@
+{
+  "goal": "Deploy CircleCI pipeline with automated testing",
+  "steps": [
+    {
+      "name": "Trigger CircleCI pipeline",
+      "type": "integration",
+      "integration_name": "trigger_pipeline",
+      "integration_params": {
+        "adapter_name": "circleci",
+        "method": "trigger_pipeline",
+        "parameters": {
+          "username": "example-org",
+          "project": "microservice-api",
+          "branch": "main",
+          "params": {
+            "run_integration_tests": true
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Get pipeline status",
+      "type": "integration",
+      "integration_name": "get_pipeline",
+      "integration_params": {
+        "adapter_name": "circleci",
+        "method": "get_pipeline",
+        "parameters": {
+          "pipeline_id": "123e4567-e89b-12d3-a456-426614174000"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Monitor workflow execution",
+      "type": "integration",
+      "integration_name": "get_pipeline_workflow",
+      "integration_params": {
+        "adapter_name": "circleci",
+        "method": "get_pipeline_workflow",
+        "parameters": {
+          "pipeline_id": "123e4567-e89b-12d3-a456-426614174000"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Verify test results",
+      "type": "cli",
+      "command": "circleci tests summarize test-results/junit.xml",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

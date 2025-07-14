@@ -1,0 +1,202 @@
+{
+  "goal": "Perform comprehensive AWS cost optimization analysis and implement savings recommendations",
+  "steps": [
+    {
+      "name": "Analyze current AWS costs",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ce.get_cost_and_usage",
+      "parameters": {
+        "TimePeriod": {
+          "Start": "2024-01-01",
+          "End": "2024-01-31"
+        },
+        "Granularity": "MONTHLY",
+        "Metrics": [
+          "UNBLENDED_COST"
+        ],
+        "GroupBy": [
+          {
+            "Type": "DIMENSION",
+            "Key": "SERVICE"
+          }
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Identify unused EC2 instances",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ec2.DescribeInstances",
+      "parameters": {
+        "Filters": [
+          {
+            "Name": "instance-state-name",
+            "Values": [
+              "running"
+            ]
+          }
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Check EC2 utilization metrics",
+      "type": "integration",
+      "integration": "aws",
+      "method": "cloudwatch.get_metric_statistics",
+      "parameters": {
+        "Namespace": "AWS/EC2",
+        "MetricName": "CPUUtilization",
+        "StartTime": "2024-01-01T00:00:00Z",
+        "EndTime": "2024-01-31T23:59:59Z",
+        "Period": 86400,
+        "Statistics": [
+          "Average"
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Analyze EBS volume usage",
+      "type": "cli",
+      "command": "aws ec2 describe-volumes --filters Name=status,Values=available --query 'Volumes[*].[VolumeId,Size,VolumeType,CreateTime]' --output table",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Review RDS instance sizing",
+      "type": "integration",
+      "integration": "aws",
+      "method": "cloudwatch.get_metric_statistics",
+      "parameters": {
+        "Namespace": "AWS/RDS",
+        "MetricName": "CPUUtilization",
+        "Dimensions": [
+          {
+            "Name": "DBInstanceIdentifier",
+            "Value": "production-db"
+          }
+        ],
+        "StartTime": "2024-01-01T00:00:00Z",
+        "EndTime": "2024-01-31T23:59:59Z",
+        "Period": 3600,
+        "Statistics": [
+          "Average",
+          "Maximum"
+        ]
+      },
+      "files": []
+    },
+    {
+      "name": "Generate cost optimization report",
+      "type": "prompt",
+      "prompt": "Analyze the collected metrics and create a comprehensive cost optimization report identifying: underutilized instances, unattached volumes, oversized RDS instances, and potential savings from Reserved Instances.",
+      "parameters": {},
+      "files": [
+        "reports/cost-optimization-report.md"
+      ]
+    },
+    {
+      "name": "Calculate Reserved Instance recommendations",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ce.get_reservation_purchase_recommendation",
+      "parameters": {
+        "Service": "EC2",
+        "TermInYears": "ONE_YEAR",
+        "PaymentOption": "PARTIAL_UPFRONT"
+      },
+      "files": []
+    },
+    {
+      "name": "Identify S3 lifecycle opportunities",
+      "type": "cli",
+      "command": "aws s3api list-buckets --query 'Buckets[*].Name' | xargs -I {} aws s3api get-bucket-lifecycle-configuration --bucket {}",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Check for idle load balancers",
+      "type": "integration",
+      "integration": "aws",
+      "method": "elbv2.describe_load_balancers",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Analyze data transfer costs",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ce.get_cost_and_usage",
+      "parameters": {
+        "TimePeriod": {
+          "Start": "2024-01-01",
+          "End": "2024-01-31"
+        },
+        "Granularity": "DAILY",
+        "Metrics": [
+          "UNBLENDED_COST"
+        ],
+        "Filter": {
+          "Dimensions": {
+            "Key": "USAGE_TYPE_GROUP",
+            "Values": [
+              "EC2: Data Transfer"
+            ]
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Create savings plan recommendations",
+      "type": "prompt",
+      "prompt": "Based on usage patterns, create specific recommendations for Savings Plans that would provide the best discount rates for the workload profile.",
+      "parameters": {},
+      "files": [
+        "reports/savings-plan-recommendations.md"
+      ]
+    },
+    {
+      "name": "Implement tagging strategy",
+      "type": "prompt",
+      "prompt": "Design and document a comprehensive tagging strategy for cost allocation, including cost centers, projects, environments, and owners.",
+      "parameters": {},
+      "files": [
+        "policies/tagging-strategy.md"
+      ]
+    },
+    {
+      "name": "Configure cost anomaly detection",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ce.create_anomaly_monitor",
+      "parameters": {
+        "AnomalyMonitor": {
+          "MonitorName": "DevOps-Cost-Monitor",
+          "MonitorType": "DIMENSIONAL",
+          "MonitorDimension": "SERVICE"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Set up budget alerts",
+      "type": "cli",
+      "command": "aws budgets create-budget --account-id $(aws sts get-caller-identity --query Account --output text) --budget file://budgets/monthly-budget.json",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Validate optimization impact",
+      "type": "prompt",
+      "prompt": "Calculate the total potential monthly savings from all identified optimization opportunities and create an implementation priority matrix based on effort vs. savings.",
+      "parameters": {},
+      "files": [
+        "reports/optimization-impact-analysis.md"
+      ]
+    }
+  ]
+}

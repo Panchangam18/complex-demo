@@ -1,0 +1,40 @@
+{
+  "goal": "Set up Ansible playbook for Node.js application deployment",
+  "steps": [
+    {
+      "name": "Review existing Ansible playbooks",
+      "type": "prompt",
+      "prompt": "Examine the day0-provisioning playbook to understand the Ansible patterns and variable usage.",
+      "parameters": {},
+      "files": [
+        "complex-demo/ansible/playbooks/day0-provisioning.yml"
+      ]
+    },
+    {
+      "name": "Create application deployment playbook",
+      "type": "prompt",
+      "prompt": "Create a new Ansible playbook for deploying the Node.js backend application with health checks and rollback capability.",
+      "parameters": {},
+      "files": [
+        "complex-demo/ansible/playbooks/deploy-backend-app.yml"
+      ]
+    },
+    {
+      "name": "Add Node exporter task",
+      "type": "prompt",
+      "prompt": "Include the install-node-exporter task in the deployment playbook for monitoring integration.",
+      "parameters": {},
+      "files": [
+        "complex-demo/ansible/playbooks/deploy-backend-app.yml",
+        "complex-demo/ansible/tasks/install-node-exporter.yml"
+      ]
+    },
+    {
+      "name": "Test playbook syntax",
+      "type": "cli",
+      "command": "ansible-playbook --syntax-check complex-demo/ansible/playbooks/deploy-backend-app.yml",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

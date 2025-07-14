@@ -1,0 +1,77 @@
+{
+  "goal": "Execute chaos engineering experiments with automated recovery validation",
+  "steps": [
+    {
+      "name": "Install Litmus chaos operator",
+      "type": "cli",
+      "command": "kubectl apply -f https://litmuschaos.github.io/litmus/litmus-operator-v2.14.0.yaml && kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=operator -n litmus --timeout=120s",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy chaos experiments",
+      "type": "cli",
+      "command": "kubectl apply -f chaos/experiments/",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Start pod delete chaos experiment",
+      "type": "cli",
+      "command": "kubectl apply -f - <<EOF\napiVersion: litmuschaos.io/v1alpha1\nkind: ChaosEngine\nmetadata:\n  name: pod-delete-chaos\n  namespace: default\nspec:\n  appinfo:\n    appns: production\n    applabel: 'app=payment-api'\n  chaosServiceAccount: litmus-admin\n  experiments:\n  - name: pod-delete\n    spec:\n      components:\n        env:\n        - name: TOTAL_CHAOS_DURATION\n          value: '60'\n        - name: CHAOS_INTERVAL\n          value: '10'\n        - name: FORCE\n          value: 'true'\nEOF",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor application health during chaos",
+      "type": "cli",
+      "command": "for i in {1..12}; do echo \"Check $i:\"; curl -s -o /dev/null -w '%{http_code}' http://payment-api:8080/health; echo; kubectl get pods -l app=payment-api --no-headers | wc -l; sleep 5; done",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Query Grafana for service metrics",
+      "type": "integration",
+      "integration_name": "smartquery",
+      "integration_params": {
+        "adapter_name": "grafana",
+        "method": "datasource.smartquery",
+        "parameters": {
+          "datasourceId": 1,
+          "targets": [
+            {
+              "expr": "up{job=\"payment-api\"}",
+              "refId": "availability"
+            },
+            {
+              "expr": "rate(http_requests_total{job=\"payment-api\",status!~\"5..\"}[1m])",
+              "refId": "success_rate"
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Verify auto-scaling responded",
+      "type": "cli",
+      "command": "kubectl get hpa payment-api-hpa -o json | jq '{current: .status.currentReplicas, desired: .status.desiredReplicas, metrics: .status.currentMetrics}'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Check chaos experiment results",
+      "type": "cli",
+      "command": "kubectl get chaosresult pod-delete-chaos-pod-delete -o json | jq '.status.experimentStatus'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Generate chaos report",
+      "type": "cli",
+      "command": "kubectl logs -l chaosUID=$(kubectl get chaosengine pod-delete-chaos -o json | jq -r '.metadata.uid') --tail=100 | grep -E 'verdict|probe|summary' > chaos-report.txt && cat chaos-report.txt",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

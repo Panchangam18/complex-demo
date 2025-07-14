@@ -1,0 +1,131 @@
+{
+  "goal": "Implement progressive canary deployment for serverless application with automated rollback",
+  "steps": [
+    {
+      "name": "Create Lambda function with alias configuration",
+      "type": "prompt",
+      "prompt": "Design Lambda function with staging and production aliases. Configure AWS CodeDeploy for canary deployments with CloudWatch alarms for automatic rollback on errors.",
+      "parameters": {},
+      "files": [
+        "lambda/api-gateway/handler.py",
+        "lambda/api-gateway/deployment-config.json"
+      ]
+    },
+    {
+      "name": "Deploy Lambda function with initial version",
+      "type": "integration",
+      "integration_name": "CreateFunction",
+      "integration_params": {
+        "adapter_name": "aws",
+        "method": "lambda.CreateFunction",
+        "parameters": {
+          "FunctionName": "api-handler",
+          "Runtime": "python3.9",
+          "Handler": "handler.main",
+          "Code": {
+            "S3Bucket": "deployment-artifacts",
+            "S3Key": "lambda/api-handler-v1.zip"
+          },
+          "Publish": true
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Create production alias pointing to version",
+      "type": "integration",
+      "integration_name": "CreateAlias",
+      "integration_params": {
+        "adapter_name": "aws",
+        "method": "lambda.CreateAlias",
+        "parameters": {
+          "FunctionName": "api-handler",
+          "Name": "production",
+          "FunctionVersion": "1",
+          "Description": "Production environment"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Configure CloudWatch alarms for rollback",
+      "type": "integration",
+      "integration_name": "PutMetricAlarm",
+      "integration_params": {
+        "adapter_name": "aws",
+        "method": "cloudwatch.PutMetricAlarm",
+        "parameters": {
+          "AlarmName": "lambda-api-handler-errors",
+          "MetricName": "Errors",
+          "Namespace": "AWS/Lambda",
+          "Statistic": "Sum",
+          "Period": 60,
+          "Threshold": 10,
+          "ComparisonOperator": "GreaterThanThreshold"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Deploy new version with canary configuration",
+      "type": "cli",
+      "command": "aws lambda update-function-code --function-name api-handler --s3-bucket deployment-artifacts --s3-key lambda/api-handler-v2.zip --publish",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Start canary deployment with 10% traffic",
+      "type": "cli",
+      "command": "aws codedeploy create-deployment --application-name lambda-api-app --deployment-group-name production --deployment-config-name CodeDeployDefault.LambdaCanary10PercentEvery5Minutes --revision '{\"revisionType\": \"S3\", \"s3Location\": {\"bucket\": \"deployment-artifacts\", \"key\": \"codedeploy/appspec.yaml\"}}'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor canary metrics",
+      "type": "integration",
+      "integration_name": "GetMetricData",
+      "integration_params": {
+        "adapter_name": "aws",
+        "method": "cloudwatch.GetMetricData",
+        "parameters": {
+          "MetricDataQueries": [
+            {
+              "Id": "m1",
+              "MetricStat": {
+                "Metric": {
+                  "Namespace": "AWS/Lambda",
+                  "MetricName": "Duration",
+                  "Dimensions": [
+                    {
+                      "Name": "FunctionName",
+                      "Value": "api-handler"
+                    }
+                  ]
+                },
+                "Period": 300,
+                "Stat": "Average"
+              }
+            }
+          ],
+          "StartTime": "2024-01-01T00:00:00Z",
+          "EndTime": "2024-01-01T01:00:00Z"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Verify canary deployment progress",
+      "type": "cli",
+      "command": "aws codedeploy get-deployment --deployment-id $(aws codedeploy list-deployments --application-name lambda-api-app --deployment-group-name production --query 'deployments[0]' --output text) --query 'deploymentInfo.status' --output text",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test both versions are serving traffic",
+      "type": "cli",
+      "command": "for i in {1..20}; do curl -s https://api.example.com/version | jq -r '.version'; done | sort | uniq -c",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "goal": "Deploy monitoring stack using existing scripts",
+  "steps": [
+    {
+      "name": "Run monitoring setup",
+      "type": "cli",
+      "command": "./scripts/monitoring/setup-prometheus.sh",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy Grafana",
+      "type": "cli",
+      "command": "./scripts/monitoring/setup-grafana.sh",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify monitoring",
+      "type": "cli",
+      "command": "kubectl get pods -n monitoring",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

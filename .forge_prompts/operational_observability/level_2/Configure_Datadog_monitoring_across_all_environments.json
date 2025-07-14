@@ -1,0 +1,82 @@
+{
+  "goal": "Configure Datadog monitoring across all environments",
+  "steps": [
+    {
+      "name": "Apply Datadog secrets",
+      "type": "cli",
+      "command": "kubectl apply -f complex-demo/k8s/envs/dev/monitoring/datadog-secrets.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Deploy Datadog agent on EKS",
+      "type": "cli",
+      "command": "kubectl apply -f complex-demo/k8s/envs/dev/monitoring/datadog-aws-eks.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure APM for backend",
+      "type": "prompt",
+      "prompt": "Update the backend deployment.yaml to include Datadog APM environment variables and annotations for trace collection.",
+      "parameters": {},
+      "files": [
+        "complex-demo/k8s/envs/dev/backend/deployment.yaml"
+      ]
+    },
+    {
+      "name": "Create Datadog dashboard",
+      "type": "integration",
+      "integration_name": "CreateDashboard",
+      "integration_params": {
+        "adapter_name": "datadog",
+        "method": "dashboards.CreateDashboard",
+        "parameters": {
+          "title": "Complex Demo Application",
+          "widgets": [
+            {
+              "definition": {
+                "type": "timeseries",
+                "requests": [
+                  {
+                    "q": "avg:kubernetes.cpu.usage{kube_deployment:backend}"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Set up log pipeline",
+      "type": "integration",
+      "integration_name": "CreateLogsPipeline",
+      "integration_params": {
+        "adapter_name": "datadog",
+        "method": "logs.CreateLogsPipeline",
+        "parameters": {
+          "name": "Backend Application Logs",
+          "filter": {
+            "query": "source:nodejs service:backend"
+          },
+          "processors": [
+            {
+              "type": "grok-parser",
+              "name": "Parse backend logs"
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Verify monitoring",
+      "type": "cli",
+      "command": "kubectl get pods -l app=datadog-agent && kubectl exec -it $(kubectl get pod -l app=datadog-agent -o name | head -1) -- agent status",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

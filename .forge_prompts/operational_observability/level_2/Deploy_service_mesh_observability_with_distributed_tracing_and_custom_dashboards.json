@@ -1,0 +1,96 @@
+{
+  "goal": "Deploy service mesh observability with distributed tracing and custom dashboards",
+  "steps": [
+    {
+      "name": "Install Jaeger tracing",
+      "type": "cli",
+      "command": "kubectl create namespace observability && helm install jaeger jaegertracing/jaeger --namespace observability --set collector.service.type=LoadBalancer",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure service mesh for tracing",
+      "type": "cli",
+      "command": "kubectl apply -f - <<EOF\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: envoy-tracing-config\ndata:\n  envoy.yaml: |\n    tracing:\n      http:\n        name: envoy.tracers.zipkin\n        typed_config:\n          \"@type\": type.googleapis.com/envoy.config.trace.v3.ZipkinConfig\n          collector_cluster: jaeger-collector\n          collector_endpoint: \"/api/v2/spans\"\nEOF",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Query service dependencies",
+      "type": "integration",
+      "integration_name": "GetServiceConnections",
+      "integration_params": {
+        "adapter_name": "consul",
+        "method": "catalog.service",
+        "parameters": {
+          "service": "payment-api",
+          "dc": "dc1"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Create Grafana tracing dashboard",
+      "type": "integration",
+      "integration_name": "CreateDashboard",
+      "integration_params": {
+        "adapter_name": "grafana",
+        "method": "dashboard.create_dashboard",
+        "parameters": {
+          "dashboard": {
+            "title": "Service Mesh Tracing",
+            "panels": [
+              {
+                "title": "Request Flow",
+                "type": "jaeger",
+                "targets": [
+                  {
+                    "query": "service=\"payment-api\" AND operation=\"POST /api/payment\""
+                  }
+                ]
+              }
+            ]
+          },
+          "folderId": 0
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Generate trace data",
+      "type": "cli",
+      "command": "for i in {1..50}; do curl -H 'X-B3-TraceId: $(openssl rand -hex 16)' -H 'X-B3-SpanId: $(openssl rand -hex 8)' -H 'X-B3-Sampled: 1' http://api-gateway/api/v1/payment -d '{\"amount\": 100}' &; done; wait",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Query trace metrics",
+      "type": "cli",
+      "command": "curl -s 'http://jaeger-query:16686/api/traces?service=payment-api&limit=20' | jq '.data[].spans | group_by(.operationName) | map({operation: .[0].operationName, count: length, avg_duration: (map(.duration) | add/length)})'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Check service mesh health metrics",
+      "type": "integration",
+      "integration_name": "ServiceHealthStats",
+      "integration_params": {
+        "adapter_name": "consul",
+        "method": "health.service",
+        "parameters": {
+          "service": "payment-api",
+          "passing": true,
+          "near": "_agent"
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Analyze trace anomalies",
+      "type": "cli",
+      "command": "curl -s 'http://jaeger-query:16686/api/traces?service=payment-api&tags={\"error\":\"true\"}' | jq '.data[] | {traceID, duration: (.spans | map(.duration) | add), errorCount: (.spans | map(select(.tags[]?.value == \"true\" and .tags[]?.key == \"error\")) | length)}'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

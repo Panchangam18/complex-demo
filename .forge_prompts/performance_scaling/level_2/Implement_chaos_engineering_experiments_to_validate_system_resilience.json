@@ -1,0 +1,134 @@
+{
+  "goal": "Implement chaos engineering experiments to validate system resilience",
+  "steps": [
+    {
+      "name": "Define steady state",
+      "type": "prompt",
+      "prompt": "Document system steady state metrics including response times, error rates, and throughput. Define acceptable thresholds for each metric during chaos experiments.",
+      "parameters": {},
+      "files": [
+        "chaos-engineering/steady-state-hypothesis.md"
+      ]
+    },
+    {
+      "name": "Deploy Chaos Mesh",
+      "type": "cli",
+      "command": "helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=chaos-testing --create-namespace",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create pod failure experiments",
+      "type": "prompt",
+      "prompt": "Design Chaos Mesh experiments to randomly kill pods in production namespace. Target 30% of pods with proper selectors and duration limits.",
+      "parameters": {},
+      "files": [
+        "chaos-engineering/experiments/pod-failure.yaml"
+      ]
+    },
+    {
+      "name": "Implement network chaos",
+      "type": "prompt",
+      "prompt": "Create network chaos experiments including latency injection (100-500ms), packet loss (10-30%), and bandwidth limitations to test service resilience.",
+      "parameters": {},
+      "files": [
+        "chaos-engineering/experiments/network-chaos.yaml"
+      ]
+    },
+    {
+      "name": "Configure stress testing",
+      "type": "prompt",
+      "prompt": "Set up CPU and memory stress experiments targeting specific services. Configure 80% CPU usage and memory pressure to test resource handling.",
+      "parameters": {},
+      "files": [
+        "chaos-engineering/experiments/resource-stress.yaml"
+      ]
+    },
+    {
+      "name": "Execute pod deletion experiment",
+      "type": "cli",
+      "command": "kubectl apply -f chaos-engineering/experiments/pod-failure.yaml",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor system behavior",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "MetricsApi.query_scalar_data",
+      "parameters": {
+        "body": {
+          "queries": [
+            {
+              "data_source": "metrics",
+              "query": "avg:kubernetes.cpu.usage{kube_namespace:production} by {pod_name}",
+              "name": "cpu_during_chaos"
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Test database failover",
+      "type": "integration",
+      "integration": "aws",
+      "method": "rds.failover_db_cluster",
+      "parameters": {
+        "DBClusterIdentifier": "production-aurora-cluster",
+        "TargetDBInstanceIdentifier": "production-aurora-instance-2"
+      },
+      "files": []
+    },
+    {
+      "name": "Simulate zone failure",
+      "type": "cli",
+      "command": "kubectl cordon $(kubectl get nodes -l failure-domain.beta.kubernetes.io/zone=us-east-2a -o name)",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify auto-scaling",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "AppsV1Api.list_namespaced_deployment",
+      "parameters": {
+        "namespace": "production",
+        "label_selector": "app=frontend"
+      },
+      "files": []
+    },
+    {
+      "name": "Run traffic surge test",
+      "type": "cli",
+      "command": "k6 run --vus 1000 --duration 5m chaos-engineering/load-tests/surge-test.js",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Analyze experiment results",
+      "type": "prompt",
+      "prompt": "Analyze metrics collected during chaos experiments. Compare with steady state hypothesis and identify any deviations or unexpected behaviors.",
+      "parameters": {},
+      "files": [
+        "chaos-engineering/reports/experiment-analysis.md"
+      ]
+    },
+    {
+      "name": "Clean up experiments",
+      "type": "cli",
+      "command": "kubectl delete chaosengine --all -n production",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Document improvements",
+      "type": "prompt",
+      "prompt": "Based on chaos experiment findings, document required system improvements, updated runbooks, and new monitoring alerts to enhance resilience.",
+      "parameters": {},
+      "files": [
+        "chaos-engineering/improvement-plan.md"
+      ]
+    }
+  ]
+}

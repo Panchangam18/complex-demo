@@ -1,0 +1,57 @@
+{
+  "goal": "Create advanced Kubernetes network policies and service mesh security",
+  "steps": [
+    {
+      "name": "Analyze service communication patterns",
+      "type": "prompt",
+      "prompt": "Review microservices architecture to map all inter-service communications, external dependencies, and ingress/egress requirements for zero-trust network design.",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Design network policies",
+      "type": "prompt",
+      "prompt": "Create Kubernetes NetworkPolicies implementing: default deny-all, service-specific ingress rules, namespace isolation, and egress restrictions to external services only.",
+      "parameters": {},
+      "files": [
+        "k8s/network-policies/default-deny.yaml",
+        "k8s/network-policies/payment-api-policy.yaml",
+        "k8s/network-policies/database-access.yaml"
+      ]
+    },
+    {
+      "name": "Implement mTLS with cert-manager",
+      "type": "prompt",
+      "prompt": "Configure cert-manager for automatic certificate rotation, create Istio DestinationRules for mTLS enforcement, and set up certificate monitoring with expiry alerts.",
+      "parameters": {},
+      "files": [
+        "k8s/cert-manager/cluster-issuer.yaml",
+        "istio/security/mtls-strict.yaml"
+      ]
+    },
+    {
+      "name": "Create security monitoring",
+      "type": "prompt",
+      "prompt": "Design Falco rules for runtime security monitoring: detect privilege escalation, unexpected network connections, and file system changes. Include alert routing.",
+      "parameters": {},
+      "files": [
+        "falco/rules/custom-rules.yaml",
+        "falco/config/falco.yaml"
+      ]
+    },
+    {
+      "name": "Validate network policies",
+      "type": "cli",
+      "command": "kubectl apply --dry-run=server -f k8s/network-policies/ && echo 'Network policies validated'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test policy enforcement",
+      "type": "cli",
+      "command": "kubectl run test-pod --image=busybox --rm -it --restart=Never -- wget -qO- --timeout=2 http://payment-api:8080 2>&1 | grep -E 'timeout|refused'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}
