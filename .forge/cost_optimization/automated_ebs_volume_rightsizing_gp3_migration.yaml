@@ -1,0 +1,175 @@
+goal: Automatically identify oversized EBS volumes and migrate to cheaper GP3 storage
+  with optimal IOPS allocation
+steps:
+- name: List all EBS volumes
+  type: integration
+  integration: aws
+  method: ec2.DescribeVolumes
+  parameters:
+    Filters:
+    - Name: status
+      Values:
+      - in-use
+      - available
+    MaxResults: 500
+- name: Get volume usage metrics
+  type: integration
+  integration: aws
+  method: cloudwatch.GetMetricStatistics
+  parameters:
+    Namespace: AWS/EBS
+    MetricName: VolumeReadBytes
+    Dimensions:
+    - Name: VolumeId
+      Value: ${VOLUME_ID}
+    StartTime: ${START_TIME}
+    EndTime: ${END_TIME}
+    Period: 3600
+    Statistics:
+    - Average
+    - Maximum
+- name: Get volume write metrics
+  type: integration
+  integration: aws
+  method: cloudwatch.GetMetricStatistics
+  parameters:
+    Namespace: AWS/EBS
+    MetricName: VolumeWriteBytes
+    Dimensions:
+    - Name: VolumeId
+      Value: ${VOLUME_ID}
+    StartTime: ${START_TIME}
+    EndTime: ${END_TIME}
+    Period: 3600
+    Statistics:
+    - Average
+    - Maximum
+- name: Calculate volume utilization
+  type: prompt
+  prompt: Analyze read/write metrics to identify volumes with <20% utilization over
+    30 days. Calculate potential savings from downsizing and GP2 to GP3 migration.
+- name: Get IOPS metrics for GP3 sizing
+  type: integration
+  integration: aws
+  method: cloudwatch.GetMetricStatistics
+  parameters:
+    Namespace: AWS/EBS
+    MetricName: VolumeReadOps
+    Dimensions:
+    - Name: VolumeId
+      Value: ${VOLUME_ID}
+    StartTime: ${START_TIME}
+    EndTime: ${END_TIME}
+    Period: 300
+    Statistics:
+    - Average
+    - Maximum
+    Unit: Count/Second
+- name: Plan GP3 migration configuration
+  type: prompt
+  prompt: For GP2 volumes, calculate optimal GP3 configuration. Set IOPS to 20% above
+    historical peak (minimum 3000). Calculate if current burst performance is being
+    used.
+- name: Create volume snapshots for safety
+  type: integration
+  integration: aws
+  method: ec2.CreateSnapshot
+  parameters:
+    VolumeId: ${VOLUME_ID}
+    Description: Pre-optimization backup - ${DATE}
+    TagSpecifications:
+    - ResourceType: snapshot
+      Tags:
+      - Key: Purpose
+        Value: volume-optimization
+      - Key: OriginalVolume
+        Value: ${VOLUME_ID}
+      - Key: AutomatedBackup
+        Value: 'true'
+- name: Check volume modification state
+  type: integration
+  integration: aws
+  method: ec2.DescribeVolumesModifications
+  parameters:
+    VolumeIds:
+    - ${VOLUME_ID}
+    Filters:
+    - Name: modification-state
+      Values:
+      - modifying
+      - optimizing
+      - failed
+- name: Resize volumes if oversized
+  type: integration
+  integration: aws
+  method: ec2.ModifyVolume
+  parameters:
+    VolumeId: ${VOLUME_ID}
+    Size: ${NEW_SIZE}
+- name: Migrate GP2 volumes to GP3
+  type: integration
+  integration: aws
+  method: ec2.ModifyVolume
+  parameters:
+    VolumeId: ${VOLUME_ID}
+    VolumeType: gp3
+    Iops: ${TARGET_IOPS}
+    Throughput: ${TARGET_THROUGHPUT}
+- name: Monitor modification progress
+  type: integration
+  integration: aws
+  method: ec2.DescribeVolumesModifications
+  parameters:
+    VolumeIds:
+    - ${VOLUME_ID}
+- name: Get application performance metrics
+  type: integration
+  integration: datadog
+  method: MetricsApi.query_timeseries_data
+  parameters:
+    body:
+      data:
+        type: timeseries_request
+        attributes:
+          formulas:
+          - formula: query1
+          queries:
+          - name: query1
+            data_source: metrics
+            query: avg:aws.ebs.volume_read_time{volume_id:${VOLUME_ID}}
+          from: now-1h
+          to: now
+- name: Check for performance degradation
+  type: prompt
+  prompt: Monitor EBS latency metrics after migration. If latency increases by >20%,
+    automatically increase IOPS by 500 and recheck.
+- name: Adjust IOPS if needed
+  type: integration
+  integration: aws
+  method: ec2.ModifyVolume
+  parameters:
+    VolumeId: ${VOLUME_ID}
+    Iops: ${ADJUSTED_IOPS}
+- name: Tag volumes with optimization details
+  type: integration
+  integration: aws
+  method: ec2.CreateTags
+  parameters:
+    Resources:
+    - ${VOLUME_ID}
+    Tags:
+    - Key: CostOptimized
+      Value: ${DATE}
+    - Key: OptimizationType
+      Value: automated-rightsizing
+    - Key: MonthlySavings
+      Value: ${MONTHLY_SAVINGS}
+    - Key: PreviousType
+      Value: ${PREVIOUS_TYPE}
+    - Key: PreviousSize
+      Value: ${PREVIOUS_SIZE}
+- name: Generate cost savings report
+  type: prompt
+  prompt: Calculate total monthly and annual savings from volume optimizations. Include
+    breakdown by volume type changes and size reductions.
+

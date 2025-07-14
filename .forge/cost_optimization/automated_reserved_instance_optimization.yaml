@@ -1,0 +1,149 @@
+goal: Automatically purchase Reserved Instances for stable workloads and convert existing
+  RIs when usage patterns change
+steps:
+- name: Get EC2 usage data for analysis
+  type: integration
+  integration: aws
+  method: ce.GetCostAndUsage
+  parameters:
+    TimePeriod:
+      Start: ${START_DATE}
+      End: ${END_DATE}
+    Granularity: DAILY
+    Metrics:
+    - UsageQuantity
+    - UnblendedCost
+    GroupBy:
+    - Type: DIMENSION
+      Key: INSTANCE_TYPE
+    - Type: DIMENSION
+      Key: AVAILABILITY_ZONE
+    Filter:
+      Dimensions:
+        Key: SERVICE
+        Values:
+        - Amazon Elastic Compute Cloud - Compute
+- name: Analyze instance stability patterns
+  type: prompt
+  prompt: Identify EC2 instances running >80% of the time in the same AZ and instance
+    type over the past 90 days. These are prime candidates for Reserved Instances.
+- name: Get RI recommendations
+  type: integration
+  integration: aws
+  method: ce.GetReservationPurchaseRecommendation
+  parameters:
+    Service: EC2
+    AccountScope: PAYER
+    LookbackPeriodInDays: SIXTY_DAYS
+    TermInYears: ONE_YEAR
+    PaymentOption: NO_UPFRONT
+- name: List existing Reserved Instances
+  type: integration
+  integration: aws
+  method: ec2.DescribeReservedInstances
+  parameters:
+    Filters:
+    - Name: state
+      Values:
+      - active
+- name: Get RI utilization metrics
+  type: integration
+  integration: aws
+  method: ce.GetReservationUtilization
+  parameters:
+    TimePeriod:
+      Start: ${MONTH_START}
+      End: ${MONTH_END}
+    GroupBy:
+    - Type: DIMENSION
+      Key: INSTANCE_TYPE_FAMILY
+    Granularity: MONTHLY
+- name: Identify underutilized RIs for modification
+  type: prompt
+  prompt: Find Reserved Instances with <60% utilization and determine if they can
+    be modified to better match current usage patterns (e.g., convert 2x m5.large
+    to 1x m5.xlarge).
+- name: Describe RI modification options
+  type: integration
+  integration: aws
+  method: ec2.DescribeReservedInstancesModifications
+  parameters:
+    Filters:
+    - Name: status
+      Values:
+      - fulfilled
+      - failed
+- name: Calculate cost savings
+  type: prompt
+  prompt: Calculate potential annual savings from RI purchases and modifications.
+    Only proceed with purchases that will save >$5,000 annually.
+- name: Get RI offerings
+  type: integration
+  integration: aws
+  method: ec2.DescribeReservedInstancesOfferings
+  parameters:
+    InstanceType: ${INSTANCE_TYPE}
+    AvailabilityZone: ${AZ}
+    ProductDescription: Linux/UNIX
+    InstanceTenancy: default
+    OfferingClass: standard
+    OfferingType: No Upfront
+    MaxDuration: 31536000
+- name: Create approval request for large purchases
+  type: prompt
+  prompt: For RI purchases totaling over $50,000, create an approval request with
+    detailed cost-benefit analysis for finance team review.
+- name: Execute RI modifications
+  type: integration
+  integration: aws
+  method: ec2.ModifyReservedInstances
+  parameters:
+    ReservedInstancesIds:
+    - ${RI_ID}
+    TargetConfigurations:
+    - InstanceType: ${TARGET_TYPE}
+      InstanceCount: ${TARGET_COUNT}
+      AvailabilityZone: ${AZ}
+- name: Purchase new Reserved Instances
+  type: integration
+  integration: aws
+  method: ec2.PurchaseReservedInstancesOffering
+  parameters:
+    InstanceCount: ${COUNT}
+    ReservedInstancesOfferingId: ${OFFERING_ID}
+    LimitPrice:
+      Amount: ${LIMIT_PRICE}
+      CurrencyCode: USD
+- name: Tag RIs for cost allocation
+  type: integration
+  integration: aws
+  method: ec2.CreateTags
+  parameters:
+    Resources:
+    - ${RI_ID}
+    Tags:
+    - Key: CostCenter
+      Value: ${COST_CENTER}
+    - Key: PurchaseDate
+      Value: ${PURCHASE_DATE}
+    - Key: AutoPurchased
+      Value: 'true'
+- name: Update cost tracking dashboard
+  type: integration
+  integration: aws
+  method: cloudwatch.PutMetricData
+  parameters:
+    Namespace: FinOps/RIOptimization
+    MetricData:
+    - MetricName: RIPurchaseAmount
+      Value: ${PURCHASE_AMOUNT}
+      Unit: Count
+      Timestamp: ${TIMESTAMP}
+    - MetricName: ProjectedAnnualSavings
+      Value: ${ANNUAL_SAVINGS}
+      Unit: Count
+- name: Generate and send optimization report
+  type: prompt
+  prompt: Create a comprehensive RI optimization report showing purchases made, modifications
+    executed, and projected savings. Send to finance and infrastructure teams.
+

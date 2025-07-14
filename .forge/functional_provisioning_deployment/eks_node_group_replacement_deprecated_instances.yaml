@@ -1,0 +1,97 @@
+goal: Automatically replace EKS node groups when AWS announces instance type deprecation
+steps:
+- name: List EKS clusters
+  type: integration
+  integration: aws
+  method: eks.ListClusters
+  parameters:
+    maxResults: 100
+- name: Describe node groups for each cluster
+  type: integration
+  integration: aws
+  method: eks.ListNodegroups
+  parameters:
+    clusterName: ${CLUSTER_NAME}
+    maxResults: 100
+- name: Get node group details
+  type: integration
+  integration: aws
+  method: eks.DescribeNodegroup
+  parameters:
+    clusterName: ${CLUSTER_NAME}
+    nodegroupName: ${NODEGROUP_NAME}
+- name: Check for deprecated instance types
+  type: prompt
+  prompt: Analyze the node group instance types and identify any that match the deprecation
+    announcement. Create a mapping of deprecated to recommended replacement instance
+    types.
+- name: Create replacement node group configuration
+  type: prompt
+  prompt: Generate a new node group configuration with replacement instance types,
+    preserving all existing settings including labels, taints, scaling configuration,
+    and security groups.
+- name: Create new node group
+  type: integration
+  integration: aws
+  method: eks.CreateNodegroup
+  parameters:
+    clusterName: ${CLUSTER_NAME}
+    nodegroupName: ${NODEGROUP_NAME}-replacement
+    scalingConfig:
+      minSize: ${MIN_SIZE}
+      maxSize: ${MAX_SIZE}
+      desiredSize: ${DESIRED_SIZE}
+    instanceTypes:
+    - ${NEW_INSTANCE_TYPES}
+    subnets: ${SUBNET_IDS}
+    nodeRole: ${NODE_ROLE_ARN}
+    labels: ${NODE_LABELS}
+    taints: ${NODE_TAINTS}
+- name: Wait for node group to be active
+  type: integration
+  integration: aws
+  method: eks.waiters.NodegroupActive
+  parameters:
+    clusterName: ${CLUSTER_NAME}
+    nodegroupName: ${NODEGROUP_NAME}-replacement
+- name: Get nodes from old node group
+  type: integration
+  integration: kubernetes
+  method: CoreV1Api.list_node
+  parameters:
+    label_selector: eks.amazonaws.com/nodegroup=${NODEGROUP_NAME}
+- name: Cordon old nodes
+  type: integration
+  integration: kubernetes
+  method: CoreV1Api.patch_node
+  parameters:
+    name: ${NODE_NAME}
+    body:
+      spec:
+        unschedulable: true
+- name: Drain workloads from old nodes
+  type: cli
+  command: kubectl drain ${NODE_NAME} --ignore-daemonsets --delete-emptydir-data --grace-period=300
+    --timeout=600s
+- name: Monitor pod migration status
+  type: integration
+  integration: kubernetes
+  method: CoreV1Api.list_pod_for_all_namespaces
+  parameters:
+    field_selector: status.phase=Pending
+- name: Verify all pods are running
+  type: prompt
+  prompt: Check that all pods have been successfully rescheduled to new nodes and
+    are in Running state. Identify any pods stuck in Pending state.
+- name: Delete old node group
+  type: integration
+  integration: aws
+  method: eks.DeleteNodegroup
+  parameters:
+    clusterName: ${CLUSTER_NAME}
+    nodegroupName: ${NODEGROUP_NAME}
+- name: Update infrastructure as code
+  type: prompt
+  prompt: Update Terraform or CloudFormation templates to reflect the new instance
+    types and node group configuration for future deployments.
+
