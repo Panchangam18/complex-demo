@@ -3481,7 +3481,7 @@
           "prompt": "Analyze the existing Dockerfile to identify opportunities for build optimization and layer caching improvements.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/Code/server/Dockerfile"
+            "complex-demo/Code/server/Dockerfile"
           ]
         },
         {
@@ -3490,14 +3490,14 @@
           "prompt": "Modify the Dockerfile to use Docker BuildKit cache mounts for npm modules and add .dockerignore optimizations.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/Code/server/Dockerfile",
-            "/Users/computer/complex-demo/Code/server/.dockerignore"
+            "complex-demo/Code/server/Dockerfile",
+            "complex-demo/Code/server/.dockerignore"
           ]
         },
         {
           "name": "Test optimized build",
           "type": "cli",
-          "command": "cd /Users/computer/complex-demo/Code/server && DOCKER_BUILDKIT=1 docker build --progress=plain -t backend:optimized .",
+          "command": "cd complex-demo/Code/server && DOCKER_BUILDKIT=1 docker build --progress=plain -t backend:optimized .",
           "parameters": {},
           "files": []
         },
@@ -3519,7 +3519,7 @@
           "prompt": "Examine the current CircleCI config to understand the existing workflow structure and job definitions.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/.circleci/config.yml"
+            "complex-demo/.circleci/config.yml"
           ]
         },
         {
@@ -3528,7 +3528,7 @@
           "prompt": "Update config.yml to add a staging deployment job that runs after tests pass, with manual approval for production.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/.circleci/config.yml"
+            "complex-demo/.circleci/config.yml"
           ]
         },
         {
@@ -3537,13 +3537,13 @@
           "prompt": "Add CircleCI context references for AWS, GCP, and Azure credentials in the deployment jobs.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/.circleci/config.yml"
+            "complex-demo/.circleci/config.yml"
           ]
         },
         {
           "name": "Validate CircleCI config",
           "type": "cli",
-          "command": "circleci config validate /Users/computer/complex-demo/.circleci/config.yml",
+          "command": "circleci config validate complex-demo/.circleci/config.yml",
           "parameters": {},
           "files": []
         }
@@ -3558,7 +3558,7 @@
           "prompt": "Examine the day0-provisioning playbook to understand the Ansible patterns and variable usage.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/ansible/playbooks/day0-provisioning.yml"
+            "complex-demo/ansible/playbooks/day0-provisioning.yml"
           ]
         },
         {
@@ -3567,7 +3567,7 @@
           "prompt": "Create a new Ansible playbook for deploying the Node.js backend application with health checks and rollback capability.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/ansible/playbooks/deploy-backend-app.yml"
+            "complex-demo/ansible/playbooks/deploy-backend-app.yml"
           ]
         },
         {
@@ -3576,14 +3576,14 @@
           "prompt": "Include the install-node-exporter task in the deployment playbook for monitoring integration.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/ansible/playbooks/deploy-backend-app.yml",
-            "/Users/computer/complex-demo/ansible/tasks/install-node-exporter.yml"
+            "complex-demo/ansible/playbooks/deploy-backend-app.yml",
+            "complex-demo/ansible/tasks/install-node-exporter.yml"
           ]
         },
         {
           "name": "Test playbook syntax",
           "type": "cli",
-          "command": "ansible-playbook --syntax-check /Users/computer/complex-demo/ansible/playbooks/deploy-backend-app.yml",
+          "command": "ansible-playbook --syntax-check complex-demo/ansible/playbooks/deploy-backend-app.yml",
           "parameters": {},
           "files": []
         }
@@ -3598,7 +3598,7 @@
           "prompt": "Examine the configure-nexus.sh script to understand how Nexus repositories are set up.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/scripts/configure-nexus.sh"
+            "complex-demo/scripts/configure-nexus.sh"
           ]
         },
         {
@@ -3607,7 +3607,7 @@
           "prompt": "Modify configure-nexus.sh to add npm proxy repository configuration pointing to npmjs.org.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/scripts/configure-nexus.sh"
+            "complex-demo/scripts/configure-nexus.sh"
           ]
         },
         {
@@ -3616,14 +3616,14 @@
           "prompt": "Update the backend package.json to include npmrc configuration for using Nexus as npm registry.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/Code/server/package.json",
-            "/Users/computer/complex-demo/Code/server/.npmrc"
+            "complex-demo/Code/server/package.json",
+            "complex-demo/Code/server/.npmrc"
           ]
         },
         {
           "name": "Test Nexus npm repository",
           "type": "cli",
-          "command": "cd /Users/computer/complex-demo/Code/server && npm config set registry http://nexus:8081/repository/npm-proxy/ && npm install --dry-run",
+          "command": "cd complex-demo/Code/server && npm config set registry http://nexus:8081/repository/npm-proxy/ && npm install --dry-run",
           "parameters": {},
           "files": []
         }
@@ -3638,7 +3638,7 @@
           "prompt": "Examine the security-hardening.sh script to understand the security measures being applied.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/scripts/security-hardening.sh"
+            "complex-demo/scripts/security-hardening.sh"
           ]
         },
         {
@@ -3647,7 +3647,7 @@
           "prompt": "Modify the backend deployment.yaml to add security context with runAsNonRoot, readOnlyRootFilesystem, and capabilities drop.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/k8s/envs/dev/backend/deployment.yaml"
+            "complex-demo/k8s/envs/dev/backend/deployment.yaml"
           ]
         },
         {
@@ -3656,13 +3656,13 @@
           "prompt": "Create a NetworkPolicy for the backend namespace to restrict ingress traffic only from frontend pods.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/k8s/envs/dev/backend/network-policy.yaml"
+            "complex-demo/k8s/envs/dev/backend/network-policy.yaml"
           ]
         },
         {
           "name": "Apply security policies",
           "type": "cli",
-          "command": "kubectl apply -f /Users/computer/complex-demo/k8s/envs/dev/backend/network-policy.yaml --dry-run=client",
+          "command": "kubectl apply -f complex-demo/k8s/envs/dev/backend/network-policy.yaml --dry-run=client",
           "parameters": {},
           "files": []
         }
@@ -3677,7 +3677,7 @@
           "prompt": "Examine the deploy-datadog-multicloud.sh script to understand the multi-cloud Datadog deployment approach.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/scripts/deploy-datadog-multicloud.sh"
+            "complex-demo/scripts/deploy-datadog-multicloud.sh"
           ]
         },
         {
@@ -3686,7 +3686,7 @@
           "prompt": "Modify datadog-aws-eks.yaml to enable APM, logs collection, and process monitoring for the backend service.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/k8s/envs/dev/monitoring/datadog-aws-eks.yaml"
+            "complex-demo/k8s/envs/dev/monitoring/datadog-aws-eks.yaml"
           ]
         },
         {
@@ -3695,13 +3695,13 @@
           "prompt": "Update the Datadog ServiceMonitor to scrape custom metrics from the Node.js backend /metrics endpoint.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/monitoring/datadog-servicemonitor.yaml"
+            "complex-demo/monitoring/datadog-servicemonitor.yaml"
           ]
         },
         {
           "name": "Deploy monitoring stack",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/scripts/deploy-datadog-multicloud.sh",
+          "command": "bash complex-demo/scripts/deploy-datadog-multicloud.sh",
           "parameters": {},
           "files": []
         }
@@ -3716,7 +3716,7 @@
           "prompt": "Add a new 'deploy-prod' target to the Makefile that calls deploy.sh with production parameters.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/Makefile"
+            "complex-demo/Makefile"
           ]
         },
         {
@@ -3737,13 +3737,13 @@
           "prompt": "Update the JFrog pull secret YAML with base64 encoded Docker config for authentication.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/k8s/secrets/jfrog-pull-secret.yaml"
+            "complex-demo/k8s/secrets/jfrog-pull-secret.yaml"
           ]
         },
         {
           "name": "Apply secret",
           "type": "cli",
-          "command": "kubectl apply -f /Users/computer/complex-demo/k8s/secrets/jfrog-pull-secret.yaml",
+          "command": "kubectl apply -f complex-demo/k8s/secrets/jfrog-pull-secret.yaml",
           "parameters": {},
           "files": []
         }
@@ -3758,13 +3758,13 @@
           "prompt": "Update the frontend Dockerfile to use nginx:alpine for smaller production image size.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/Code/client/Dockerfile"
+            "complex-demo/Code/client/Dockerfile"
           ]
         },
         {
           "name": "Build optimized image",
           "type": "cli",
-          "command": "cd /Users/computer/complex-demo/Code/client && docker build -t frontend:slim .",
+          "command": "cd complex-demo/Code/client && docker build -t frontend:slim .",
           "parameters": {},
           "files": []
         }
@@ -3779,13 +3779,13 @@
           "prompt": "Update the New Relic integration YAML with proper license key and app name configuration.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/k8s/envs/dev/monitoring/newrelic-integration.yaml"
+            "complex-demo/k8s/envs/dev/monitoring/newrelic-integration.yaml"
           ]
         },
         {
           "name": "Deploy New Relic",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/k8s/envs/dev/monitoring/deploy-newrelic.sh",
+          "command": "bash complex-demo/k8s/envs/dev/monitoring/deploy-newrelic.sh",
           "parameters": {},
           "files": []
         }
@@ -3800,13 +3800,13 @@
           "prompt": "Modify the backend configuration JSON to use the correct S3 bucket and DynamoDB table for state locking.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/terraform/bootstrap/generated/backend-config.json"
+            "complex-demo/terraform/bootstrap/generated/backend-config.json"
           ]
         },
         {
           "name": "Initialize backend",
           "type": "cli",
-          "command": "cd /Users/computer/complex-demo/terraform && terraform init -backend-config=bootstrap/generated/backend-config.json",
+          "command": "cd complex-demo/terraform && terraform init -backend-config=bootstrap/generated/backend-config.json",
           "parameters": {},
           "files": []
         }
@@ -10641,7 +10641,7 @@
           "prompt": "Examine deploy.sh to understand the deployment phases and configuration options available.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/deploy.sh"
+            "complex-demo/deploy.sh"
           ]
         },
         {
@@ -10654,14 +10654,14 @@
         {
           "name": "Run pre-deployment validation",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/scripts/test-env.sh",
+          "command": "bash complex-demo/scripts/test-env.sh",
           "parameters": {},
           "files": []
         },
         {
           "name": "Execute deployment",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/deploy.sh --phase all --log-level debug",
+          "command": "bash complex-demo/deploy.sh --phase all --log-level debug",
           "parameters": {},
           "files": []
         },
@@ -10675,14 +10675,14 @@
         {
           "name": "Validate deployment",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/scripts/validate-complete-setup.sh",
+          "command": "bash complex-demo/scripts/validate-complete-setup.sh",
           "parameters": {},
           "files": []
         },
         {
           "name": "Extract credentials",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/scripts/extract-credentials-to-env.sh > credentials.env",
+          "command": "bash complex-demo/scripts/extract-credentials-to-env.sh > credentials.env",
           "parameters": {},
           "files": []
         }
@@ -10694,35 +10694,35 @@
         {
           "name": "Build frontend and backend images",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/scripts/build-and-push.sh --frontend --backend --tag $(git rev-parse --short HEAD)",
+          "command": "bash complex-demo/scripts/build-and-push.sh --frontend --backend --tag $(git rev-parse --short HEAD)",
           "parameters": {},
           "files": []
         },
         {
           "name": "Update image tags in deployments",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/scripts/update-k8s-images.sh --tag $(git rev-parse --short HEAD)",
+          "command": "bash complex-demo/scripts/update-k8s-images.sh --tag $(git rev-parse --short HEAD)",
           "parameters": {},
           "files": []
         },
         {
           "name": "Deploy full stack",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/scripts/deploy-full-stack.sh --namespace dev --wait",
+          "command": "bash complex-demo/scripts/deploy-full-stack.sh --namespace dev --wait",
           "parameters": {},
           "files": []
         },
         {
           "name": "Configure monitoring",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/scripts/monitoring-setup.sh --datadog --prometheus --grafana",
+          "command": "bash complex-demo/scripts/monitoring-setup.sh --datadog --prometheus --grafana",
           "parameters": {},
           "files": []
         },
         {
           "name": "Deploy Elasticsearch integration",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/scripts/deploy-elasticsearch-integration.sh",
+          "command": "bash complex-demo/scripts/deploy-elasticsearch-integration.sh",
           "parameters": {},
           "files": []
         },
@@ -10732,7 +10732,7 @@
           "prompt": "Apply the Grafana Elasticsearch datasource configuration to connect Grafana with Elasticsearch for log visualization.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/monitoring/grafana-elasticsearch-datasource.yaml"
+            "complex-demo/monitoring/grafana-elasticsearch-datasource.yaml"
           ]
         },
         {
@@ -10743,7 +10743,7 @@
             "adapter_name": "grafana",
             "method": "dashboard.create_dashboard",
             "parameters": {
-              "dashboard": "file:///Users/computer/complex-demo/monitoring/elasticsearch-log-dashboards.json"
+              "dashboard": "file://complex-demo/monitoring/elasticsearch-log-dashboards.json"
             }
           },
           "files": []
@@ -10756,7 +10756,7 @@
         {
           "name": "Configure DR infrastructure",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/scripts/setup-disaster-recovery.sh --primary us-east-2 --secondary us-west-2",
+          "command": "bash complex-demo/scripts/setup-disaster-recovery.sh --primary us-east-2 --secondary us-west-2",
           "parameters": {},
           "files": []
         },
@@ -10766,7 +10766,7 @@
           "prompt": "Examine the multi-cloud service outage runbook to understand the automated recovery procedures.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/runbooks/multi-cloud-service-outage.yaml"
+            "complex-demo/runbooks/multi-cloud-service-outage.yaml"
           ]
         },
         {
@@ -10775,14 +10775,14 @@
           "prompt": "Convert the YAML runbook into an executable automation script that can be triggered during incidents.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/runbooks/multi-cloud-service-outage.yaml",
-            "/Users/computer/complex-demo/runbooks/execute-dr-runbook.sh"
+            "complex-demo/runbooks/multi-cloud-service-outage.yaml",
+            "complex-demo/runbooks/execute-dr-runbook.sh"
           ]
         },
         {
           "name": "Test DR failover",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/runbooks/execute-dr-runbook.sh --scenario regional-failure --dry-run",
+          "command": "bash complex-demo/runbooks/execute-dr-runbook.sh --scenario regional-failure --dry-run",
           "parameters": {},
           "files": []
         },
@@ -10801,14 +10801,14 @@
         {
           "name": "Set up Jenkins triggers",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/ci-cd/jenkins/scripts/configure-jenkins-triggers.sh",
+          "command": "bash complex-demo/ci-cd/jenkins/scripts/configure-jenkins-triggers.sh",
           "parameters": {},
           "files": []
         },
         {
           "name": "Configure Nexus integration",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/ci-cd/jenkins/scripts/jenkins-nexus-integration-complete.sh",
+          "command": "bash complex-demo/ci-cd/jenkins/scripts/jenkins-nexus-integration-complete.sh",
           "parameters": {},
           "files": []
         },
@@ -10818,27 +10818,27 @@
           "prompt": "Apply the Nexus Consul registration to enable service discovery for the artifact repository.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/ci-cd/nexus/configs/nexus-consul-registration.yaml"
+            "complex-demo/ci-cd/nexus/configs/nexus-consul-registration.yaml"
           ]
         },
         {
           "name": "Apply Nexus monitoring",
           "type": "cli",
-          "command": "kubectl apply -f /Users/computer/complex-demo/ci-cd/nexus/configs/nexus-monitoring.yaml",
+          "command": "kubectl apply -f complex-demo/ci-cd/nexus/configs/nexus-monitoring.yaml",
           "parameters": {},
           "files": []
         },
         {
           "name": "Test CI/CD pipeline",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/ci-cd/jenkins/scripts/demo-jenkins-nexus-value.sh",
+          "command": "bash complex-demo/ci-cd/jenkins/scripts/demo-jenkins-nexus-value.sh",
           "parameters": {},
           "files": []
         },
         {
           "name": "Monitor Nexus performance",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/ci-cd/nexus/scripts/demo-nexus-performance.sh",
+          "command": "bash complex-demo/ci-cd/nexus/scripts/demo-nexus-performance.sh",
           "parameters": {},
           "files": []
         }
@@ -10850,7 +10850,7 @@
         {
           "name": "Configure Ansible Tower",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/scripts/configure-ansible-tower.sh --license-file license.txt",
+          "command": "bash complex-demo/scripts/configure-ansible-tower.sh --license-file license.txt",
           "parameters": {},
           "files": []
         },
@@ -10860,34 +10860,34 @@
           "prompt": "Review and apply the Puppet integration playbook to connect Ansible with Puppet Enterprise.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/ansible/playbooks/puppet-integration.yml"
+            "complex-demo/ansible/playbooks/puppet-integration.yml"
           ]
         },
         {
           "name": "Apply Puppet-Elasticsearch integration",
           "type": "cli",
-          "command": "ansible-playbook -i inventory /Users/computer/complex-demo/ansible/playbooks/puppet-elasticsearch-integration.yml",
+          "command": "ansible-playbook -i inventory complex-demo/ansible/playbooks/puppet-elasticsearch-integration.yml",
           "parameters": {},
           "files": []
         },
         {
           "name": "Run configuration management setup",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/scripts/setup-configuration-management.sh",
+          "command": "bash complex-demo/scripts/setup-configuration-management.sh",
           "parameters": {},
           "files": []
         },
         {
           "name": "Validate Ansible Tower",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/scripts/validate-ansible-tower.sh",
+          "command": "bash complex-demo/scripts/validate-ansible-tower.sh",
           "parameters": {},
           "files": []
         },
         {
           "name": "Validate config management",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/scripts/validate-config-management.sh",
+          "command": "bash complex-demo/scripts/validate-config-management.sh",
           "parameters": {},
           "files": []
         }
@@ -10899,35 +10899,35 @@
         {
           "name": "Configure SSL certificates",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/scripts/configure-ssl-certificates.sh --domain example.com --email admin@example.com",
+          "command": "bash complex-demo/scripts/configure-ssl-certificates.sh --domain example.com --email admin@example.com",
           "parameters": {},
           "files": []
         },
         {
           "name": "Set up service mesh",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/scripts/configure-service-mesh.sh --enable-mtls --enable-tracing",
+          "command": "bash complex-demo/scripts/configure-service-mesh.sh --enable-mtls --enable-tracing",
           "parameters": {},
           "files": []
         },
         {
           "name": "Configure security policies",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/scripts/configure-security-policies.sh --enforce-mtls --enable-rbac",
+          "command": "bash complex-demo/scripts/configure-security-policies.sh --enforce-mtls --enable-rbac",
           "parameters": {},
           "files": []
         },
         {
           "name": "Fix load balancer access",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/scripts/fix-load-balancer-access.sh",
+          "command": "bash complex-demo/scripts/fix-load-balancer-access.sh",
           "parameters": {},
           "files": []
         },
         {
           "name": "Create image pull secrets",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/scripts/create-image-pull-secrets.sh --registry jfrog --namespace default",
+          "command": "bash complex-demo/scripts/create-image-pull-secrets.sh --registry jfrog --namespace default",
           "parameters": {},
           "files": []
         },
@@ -10956,20 +10956,20 @@
           "prompt": "Examine destroy.sh to understand the destruction order and safety checks.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/destroy.sh"
+            "complex-demo/destroy.sh"
           ]
         },
         {
           "name": "Run pre-destroy cleanup",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/terraform/scripts/pre-destroy-cleanup.sh",
+          "command": "bash complex-demo/terraform/scripts/pre-destroy-cleanup.sh",
           "parameters": {},
           "files": []
         },
         {
           "name": "Execute destroy with confirmation",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/destroy.sh --confirm --retain-backups",
+          "command": "bash complex-demo/destroy.sh --confirm --retain-backups",
           "parameters": {},
           "files": []
         },
@@ -10991,13 +10991,13 @@
           "prompt": "Examine the advanced threat detection configuration to understand the security monitoring setup.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/security-enhancements/advanced-threat-detection.yaml"
+            "complex-demo/security-enhancements/advanced-threat-detection.yaml"
           ]
         },
         {
           "name": "Apply threat detection",
           "type": "cli",
-          "command": "kubectl apply -f /Users/computer/complex-demo/security-enhancements/advanced-threat-detection.yaml",
+          "command": "kubectl apply -f complex-demo/security-enhancements/advanced-threat-detection.yaml",
           "parameters": {},
           "files": []
         },
@@ -11007,13 +11007,13 @@
           "prompt": "Apply the container supply chain security configuration for image scanning and policy enforcement.",
           "parameters": {},
           "files": [
-            "/Users/computer/complex-demo/security-enhancements/container-supply-chain-security.yaml"
+            "complex-demo/security-enhancements/container-supply-chain-security.yaml"
           ]
         },
         {
           "name": "Deploy security findings integration",
           "type": "cli",
-          "command": "kubectl apply -f /Users/computer/complex-demo/k8s/envs/dev/logging/security-findings-integration.yaml",
+          "command": "kubectl apply -f complex-demo/k8s/envs/dev/logging/security-findings-integration.yaml",
           "parameters": {},
           "files": []
         },
@@ -11039,21 +11039,21 @@
         {
           "name": "Run server stress test",
           "type": "cli",
-          "command": "cd /Users/computer/complex-demo/Code/server && artillery run src/tests/stresstests/stress_server.yml",
+          "command": "cd complex-demo/Code/server && artillery run src/tests/stresstests/stress_server.yml",
           "parameters": {},
           "files": []
         },
         {
           "name": "Run client stress test",
           "type": "cli",
-          "command": "cd /Users/computer/complex-demo/Code/client && artillery run src/tests/stresstests/stress_client.yml",
+          "command": "cd complex-demo/Code/client && artillery run src/tests/stresstests/stress_client.yml",
           "parameters": {},
           "files": []
         },
         {
           "name": "Update load test URLs",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/scripts/update-load-test-urls.sh",
+          "command": "bash complex-demo/scripts/update-load-test-urls.sh",
           "parameters": {},
           "files": []
         }
@@ -11065,14 +11065,14 @@
         {
           "name": "Install ArgoCD",
           "type": "cli",
-          "command": "kubectl apply -f /Users/computer/complex-demo/k8s/argocd/install.yaml",
+          "command": "kubectl apply -f complex-demo/k8s/argocd/install.yaml",
           "parameters": {},
           "files": []
         },
         {
           "name": "Apply applications",
           "type": "cli",
-          "command": "kubectl apply -f /Users/computer/complex-demo/k8s/envs/dev/applications.yaml",
+          "command": "kubectl apply -f complex-demo/k8s/envs/dev/applications.yaml",
           "parameters": {},
           "files": []
         },
@@ -11091,14 +11091,14 @@
         {
           "name": "Run bootstrap script",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/terraform/bootstrap/run-bootstrap.sh",
+          "command": "bash complex-demo/terraform/bootstrap/run-bootstrap.sh",
           "parameters": {},
           "files": []
         },
         {
           "name": "Update Terragrunt",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/terraform/bootstrap/update-terragrunt.sh",
+          "command": "bash complex-demo/terraform/bootstrap/update-terragrunt.sh",
           "parameters": {},
           "files": []
         }
@@ -11110,14 +11110,14 @@
         {
           "name": "Check Consul status",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/terraform/scripts/consul-status.sh",
+          "command": "bash complex-demo/terraform/scripts/consul-status.sh",
           "parameters": {},
           "files": []
         },
         {
           "name": "Validate Terraform modules",
           "type": "cli",
-          "command": "bash /Users/computer/complex-demo/terraform/scripts/validate-modules.sh",
+          "command": "bash complex-demo/terraform/scripts/validate-modules.sh",
           "parameters": {},
           "files": []
         }
@@ -11129,14 +11129,14 @@
         {
           "name": "Deploy Prometheus lite",
           "type": "cli",
-          "command": "kubectl apply -f /Users/computer/complex-demo/k8s/envs/dev/aws/observability/prometheus-lite.yaml",
+          "command": "kubectl apply -f complex-demo/k8s/envs/dev/aws/observability/prometheus-lite.yaml",
           "parameters": {},
           "files": []
         },
         {
           "name": "Deploy New Relic lightweight",
           "type": "cli",
-          "command": "kubectl apply -f /Users/computer/complex-demo/k8s/envs/dev/monitoring/newrelic-lightweight.yaml",
+          "command": "kubectl apply -f complex-demo/k8s/envs/dev/monitoring/newrelic-lightweight.yaml",
           "parameters": {},
           "files": []
         }
