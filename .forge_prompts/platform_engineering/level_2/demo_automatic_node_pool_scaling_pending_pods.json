@@ -189,16 +189,6 @@
         ]
       },
       "files": []
-    },
-    {
-      "name": "Send scaling notification",
-      "type": "prompt",
-      "prompt": "Send notification about the scaling event including number of nodes added, reason, and any remaining issues that need manual intervention.",
-      "parameters": {
-        "notification_channels": ["slack", "email"],
-        "include_details": ["scaling_reason", "nodes_added", "cost_impact", "remaining_issues"]
-      },
-      "files": ["scaling/notification.json"]
     }
   ]
 }

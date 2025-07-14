@@ -1,0 +1,110 @@
+{
+  "goal": "Automatically deploy and configure Datadog monitoring when new EKS cluster is created",
+  "steps": [
+    {
+      "name": "Detect EKS cluster creation",
+      "type": "integration",
+      "integration": "aws",
+      "method": "eks.DescribeCluster",
+      "parameters": {
+        "name": "${CLUSTER_NAME}"
+      },
+      "files": []
+    },
+    {
+      "name": "Check if Datadog already deployed",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "CoreV1Api.list_namespaced_pod",
+      "parameters": {
+        "namespace": "monitoring",
+        "label_selector": "app=datadog"
+      },
+      "files": []
+    },
+    {
+      "name": "Create monitoring namespace",
+      "type": "cli",
+      "command": "kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Apply Datadog secrets",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/envs/dev/monitoring/datadog-secrets.yaml",
+      "parameters": {},
+      "files": ["k8s/envs/dev/monitoring/datadog-secrets.yaml"]
+    },
+    {
+      "name": "Deploy Datadog for AWS EKS",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/envs/dev/monitoring/datadog-aws-eks.yaml",
+      "parameters": {},
+      "files": ["k8s/envs/dev/monitoring/datadog-aws-eks.yaml"]
+    },
+    {
+      "name": "Execute deployment script",
+      "type": "cli",
+      "command": "./scripts/deploy-datadog-integration.sh",
+      "parameters": {},
+      "files": ["scripts/deploy-datadog-integration.sh"]
+    },
+    {
+      "name": "Wait for Datadog pods to be ready",
+      "type": "cli",
+      "command": "kubectl wait --for=condition=ready pod -l app=datadog -n monitoring --timeout=300s",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify Datadog agent status",
+      "type": "cli",
+      "command": "kubectl exec -n monitoring deployment/datadog -- agent status",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure service monitors",
+      "type": "cli",
+      "command": "kubectl apply -f monitoring/datadog-servicemonitors.yaml",
+      "parameters": {},
+      "files": ["monitoring/datadog-servicemonitors.yaml"]
+    },
+    {
+      "name": "Test metrics collection",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "MetricsApi.query_timeseries_data",
+      "parameters": {
+        "body": {
+          "data": {
+            "type": "timeseries_request",
+            "attributes": {
+              "formulas": [{"formula": "query1"}],
+              "queries": [{
+                "name": "query1",
+                "data_source": "metrics",
+                "query": "kubernetes.cpu.usage{cluster_name:${CLUSTER_NAME}}"
+              }],
+              "from": "now-5m",
+              "to": "now"
+            }
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Update deployment documentation",
+      "type": "prompt",
+      "prompt": "Update monitoring deployment status and add cluster to monitored resources list.",
+      "parameters": {
+        "cluster_name": "${CLUSTER_NAME}",
+        "monitoring_type": "datadog",
+        "deployment_date": "${DATE}"
+      },
+      "files": []
+    }
+  ]
+}

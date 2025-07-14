@@ -1,0 +1,49 @@
+{
+  "task_description": "Implement comprehensive Consul service discovery across the multi-cloud infrastructure. Deploy Consul servers on dedicated EC2 instances, configure Consul agents on all Kubernetes nodes, set up service mesh with Connect for mTLS, implement health checks for all services, configure DNS forwarding for .consul domains, and integrate with monitoring systems. Services should auto-register including Jenkins, Nexus, frontend, and backend applications.",
+  "goal": "Deploy Consul service mesh with automatic service discovery and health monitoring",
+  "difficulty": "advanced",
+  "expected_actions": [
+    "Verify Consul servers are running on EC2 instances",
+    "Deploy Consul agents to Kubernetes via Helm",
+    "Configure Connect for service-to-service encryption",
+    "Set up automatic service registration for applications",
+    "Implement health checks for all registered services",
+    "Configure DNS resolution for .consul domains",
+    "Enable Consul UI and secure with ACLs",
+    "Integrate Consul metrics with Prometheus"
+  ],
+  "expected_outputs": [
+    "Consul cluster with leader election functioning",
+    "All services registered with health checks passing",
+    "Connect CA configured for mTLS between services",
+    "DNS queries resolving service.consul addresses",
+    "Consul UI accessible showing service topology",
+    "Prometheus scraping Consul metrics successfully"
+  ],
+  "evaluation_criteria": [
+    "Consul cluster has active leader and healthy servers",
+    "Services are auto-discovered and registered",
+    "Health checks report accurate service status",
+    "Connect proxies enable secure service communication",
+    "DNS resolution works for consul domains",
+    "Service topology visible in Consul UI"
+  ],
+  "tags": ["consul", "service-mesh", "service-discovery", "mtls", "health-checks", "dns"],
+  "hints": [
+    "Check Consul server IPs from Terraform outputs",
+    "Use consul/helm/consul-values.yaml for Kubernetes deployment",
+    "Configure service annotations for automatic registration",
+    "Set up kube-dns or CoreDNS to forward .consul queries",
+    "Enable gossip encryption with key from Terraform"
+  ],
+  "files_to_modify": [
+    "consul/helm/consul-values.yaml",
+    "k8s/base/frontend/deployment.yaml",
+    "k8s/base/backend/deployment.yaml"
+  ],
+  "related_files": [
+    "terraform/modules/aws/consul/main.tf",
+    "consul/config/consul.hcl",
+    "scripts/validate-service-discovery.sh"
+  ]
+}

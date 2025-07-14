@@ -1,0 +1,51 @@
+{
+  "task_description": "Implement advanced Terraform state management for the multi-cloud infrastructure. Configure S3 backend with DynamoDB locking for AWS state, set up Azure Storage backend for Azure resources, configure GCS backend for GCP state, implement state file encryption with KMS, set up remote state data sources for cross-stack references, configure Terragrunt for DRY infrastructure code, implement state backup automation, and establish state migration procedures for disaster recovery.",
+  "goal": "Set up secure, distributed Terraform state management with proper locking and backups",
+  "difficulty": "advanced",
+  "expected_actions": [
+    "Configure S3 bucket with versioning for Terraform state",
+    "Set up DynamoDB table for state locking",
+    "Enable KMS encryption for state files",
+    "Configure Terragrunt with remote state references",
+    "Implement automated state backup to separate region",
+    "Set up state file access controls with IAM",
+    "Create state migration runbooks",
+    "Test state recovery procedures"
+  ],
+  "expected_outputs": [
+    "S3 backend configured with encryption and versioning",
+    "DynamoDB table preventing concurrent modifications",
+    "State files encrypted with customer-managed KMS keys",
+    "Terragrunt successfully managing multiple environments",
+    "Automated backups running on schedule",
+    "IAM policies restricting state access appropriately",
+    "State migration procedures documented and tested"
+  ],
+  "evaluation_criteria": [
+    "State files are encrypted at rest and in transit",
+    "Concurrent runs are prevented by DynamoDB locks",
+    "State versions are retained for rollback capability",
+    "Cross-stack references work via remote state",
+    "Backup restoration completes successfully",
+    "Only authorized users can access state files",
+    "State can be migrated between backends"
+  ],
+  "tags": ["terraform", "state-management", "s3", "encryption", "backup", "terragrunt"],
+  "hints": [
+    "Check terraform/terragrunt.hcl for backend configuration",
+    "Use terraform/modules/aws/s3/main.tf for state bucket",
+    "Configure lifecycle rules for state file retention",
+    "Test locking with concurrent terraform plan commands",
+    "Use AWS Backup for automated state backups"
+  ],
+  "files_to_modify": [
+    "terraform/terragrunt.hcl",
+    "terraform/envs/dev/us-east-2/terragrunt.hcl",
+    "terraform/modules/terraform-backend/main.tf"
+  ],
+  "related_files": [
+    "terraform/Makefile",
+    "scripts/terraform-state-backup.sh",
+    "terraform/modules/aws/s3/main.tf"
+  ]
+}

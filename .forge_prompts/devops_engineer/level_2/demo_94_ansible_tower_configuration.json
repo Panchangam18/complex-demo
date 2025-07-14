@@ -1,0 +1,49 @@
+{
+  "task_description": "Configure Ansible Tower for Day-0/1 provisioning according to the multi-cloud DevOps architecture. Set up dynamic inventory from Terraform state, create job templates for infrastructure provisioning and Puppet integration, configure SSH credentials from AWS Secrets Manager, and implement workflow templates for complete provisioning pipelines. Ansible Tower should integrate with Consul for service discovery and report metrics to monitoring systems.",
+  "goal": "Set up Ansible Tower with Terraform integration for automated configuration management",
+  "difficulty": "advanced",
+  "expected_actions": [
+    "Run configure-ansible-tower.sh script to set up Tower",
+    "Configure dynamic inventory sourced from Terraform state",
+    "Create SSH credentials using AWS Secrets Manager keys",
+    "Set up Day-0 provisioning job template with Consul agents",
+    "Create Puppet integration job template for Hiera classifications",
+    "Configure workflow template for end-to-end provisioning",
+    "Test inventory sync from Terraform",
+    "Verify job execution and Puppet integration"
+  ],
+  "expected_outputs": [
+    "Ansible Tower configured with organization and credentials",
+    "Dynamic inventory populated from Terraform state",
+    "Job templates created for provisioning and integration",
+    "Workflow template linking Day-0 to Puppet configuration",
+    "SSH keys properly configured from Secrets Manager",
+    "Inventory sync showing infrastructure resources"
+  ],
+  "evaluation_criteria": [
+    "Ansible Tower API is accessible and authenticated",
+    "Dynamic inventory reflects current Terraform state",
+    "SSH credentials work for EC2 instance access",
+    "Day-0 provisioning job runs successfully",
+    "Puppet integration uploads Hiera data correctly",
+    "Workflow executes complete provisioning pipeline"
+  ],
+  "tags": ["ansible", "tower", "automation", "terraform", "puppet", "configuration-management"],
+  "hints": [
+    "Review scripts/configure-ansible-tower.sh for complete setup steps",
+    "Ensure Terraform outputs are available for integration",
+    "SSH key should be retrieved from AWS Secrets Manager",
+    "Use ansible/inventory/terraform-inventory.py for dynamic inventory",
+    "Check Tower UI at the URL from Terraform outputs"
+  ],
+  "files_to_modify": [
+    "ansible/playbooks/day0-provisioning.yml",
+    "ansible/playbooks/puppet-integration.yml",
+    "ansible/inventory/terraform-inventory.py"
+  ],
+  "related_files": [
+    "scripts/configure-ansible-tower.sh",
+    "terraform/envs/dev/us-east-2/terragrunt.hcl",
+    "scripts/validate-ansible-tower.sh"
+  ]
+}

@@ -1,0 +1,110 @@
+{
+  "goal": "Automatically scan container images in JFrog before deployment and block vulnerable images",
+  "steps": [
+    {
+      "name": "Create JFrog pull secret",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/secrets/jfrog-pull-secret.yaml",
+      "parameters": {},
+      "files": ["k8s/secrets/jfrog-pull-secret.yaml"]
+    },
+    {
+      "name": "Get images from deployments",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "AppsV1Api.list_deployment_for_all_namespaces",
+      "parameters": {
+        "limit": 100
+      },
+      "files": []
+    },
+    {
+      "name": "Extract container images",
+      "type": "prompt",
+      "prompt": "Extract all container images from deployments and identify which ones need scanning.",
+      "parameters": {
+        "exclude_system_images": true,
+        "include_init_containers": true
+      },
+      "files": []
+    },
+    {
+      "name": "Build and push images to JFrog",
+      "type": "cli",
+      "command": "./scripts/build-and-push.sh ${IMAGE_NAME} ${VERSION}",
+      "parameters": {},
+      "files": ["scripts/build-and-push.sh"]
+    },
+    {
+      "name": "Create image pull secrets",
+      "type": "cli",
+      "command": "./scripts/create-image-pull-secrets.sh ${NAMESPACE}",
+      "parameters": {},
+      "files": ["scripts/create-image-pull-secrets.sh"]
+    },
+    {
+      "name": "Scan image in JFrog Xray",
+      "type": "cli",
+      "command": "jfrog rt scan ${JFROG_REGISTRY}/${IMAGE_NAME}:${VERSION} --fail=false",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Check scan results",
+      "type": "prompt",
+      "prompt": "Analyze JFrog Xray scan results and determine if image has critical vulnerabilities that should block deployment.",
+      "parameters": {
+        "severity_threshold": "HIGH",
+        "cve_blacklist": ["CVE-2021-44228", "CVE-2021-45046"]
+      },
+      "files": []
+    },
+    {
+      "name": "Update deployment with scanned image",
+      "type": "cli",
+      "command": "./scripts/update-k8s-images.sh ${DEPLOYMENT} ${JFROG_REGISTRY}/${IMAGE_NAME}:${VERSION}",
+      "parameters": {},
+      "files": ["scripts/update-k8s-images.sh"]
+    },
+    {
+      "name": "Apply security policies",
+      "type": "cli",
+      "command": "./scripts/configure-security-policies.sh --enforce-image-scanning",
+      "parameters": {},
+      "files": ["scripts/configure-security-policies.sh"]
+    },
+    {
+      "name": "Execute security hardening",
+      "type": "cli",
+      "command": "./scripts/security-hardening.sh --container-security",
+      "parameters": {},
+      "files": ["scripts/security-hardening.sh"]
+    },
+    {
+      "name": "Create security alert if vulnerabilities found",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "MetricsApi.submit_metrics",
+      "parameters": {
+        "body": {
+          "series": [
+            {
+              "metric": "security.vulnerabilities.count",
+              "points": [["{TIMESTAMP}", "${VULN_COUNT}"]],
+              "type": "gauge",
+              "tags": ["image:${IMAGE_NAME}", "severity:${SEVERITY}"]
+            }
+          ]
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Block deployment if critical vulnerabilities",
+      "type": "cli",
+      "command": "if [ ${CRITICAL_VULNS} -gt 0 ]; then kubectl annotate deployment ${DEPLOYMENT} security.scan/blocked=true; exit 1; fi",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

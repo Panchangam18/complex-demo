@@ -1,0 +1,100 @@
+{
+  "goal": "Automatically validate configuration management compliance across Ansible, Puppet, and Kubernetes",
+  "steps": [
+    {
+      "name": "Execute configuration validation script",
+      "type": "cli",
+      "command": "./scripts/validate-config-management.sh",
+      "parameters": {},
+      "files": ["scripts/validate-config-management.sh"]
+    },
+    {
+      "name": "Validate Ansible Tower setup",
+      "type": "cli",
+      "command": "./scripts/validate-ansible-tower.sh",
+      "parameters": {},
+      "files": ["scripts/validate-ansible-tower.sh"]
+    },
+    {
+      "name": "Check Puppet configuration",
+      "type": "cli",
+      "command": "cd ansible && ansible-playbook -i inventory/terraform-inventory.py playbooks/puppet-integration.yml --check",
+      "parameters": {},
+      "files": ["ansible/playbooks/puppet-integration.yml"]
+    },
+    {
+      "name": "Verify Puppet Enterprise integration",
+      "type": "cli",
+      "command": "cd ansible && ansible-playbook -i inventory/terraform-inventory.py playbooks/puppet-elasticsearch-integration.yml --check",
+      "parameters": {},
+      "files": ["ansible/playbooks/puppet-elasticsearch-integration.yml"]
+    },
+    {
+      "name": "Run Day 0 provisioning check",
+      "type": "cli",
+      "command": "cd ansible && ansible-playbook -i inventory/terraform-inventory.py playbooks/day0-provisioning.yml --check",
+      "parameters": {},
+      "files": ["ansible/playbooks/day0-provisioning.yml"]
+    },
+    {
+      "name": "Verify Consul templates",
+      "type": "cli",
+      "command": "ansible -m template -a 'src=ansible/templates/consul.json.j2 dest=/tmp/consul-test.json' localhost --check",
+      "parameters": {},
+      "files": ["ansible/templates/consul.json.j2"]
+    },
+    {
+      "name": "Check node exporter configuration",
+      "type": "cli",
+      "command": "ansible -m include_tasks -a 'file=ansible/tasks/install-node-exporter.yml' localhost --check",
+      "parameters": {},
+      "files": ["ansible/tasks/install-node-exporter.yml"]
+    },
+    {
+      "name": "Validate Hiera configuration",
+      "type": "prompt",
+      "prompt": "Validate that Hiera YAML configuration matches expected Puppet hierarchy structure.",
+      "parameters": {
+        "template_file": "ansible/templates/hiera.yaml.j2"
+      },
+      "files": ["ansible/templates/hiera.yaml.j2"]
+    },
+    {
+      "name": "Check Puppet node classification",
+      "type": "cli",
+      "command": "ansible -m template -a 'src=ansible/templates/node-classification.yaml.j2 dest=/tmp/node-class-test.yaml' localhost --check",
+      "parameters": {},
+      "files": ["ansible/templates/node-classification.yaml.j2"]
+    },
+    {
+      "name": "Verify configuration drift",
+      "type": "prompt",
+      "prompt": "Compare actual configuration state with desired state defined in Ansible and Puppet manifests.",
+      "parameters": {
+        "drift_threshold": 0.05,
+        "critical_configs": ["consul", "puppet", "node-exporter"]
+      },
+      "files": []
+    },
+    {
+      "name": "Generate compliance report",
+      "type": "integration",
+      "integration": "aws",
+      "method": "cloudwatch.PutMetricData",
+      "parameters": {
+        "Namespace": "ConfigCompliance",
+        "MetricData": [
+          {
+            "MetricName": "ComplianceScore",
+            "Value": "${COMPLIANCE_SCORE}",
+            "Unit": "Percent",
+            "Dimensions": [
+              {"Name": "ConfigType", "Value": "ansible-puppet"}
+            ]
+          }
+        ]
+      },
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,97 @@
+{
+  "goal": "Automatically sync ArgoCD applications when Git repository changes are detected",
+  "steps": [
+    {
+      "name": "Install ArgoCD if not present",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/argocd/install.yaml",
+      "parameters": {},
+      "files": ["k8s/argocd/install.yaml"]
+    },
+    {
+      "name": "Wait for ArgoCD to be ready",
+      "type": "cli",
+      "command": "kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server -n argocd --timeout=300s",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Get ArgoCD admin password",
+      "type": "cli",
+      "command": "kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Check Git repository for changes",
+      "type": "cli",
+      "command": "git fetch origin && git diff HEAD origin/main --name-only | grep -E 'k8s/|deployment.yaml'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Apply ArgoCD applications",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/envs/dev/applications.yaml",
+      "parameters": {},
+      "files": ["k8s/envs/dev/applications.yaml"]
+    },
+    {
+      "name": "Execute ArgoCD terraform module",
+      "type": "cli",
+      "command": "cd terraform/modules/k8s/argocd && terraform apply -auto-approve",
+      "parameters": {},
+      "files": ["terraform/modules/k8s/argocd/main.tf"]
+    },
+    {
+      "name": "List ArgoCD applications",
+      "type": "cli",
+      "command": "argocd app list --grpc-web",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Sync out-of-sync applications",
+      "type": "cli",
+      "command": "argocd app sync ${APP_NAME} --grpc-web",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Wait for sync to complete",
+      "type": "cli",
+      "command": "argocd app wait ${APP_NAME} --health --grpc-web",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify backend deployment",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "AppsV1Api.read_namespaced_deployment",
+      "parameters": {
+        "name": "backend",
+        "namespace": "default"
+      },
+      "files": ["k8s/envs/dev/backend/deployment.yaml"]
+    },
+    {
+      "name": "Verify frontend deployment",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "AppsV1Api.read_namespaced_deployment",
+      "parameters": {
+        "name": "frontend",
+        "namespace": "default"
+      },
+      "files": ["k8s/envs/dev/frontend/deployment.yaml"]
+    },
+    {
+      "name": "Check application health",
+      "type": "cli",
+      "command": "argocd app get ${APP_NAME} --grpc-web -o json | jq '.status.health.status'",
+      "parameters": {},
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,110 @@
+{
+  "goal": "Automatically configure SSL certificates for new services using existing certificate management scripts",
+  "steps": [
+    {
+      "name": "Detect new service deployment",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "CoreV1Api.list_service_for_all_namespaces",
+      "parameters": {
+        "label_selector": "needs-ssl=true",
+        "limit": 100
+      },
+      "files": []
+    },
+    {
+      "name": "Check existing certificates",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "CoreV1Api.list_namespaced_secret",
+      "parameters": {
+        "namespace": "${NAMESPACE}",
+        "label_selector": "type=tls"
+      },
+      "files": []
+    },
+    {
+      "name": "Execute SSL configuration script",
+      "type": "cli",
+      "command": "./scripts/configure-ssl-certificates.sh ${SERVICE_NAME} ${NAMESPACE}",
+      "parameters": {},
+      "files": ["scripts/configure-ssl-certificates.sh"]
+    },
+    {
+      "name": "Create certificate secret",
+      "type": "cli",
+      "command": "kubectl create secret tls ${SERVICE_NAME}-tls --cert=${CERT_PATH} --key=${KEY_PATH} -n ${NAMESPACE}",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Update frontend deployment with SSL",
+      "type": "cli",
+      "command": "kubectl patch deployment frontend -n ${NAMESPACE} --type json -p '[{\"op\": \"add\", \"path\": \"/spec/template/spec/volumes/-\", \"value\": {\"name\": \"tls\", \"secret\": {\"secretName\": \"${SERVICE_NAME}-tls\"}}}]'",
+      "parameters": {},
+      "files": ["k8s/envs/dev/frontend/deployment.yaml"]
+    },
+    {
+      "name": "Configure nginx for SSL",
+      "type": "prompt",
+      "prompt": "Update nginx configuration in frontend container to use SSL certificates mounted from secret.",
+      "parameters": {
+        "cert_mount_path": "/etc/nginx/ssl",
+        "port": 443
+      },
+      "files": ["Code/client/nginx.conf"]
+    },
+    {
+      "name": "Restart frontend pods",
+      "type": "cli",
+      "command": "kubectl rollout restart deployment/frontend -n ${NAMESPACE}",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Wait for rollout completion",
+      "type": "cli",
+      "command": "kubectl rollout status deployment/frontend -n ${NAMESPACE} --timeout=300s",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test SSL configuration",
+      "type": "cli",
+      "command": "openssl s_client -connect ${SERVICE_ENDPOINT}:443 -servername ${SERVICE_NAME} < /dev/null | grep 'Verify return code: 0'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Fix load balancer SSL access",
+      "type": "cli",
+      "command": "./scripts/fix-load-balancer-access.sh ${SERVICE_NAME}",
+      "parameters": {},
+      "files": ["scripts/fix-load-balancer-access.sh"]
+    },
+    {
+      "name": "Verify SSL in monitoring",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "MetricsApi.query_timeseries_data",
+      "parameters": {
+        "body": {
+          "data": {
+            "type": "timeseries_request",
+            "attributes": {
+              "formulas": [{"formula": "query1"}],
+              "queries": [{
+                "name": "query1",
+                "data_source": "metrics",
+                "query": "ssl.certificate.expiry{service:${SERVICE_NAME}}"
+              }],
+              "from": "now-1h",
+              "to": "now"
+            }
+          }
+        }
+      },
+      "files": []
+    }
+  ]
+}

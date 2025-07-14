@@ -1,0 +1,93 @@
+{
+  "goal": "Automatically configure Fluent Bit log pipeline when new services are deployed",
+  "steps": [
+    {
+      "name": "Check if Fluent Bit is deployed",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "AppsV1Api.read_namespaced_daemon_set",
+      "parameters": {
+        "name": "fluent-bit",
+        "namespace": "logging"
+      },
+      "files": []
+    },
+    {
+      "name": "Create logging namespace",
+      "type": "cli",
+      "command": "kubectl create namespace logging --dry-run=client -o yaml | kubectl apply -f -",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Apply Elasticsearch secret",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/envs/dev/logging/elasticsearch-secret.yaml",
+      "parameters": {},
+      "files": ["k8s/envs/dev/logging/elasticsearch-secret.yaml"]
+    },
+    {
+      "name": "Apply Fluent Bit ConfigMap",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/envs/dev/logging/fluent-bit-configmap.yaml",
+      "parameters": {},
+      "files": ["k8s/envs/dev/logging/fluent-bit-configmap.yaml"]
+    },
+    {
+      "name": "Deploy Fluent Bit DaemonSet",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/envs/dev/logging/fluent-bit-daemonset.yaml",
+      "parameters": {},
+      "files": ["k8s/envs/dev/logging/fluent-bit-daemonset.yaml"]
+    },
+    {
+      "name": "Apply security findings integration",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/envs/dev/logging/security-findings-integration.yaml",
+      "parameters": {},
+      "files": ["k8s/envs/dev/logging/security-findings-integration.yaml"]
+    },
+    {
+      "name": "Execute Elasticsearch integration script",
+      "type": "cli",
+      "command": "./scripts/deploy-elasticsearch-integration.sh",
+      "parameters": {},
+      "files": ["scripts/deploy-elasticsearch-integration.sh"]
+    },
+    {
+      "name": "Wait for Fluent Bit pods",
+      "type": "cli",
+      "command": "kubectl wait --for=condition=ready pod -l k8s-app=fluent-bit -n logging --timeout=300s",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test log forwarding",
+      "type": "cli",
+      "command": "kubectl logs -n logging -l k8s-app=fluent-bit --tail=50 | grep -E 'elasticsearch|output'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Apply Elasticsearch dashboards",
+      "type": "cli",
+      "command": "kubectl create configmap elasticsearch-dashboards --from-file=monitoring/elasticsearch-log-dashboards.json -n logging --dry-run=client -o yaml | kubectl apply -f -",
+      "parameters": {},
+      "files": ["monitoring/elasticsearch-log-dashboards.json"]
+    },
+    {
+      "name": "Verify logs in Elasticsearch",
+      "type": "cli",
+      "command": "curl -X GET ${ELASTICSEARCH_URL}/_cat/indices?v | grep fluent-bit",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Configure Grafana datasource",
+      "type": "cli",
+      "command": "kubectl apply -f monitoring/grafana-elasticsearch-datasource.yaml",
+      "parameters": {},
+      "files": ["monitoring/grafana-elasticsearch-datasource.yaml"]
+    }
+  ]
+}
