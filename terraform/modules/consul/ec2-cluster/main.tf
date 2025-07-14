@@ -13,6 +13,11 @@ locals {
   wan_secret = var.wan_federation_secret
 }
 
+# Unique suffix for secrets to avoid name collisions
+resource "random_pet" "suffix" {
+  length = 2
+}
+
 # Get Ubuntu AMI
 data "aws_ami" "ubuntu" {
   most_recent = true
@@ -54,27 +59,27 @@ resource "aws_security_group" "consul" {
 
   # Consul RPC
   ingress {
-    from_port = 8300
-    to_port   = 8300
-    protocol  = "tcp"
-    self      = true
+    from_port   = 8300
+    to_port     = 8300
+    protocol    = "tcp"
+    cidr_blocks = var.allow_consul_from_cidrs
     description = "Consul RPC"
   }
 
   # Consul Serf LAN
   ingress {
-    from_port = 8301
-    to_port   = 8301
-    protocol  = "tcp"
-    self      = true
+    from_port   = 8301
+    to_port     = 8301
+    protocol    = "tcp"
+    cidr_blocks = var.allow_consul_from_cidrs
     description = "Consul Serf LAN TCP"
   }
 
   ingress {
-    from_port = 8301
-    to_port   = 8301
-    protocol  = "udp"
-    self      = true
+    from_port   = 8301
+    to_port     = 8301
+    protocol    = "udp"
+    cidr_blocks = var.allow_consul_from_cidrs
     description = "Consul Serf LAN UDP"
   }
 
@@ -204,7 +209,7 @@ resource "tls_private_key" "consul" {
 # Store private key in AWS Secrets Manager
 resource "aws_secretsmanager_secret" "consul_ssh_key" {
   count       = var.key_name == "" ? 1 : 0
-  name        = "${var.environment}-consul-ssh-private-key"
+  name        = "${var.environment}-consul-ssh-private-key-${random_pet.suffix.id}"
   description = "SSH private key for Consul servers"
 
   tags = var.common_tags
@@ -220,12 +225,13 @@ resource "aws_secretsmanager_secret_version" "consul_ssh_key" {
 resource "aws_instance" "consul_server" {
   count = var.consul_servers
 
-  ami                    = data.aws_ami.ubuntu.id
-  instance_type          = var.instance_type
-  key_name               = var.key_name != "" ? var.key_name : aws_key_pair.consul[0].key_name
-  subnet_id              = element(var.private_subnet_ids, count.index)
-  vpc_security_group_ids = [aws_security_group.consul.id]
-  iam_instance_profile   = aws_iam_instance_profile.consul.name
+  ami                           = data.aws_ami.ubuntu.id
+  instance_type                 = var.instance_type
+  key_name                      = var.key_name != "" ? var.key_name : aws_key_pair.consul[0].key_name
+  subnet_id                     = element(var.private_subnet_ids, count.index)
+  vpc_security_group_ids        = [aws_security_group.consul.id]
+  iam_instance_profile          = aws_iam_instance_profile.consul.name
+  user_data_replace_on_change   = true
 
   user_data = templatefile("${path.module}/templates/user-data.sh.tpl", {
     consul_version    = var.consul_version
@@ -265,6 +271,7 @@ resource "aws_instance" "consul_server" {
       ConsulAutoJoin = "consul-${var.environment}"
       ConsulType     = "server"
       ManagedBy      = "terraform"
+      Version        = "fixed-userdata-v4"
     }
   )
 
@@ -382,7 +389,7 @@ resource "aws_lb_listener" "consul_ui" {
 
 # Store Consul configuration in AWS Secrets Manager
 resource "aws_secretsmanager_secret" "consul_config" {
-  name        = "${var.environment}-consul-config"
+  name        = "${var.environment}-consul-config-${random_pet.suffix.id}"
   description = "Consul cluster configuration and secrets"
 
   tags = var.common_tags
@@ -398,4 +405,87 @@ resource "aws_secretsmanager_secret_version" "consul_config" {
     server_ips           = aws_instance.consul_server[*].private_ip
     ui_url              = var.enable_ui ? "http://${aws_lb.consul_ui[0].dns_name}" : ""
   })
+}
+
+# --- Mesh Gateway Load Balancer (for WAN federation) ---
+resource "aws_security_group" "consul_mesh_gateway_alb" {
+  count       = 1
+  name_prefix = "${var.environment}-consul-meshgw-alb-"
+  vpc_id      = var.vpc_id
+
+  ingress {
+    from_port   = 8443
+    to_port     = 8443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Consul mesh gateway WAN port"
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "All outbound traffic"
+  }
+
+  tags = merge(var.common_tags, {
+    Name = "${var.environment}-consul-meshgw-alb-sg"
+  })
+}
+
+resource "aws_lb" "consul_mesh_gateway" {
+  count              = 1
+  name               = "${var.environment}-consul-meshgw"
+  internal           = false
+  load_balancer_type = "network"
+  security_groups    = [aws_security_group.consul_mesh_gateway_alb[0].id]
+  subnets            = var.public_subnet_ids
+
+  tags = merge(var.common_tags, {
+    Name = "${var.environment}-consul-meshgw-alb"
+  })
+}
+
+resource "aws_lb_target_group" "consul_mesh_gateway" {
+  count    = 1
+  name     = "${var.environment}-consul-meshgw"
+  port     = 8443
+  protocol = "TCP"
+  vpc_id   = var.vpc_id
+
+  health_check {
+    interval            = 10
+    port                = "8443"
+    protocol            = "TCP"
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+  }
+
+  tags = merge(var.common_tags, {
+    Name = "${var.environment}-consul-meshgw-tg"
+  })
+}
+
+resource "aws_lb_target_group_attachment" "consul_mesh_gateway" {
+  count            = var.consul_servers
+  target_group_arn = aws_lb_target_group.consul_mesh_gateway[0].arn
+  target_id        = aws_instance.consul_server[count.index].id
+  port             = 8443
+}
+
+resource "aws_lb_listener" "consul_mesh_gateway" {
+  load_balancer_arn = aws_lb.consul_mesh_gateway[0].arn
+  port              = 8443
+  protocol          = "TCP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.consul_mesh_gateway[0].arn
+  }
+}
+
+output "mesh_gateway_dns_name" {
+  description = "DNS name of the Consul mesh gateway load balancer"
+  value       = aws_lb.consul_mesh_gateway[0].dns_name
 } 

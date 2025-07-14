@@ -81,21 +81,23 @@ resource "helm_release" "consul" {
   
   # Custom values for multi-datacenter client setup
   values = [templatefile("${path.module}/templates/consul-values.yaml.tpl", {
-    datacenter_name          = var.datacenter_name
-    primary_datacenter       = var.primary_datacenter
-    consul_image_tag         = var.consul_image_tag
-    consul_k8s_image_tag     = var.consul_k8s_image_tag
-    enable_connect           = var.enable_connect
-    enable_connect_inject    = var.enable_connect_inject
-    enable_ui                = var.enable_ui
-    ui_service_type          = var.ui_service_type
+    datacenter_name           = var.datacenter_name
+    primary_datacenter        = var.primary_datacenter
+    cloud_provider            = var.cloud_provider
+    consul_image_tag          = var.consul_image_tag
+    consul_k8s_image_tag      = var.consul_k8s_image_tag
+    enable_connect            = var.enable_connect
+    enable_connect_inject     = var.enable_connect_inject
+    enable_ui                 = var.enable_ui
+    ui_service_type           = var.ui_service_type
     enable_prometheus_metrics = var.enable_prometheus_metrics
-    enable_sync_catalog      = var.enable_sync_catalog
-    enable_acls              = var.enable_acls
-    mesh_gateway_replicas    = var.mesh_gateway_replicas
-    client_replicas          = var.client_replicas
-    primary_consul_servers   = jsonencode(var.primary_consul_servers)
-    wan_federation_secret    = var.wan_federation_secret
+    enable_sync_catalog       = var.enable_sync_catalog
+    enable_acls               = var.enable_acls
+    mesh_gateway_replicas     = var.mesh_gateway_replicas
+    client_replicas           = var.client_replicas
+    primary_consul_servers    = jsonencode(var.primary_consul_servers)
+    mesh_gateway_endpoints    = jsonencode(var.mesh_gateway_endpoints)
+    wan_federation_secret     = var.wan_federation_secret
   })]
 
   depends_on = [

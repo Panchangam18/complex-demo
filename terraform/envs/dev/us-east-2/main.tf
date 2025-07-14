@@ -14,6 +14,12 @@ locals {
       module     = "infrastructure"
     }
   )
+
+  # Consul mesh gateway address (AWS) including port
+  mesh_gateway_addr = "${module.consul_primary.mesh_gateway_dns_name}:8443"
+  
+  # Consul mesh gateway hostname without port (for Helm chart compatibility)
+  mesh_gateway_host = module.consul_primary.mesh_gateway_dns_name
 }
 
 # AWS VPC Module
@@ -281,41 +287,92 @@ data "aws_eks_cluster_auth" "cluster" {
   ]
 }
 
-# Wait for EKS cluster to be fully ready
 resource "null_resource" "wait_for_cluster" {
+  depends_on = [
+    module.aws_eks
+  ]
+
   provisioner "local-exec" {
     command = <<-EOT
       echo "Waiting for EKS cluster to be ready..."
       aws eks wait cluster-active --name ${module.aws_eks.cluster_id} --region ${var.aws_region} --profile ${var.aws_profile}
       echo "Cluster is active, waiting for node group..."
       aws eks wait nodegroup-active --cluster-name ${module.aws_eks.cluster_id} --nodegroup-name general --region ${var.aws_region} --profile ${var.aws_profile} || echo "Node group wait timed out, continuing..."
+      echo "Updating kubeconfig ..."
+      aws eks update-kubeconfig --name ${module.aws_eks.cluster_id} --region ${var.aws_region} --profile ${var.aws_profile}
       echo "EKS cluster is ready!"
     EOT
   }
-  
-  depends_on = [
-    module.aws_eks,
-    data.aws_eks_cluster.cluster,
-    data.aws_eks_cluster_auth.cluster
-  ]
 }
 
 # Provider configuration for EKS cluster
 provider "kubernetes" {
   alias = "eks"
   
-  host                   = data.aws_eks_cluster.cluster.endpoint
-  cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
-  token                  = data.aws_eks_cluster_auth.cluster.token
+  host                   = module.aws_eks.cluster_endpoint
+  cluster_ca_certificate = base64decode(module.aws_eks.cluster_certificate_authority_data)
+  
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args = [
+      "eks", "get-token",
+      "--cluster-name", module.aws_eks.cluster_id,
+      "--region", var.aws_region
+    ]
+  }
+}
+
+# Default kubernetes provider (for modules that don't specify an alias)
+provider "kubernetes" {
+  host                   = module.aws_eks.cluster_endpoint
+  cluster_ca_certificate = base64decode(module.aws_eks.cluster_certificate_authority_data)
+  
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args = [
+      "eks", "get-token",
+      "--cluster-name", module.aws_eks.cluster_id,
+      "--region", var.aws_region
+    ]
+  }
 }
 
 provider "helm" {
   alias = "eks"
   
   kubernetes {
-    host                   = data.aws_eks_cluster.cluster.endpoint
-    cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
-    token                  = data.aws_eks_cluster_auth.cluster.token
+    host                   = module.aws_eks.cluster_endpoint
+    cluster_ca_certificate = base64decode(module.aws_eks.cluster_certificate_authority_data)
+    
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args = [
+        "eks", "get-token",
+        "--cluster-name", module.aws_eks.cluster_id,
+        "--region", var.aws_region
+      ]
+    }
+  }
+}
+
+# Default helm provider (for modules that don't specify an alias)
+provider "helm" {
+  kubernetes {
+    host                   = module.aws_eks.cluster_endpoint
+    cluster_ca_certificate = base64decode(module.aws_eks.cluster_certificate_authority_data)
+    
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args = [
+        "eks", "get-token",
+        "--cluster-name", module.aws_eks.cluster_id,
+        "--region", var.aws_region
+      ]
+    }
   }
 }
 
@@ -335,84 +392,53 @@ module "consul_eks_client" {
   
   # Connection details for primary EC2 cluster
   gossip_key              = random_password.consul_gossip_key.result
-  wan_federation_secret   = random_password.consul_wan_federation_secret.result
+  wan_federation_secret   = ""  # Simplified for external servers mode
+  
+  # FIXED: External servers configuration (primary EC2 cluster)
   primary_consul_servers  = module.consul_primary.server_private_ips
-  consul_master_token     = ""  # ACLs disabled for now
   
-  # Service mesh configuration
-  enable_connect         = true
-  enable_connect_inject  = true
-  enable_ui              = false  # UI runs on primary EC2 cluster
-  enable_prometheus_metrics = true
-  enable_sync_catalog    = true
-  enable_acls           = false
+  # FIXED: Mesh gateway endpoints for cross-cloud communication (empty for same-cloud EKS)
+  mesh_gateway_endpoints  = []
   
-  providers = {
-    kubernetes = kubernetes.eks
-    helm       = helm.eks
-  }
+  # Component configuration - FIXED: Disabled problematic components
+  enable_connect_inject   = false  # FIXED: Disabled to avoid DNS resolution bug
+  enable_sync_catalog     = false  # Not needed for infrastructure deployment
+  enable_acls            = false   # Simplified for infrastructure deployment
   
   depends_on = [
     module.aws_eks,
-    module.consul_primary,
-    null_resource.wait_for_cluster
+    module.consul_primary
   ]
 }
 
-# Get GCP access token for GKE authentication
-data "google_client_config" "default" {}
-
-# Provider configuration for GKE cluster
-provider "kubernetes" {
-  alias = "gke"
-  
-  host                   = "https://${module.gcp_gke.cluster_endpoint}"
-  token                  = data.google_client_config.default.access_token
-  cluster_ca_certificate = base64decode(module.gcp_gke.cluster_ca_certificate)
-}
-
-provider "helm" {
-  alias = "gke"
-  
-  kubernetes {
-    host                   = "https://${module.gcp_gke.cluster_endpoint}"
-    token                  = data.google_client_config.default.access_token
-    cluster_ca_certificate = base64decode(module.gcp_gke.cluster_ca_certificate)
-  }
-}
-
-# GKE Consul Client (Secondary Datacenter)
+# GKE Consul Client (Secondary Datacenter) - FIXED: Cross-cloud via mesh gateway  
 module "consul_gke_client" {
   source = "../../../modules/consul/k8s-client"
   
-  cluster_name           = module.gcp_gke.cluster_name
-  cluster_endpoint       = module.gcp_gke.cluster_endpoint
-  region                 = var.gcp_region
-  environment            = local.environment
-  cloud_provider         = "gcp"
+  cluster_name       = module.gcp_gke.cluster_name
+  cluster_endpoint   = module.gcp_gke.cluster_endpoint
+  region             = var.gcp_region  
+  environment        = local.environment
+  cloud_provider     = "gcp"
   
-  # Fixed: Proper datacenter naming and connection to AWS primary
-  datacenter_name    = "gke-${local.environment}-${var.gcp_region}"
-  primary_datacenter = "aws-${local.environment}-${local.region}"  # Points to AWS EC2 primary
+  # Fixed: Proper datacenter naming for cross-cloud
+  datacenter_name    = "gke-${local.environment}-${local.region}"
+  primary_datacenter = "aws-${local.environment}-${local.region}"  # Points to AWS primary
   
-  # Connection details for primary AWS EC2 cluster
+  # Connection details for cross-cloud federation
   gossip_key              = random_password.consul_gossip_key.result
-  wan_federation_secret   = random_password.consul_wan_federation_secret.result
+  wan_federation_secret   = ""  # Simplified for external servers mode
+  
+  # FIXED: For GKE cross-cloud, use EC2 server IPs  
   primary_consul_servers  = module.consul_primary.server_private_ips
-  consul_master_token     = ""  # ACLs disabled for now
   
-  # Service mesh configuration
-  enable_connect         = true
-  enable_connect_inject  = true
-  enable_ui              = false  # UI runs on primary AWS cluster
-  enable_prometheus_metrics = true
-  enable_sync_catalog    = true
-  enable_acls           = false
+  # FIXED: Use UI ALB endpoint for cross-cloud connectivity
+  mesh_gateway_endpoints  = [module.consul_primary.consul_ui_alb_dns]
   
-  providers = {
-    kubernetes = kubernetes.gke
-    helm       = helm.gke
-  }
+  # Component configuration - FIXED: Disabled problematic components  
+  enable_connect_inject   = false  # FIXED: Disabled to avoid DNS resolution bug
+  enable_sync_catalog     = false  # Not needed for infrastructure deployment
+  enable_acls            = false   # Simplified for infrastructure deployment
   
   depends_on = [
     module.gcp_gke,
@@ -1053,27 +1079,27 @@ output "consul_summary" {
   }
 }
 
-# Outputs for ArgoCD and Observability (TODO: Deploy ArgoCD module)
-# output "argocd_url" {
-#   description = "ArgoCD server public URL"
-#   value       = module.argocd.argocd_url
-# }
+# Outputs for ArgoCD and Observability
+output "argocd_url" {
+  description = "ArgoCD server public URL"
+  value       = module.argocd.argocd_url
+}
 
-# output "argocd_admin_password" {
-#   description = "ArgoCD admin password"
-#   value       = module.argocd.argocd_admin_password
-#   sensitive   = true
-# }
+output "argocd_admin_password" {
+  description = "ArgoCD admin password"
+  value       = module.argocd.argocd_admin_password
+  sensitive   = true
+}
 
-# output "grafana_url" {
-#   description = "Grafana public URL"
-#   value       = module.argocd.grafana_url
-# }
+output "grafana_url" {
+  description = "Grafana public URL"
+  value       = module.argocd.grafana_url
+}
 
-# output "prometheus_url" {
-#   description = "Prometheus public URL"
-#   value       = module.argocd.prometheus_url
-# }
+output "prometheus_url" {
+  description = "Prometheus public URL"
+  value       = module.argocd.prometheus_url
+}
 
 output "observability_summary" {
   description = "Summary of observability stack deployment"

@@ -99,7 +99,7 @@ resource "aws_key_pair" "jenkins_key" {
 # Store private key in AWS Secrets Manager if auto-generated
 resource "aws_secretsmanager_secret" "jenkins_ssh_key" {
   count       = var.ssh_public_key == "" ? 1 : 0
-  name        = "${var.environment}-jenkins-ssh-private-key"
+  name        = "${var.environment}-jenkins-ssh-private-key-${random_pet.suffix.id}"
   description = "SSH private key for Jenkins server"
   
   tags = var.common_tags
@@ -192,7 +192,7 @@ resource "aws_iam_instance_profile" "jenkins_profile" {
 
 # Store Jenkins admin password in AWS Secrets Manager
 resource "aws_secretsmanager_secret" "jenkins_admin_password" {
-  name        = "${var.environment}-jenkins-admin-password"
+  name        = "${var.environment}-jenkins-admin-password-${random_pet.suffix.id}"
   description = "Jenkins admin password"
   
   tags = var.common_tags
@@ -204,6 +204,11 @@ resource "aws_secretsmanager_secret_version" "jenkins_admin_password" {
     username = "admin"
     password = random_password.jenkins_admin_password.result
   })
+}
+
+# Unique suffix to avoid secret name collisions
+resource "random_pet" "suffix" {
+  length = 2
 }
 
 # User data script for Jenkins installation

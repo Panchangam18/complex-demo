@@ -134,9 +134,11 @@ cd "$PE_DIR"
 
 # Create pe.conf
 log_message "Creating pe.conf configuration..."
+# Escape special characters in password for JSON
+PE_PASSWORD_ESCAPED=$(printf '%s\n' "$PE_CONSOLE_ADMIN_PASSWORD" | sed 's/[[\.*^$()+?{|]/\\&/g')
 cat > pe.conf << EOF
 {
-  "console_admin_password": "$PE_CONSOLE_ADMIN_PASSWORD",
+  "console_admin_password": "$PE_PASSWORD_ESCAPED",
   "puppet_enterprise::puppet_master_host": "$PUPPET_FQDN",
   "pe_install::puppet_master_dnsaltnames": [
     "puppet-enterprise",
@@ -244,9 +246,9 @@ SCRIPT_EOF
 
 chmod +x /tmp/install_puppet_enterprise.sh
 
-# Run the full installation script in background
+# Run the full installation script in foreground for better debugging
 echo "Starting Puppet Enterprise installation..."
-nohup /tmp/install_puppet_enterprise.sh > /var/log/pe-install.log 2>&1 &
-
+echo "$(date '+%Y-%m-%d %H:%M:%S') - Running installation in foreground for visibility"
+/tmp/install_puppet_enterprise.sh 2>&1 | tee /var/log/pe-install.log
 echo "✅ Bootstrap completed: $(date)"
-echo "Full installation running in background. Check /var/log/pe-install.log for progress." 
+echo "PE installation completed - check console output above for any errors." 

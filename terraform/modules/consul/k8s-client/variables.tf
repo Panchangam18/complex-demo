@@ -42,19 +42,19 @@ variable "primary_datacenter" {
 variable "consul_helm_version" {
   description = "Version of Consul Helm chart"
   type        = string
-  default     = "1.3.0"
+  default     = "1.7.2"
 }
 
 variable "consul_image_tag" {
   description = "Consul Docker image tag"
   type        = string
-  default     = "1.17.0"
+  default     = "1.21.2"
 }
 
 variable "consul_k8s_image_tag" {
   description = "Consul K8s Docker image tag"
   type        = string
-  default     = "1.3.0"
+  default     = "1.7.2"
 }
 
 variable "gossip_key" {
@@ -72,6 +72,12 @@ variable "wan_federation_secret" {
 variable "primary_consul_servers" {
   description = "List of primary Consul server IP addresses"
   type        = list(string)
+}
+
+variable "mesh_gateway_endpoints" {
+  description = "List of mesh gateway endpoints for cross-cloud connectivity (for GKE, use public ALB endpoints)"
+  type        = list(string)
+  default     = []
 }
 
 variable "enable_connect" {

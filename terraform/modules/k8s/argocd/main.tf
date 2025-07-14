@@ -37,6 +37,17 @@ resource "null_resource" "argocd_install" {
       # Apply the GitOps bootstrap applications
       kubectl apply -f ${var.k8s_manifests_path}/envs/dev/applications.yaml
       
+      # Wait for applications to be created
+      echo "Waiting for ArgoCD applications to be created..."
+      for i in {1..10}; do
+        if kubectl get application frontend-dev -n argocd >/dev/null 2>&1 && kubectl get application backend-dev -n argocd >/dev/null 2>&1; then
+          echo "✅ ArgoCD applications created successfully"
+          break
+        fi
+        echo "⏳ Waiting for applications... ($i/10)"
+        sleep 5
+      done
+      
       # Wait a moment for ArgoCD to process the applications
       sleep 30
       
@@ -98,27 +109,27 @@ data "external" "argocd_info" {
     # Update kubeconfig first
     aws eks update-kubeconfig --region ${var.region} --name ${var.cluster_name} --profile ${var.aws_profile} > /dev/null 2>&1
     
-    # Get ArgoCD URL
+    # Get ArgoCD URL (check argocd namespace, not default)
     ARGOCD_URL=""
-    for i in {1..30}; do
-      ARGOCD_URL=$(kubectl get svc argocd-server -n default -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+    for i in {1..6}; do
+      ARGOCD_URL=$(kubectl get svc argocd-server -n argocd -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
       if [ ! -z "$ARGOCD_URL" ]; then
         break
       fi
-      sleep 10
+      sleep 5
     done
     
-    # Get ArgoCD admin password
-    ARGOCD_PASSWORD=$(kubectl -n default get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" 2>/dev/null | base64 -d)
+    # Get ArgoCD admin password (check argocd namespace)
+    ARGOCD_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" 2>/dev/null | base64 -d)
     
-    # Get Grafana URL
+    # Get Grafana URL (faster timeout)
     GRAFANA_URL=""
-    for i in {1..30}; do
+    for i in {1..6}; do
       GRAFANA_URL=$(kubectl get svc prometheus-stack-grafana -n observability -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
       if [ ! -z "$GRAFANA_URL" ]; then
         break
       fi
-      sleep 10
+      sleep 5
     done
     
     # Get Prometheus URL (simplified - no health check)

@@ -5,6 +5,7 @@
 # Default environment
 ENV ?= dev
 REGION ?= us-east-2
+GCP_REGION ?= us-east1
 CLOUD ?= aws
 # Note: REGION here refers to the directory name, not the AWS deployment region
 # The actual AWS region is configured in terragrunt.hcl
@@ -57,36 +58,91 @@ apply: ## Complete pipeline: Build → Push → Deploy infrastructure & applicat
 	echo "Built images with tag: $$NEW_TAG"
 	@echo ""
 	@echo "======================================================================"
-	@echo "Phase 2: Applying Terraform infrastructure changes"
+	@echo "Phase 2: Deploying infrastructure using two-stage approach"
 	@echo "======================================================================"
-	@cd $(TG_PATH) && $(TG_CMD) init -reconfigure && $(TG_CMD) apply -auto-approve
+	@$(MAKE) apply-infra-and-k8s ENV=$(ENV) REGION=$(REGION) AWS_PROFILE=$(AWS_PROFILE)
 	@echo ""
 	@echo "======================================================================"
-	@echo "Phase 3: Deploying applications to Kubernetes"
+	@echo "Phase 3: Deploying applications via ArgoCD and testing endpoints"
 	@echo "======================================================================"
-	@echo "Forcing fresh deployment with new images..."
-	@kubectl delete pod -l app=frontend -n frontend-dev 2>/dev/null || echo "No frontend pods to delete"
-	@kubectl delete pod -l app=backend -n backend-dev 2>/dev/null || echo "No backend pods to delete"
-	@echo "Waiting for new pods to start..."
-	@kubectl rollout status deployment/frontend -n frontend-dev --timeout=300s 2>/dev/null || echo "Frontend deployment status check skipped"
-	@kubectl rollout status deployment/backend -n backend-dev --timeout=300s 2>/dev/null || echo "Backend deployment status check skipped"
+	@echo "⏳ Waiting for ArgoCD to sync applications..."
+	@for i in {1..12}; do \
+		if kubectl get application frontend-dev -n argocd -o jsonpath='{.status.sync.status}' 2>/dev/null | grep -q "Synced"; then \
+			echo "✅ Frontend application synced"; \
+			break; \
+		fi; \
+		echo "🔄 Waiting for frontend application to sync ($$i/12)..."; \
+		sleep 5; \
+	done
+	@for i in {1..12}; do \
+		if kubectl get application backend-dev -n argocd -o jsonpath='{.status.sync.status}' 2>/dev/null | grep -q "Synced"; then \
+			echo "✅ Backend application synced"; \
+			break; \
+		fi; \
+		echo "🔄 Waiting for backend application to sync ($$i/12)..."; \
+		sleep 5; \
+	done
+	@echo "⏳ Waiting for LoadBalancer services to get external IPs..."
+	@for i in {1..15}; do \
+		FRONTEND_URL=$$(kubectl get svc frontend-service -n frontend-dev -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null); \
+		BACKEND_URL=$$(kubectl get svc backend-service -n backend-dev -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null); \
+		if [ ! -z "$$FRONTEND_URL" ] && [ ! -z "$$BACKEND_URL" ]; then \
+			echo "✅ LoadBalancer URLs are ready"; \
+			break; \
+		fi; \
+		echo "🔄 Waiting for LoadBalancer IPs ($$i/15)..."; \
+		sleep 5; \
+	done
+	@echo ""
+	@echo "🧪 Testing all endpoints..."
+	@FRONTEND_URL=$$(kubectl get svc frontend-service -n frontend-dev -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null); \
+	BACKEND_URL=$$(kubectl get svc backend-service -n backend-dev -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null); \
+	ARGOCD_URL=$$(cd $(TG_PATH) && $(TG_CMD) output -raw argocd_url 2>/dev/null | sed 's/http:\/\///'); \
+	GRAFANA_URL=$$(cd $(TG_PATH) && $(TG_CMD) output -raw grafana_url 2>/dev/null | sed 's/http:\/\///'); \
+	PROMETHEUS_URL=$$(cd $(TG_PATH) && $(TG_CMD) output -raw prometheus_url 2>/dev/null | sed 's/http:\/\///'); \
+	JENKINS_URL=$$(cd $(TG_PATH) && $(TG_CMD) output -raw jenkins_url 2>/dev/null); \
+	CONSUL_URL=$$(cd $(TG_PATH) && $(TG_CMD) output -raw consul_ui_url 2>/dev/null); \
+	NEXUS_URL=$$(kubectl get svc nexus-terraform-nexus3 -n nexus-dev -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null); \
+	echo "Frontend ($$FRONTEND_URL):"; \
+	if [ ! -z "$$FRONTEND_URL" ]; then curl -s -o /dev/null -w "  Status: %{http_code}\n" http://$$FRONTEND_URL --max-time 10 || echo "  Status: Connection failed"; else echo "  Status: URL not available"; fi; \
+	echo "Backend ($$BACKEND_URL):"; \
+	if [ ! -z "$$BACKEND_URL" ]; then curl -s -o /dev/null -w "  Status: %{http_code}\n" http://$$BACKEND_URL/status --max-time 10 || echo "  Status: Connection failed"; else echo "  Status: URL not available"; fi; \
+	echo "ArgoCD ($$ARGOCD_URL):"; \
+	if [ ! -z "$$ARGOCD_URL" ]; then curl -s -o /dev/null -w "  Status: %{http_code}\n" http://$$ARGOCD_URL --max-time 10 || echo "  Status: Connection failed"; else echo "  Status: URL not available"; fi; \
+	echo "Grafana ($$GRAFANA_URL):"; \
+	if [ ! -z "$$GRAFANA_URL" ]; then curl -s -o /dev/null -w "  Status: %{http_code}\n" http://$$GRAFANA_URL --max-time 10 || echo "  Status: Connection failed"; else echo "  Status: URL not available"; fi; \
+	echo "Prometheus ($$PROMETHEUS_URL):"; \
+	if [ ! -z "$$PROMETHEUS_URL" ]; then curl -s -o /dev/null -w "  Status: %{http_code}\n" http://$$PROMETHEUS_URL --max-time 10 || echo "  Status: Connection failed"; else echo "  Status: URL not available"; fi; \
+	echo "Jenkins ($$JENKINS_URL):"; \
+	if [ ! -z "$$JENKINS_URL" ]; then curl -s -o /dev/null -w "  Status: %{http_code}\n" $$JENKINS_URL --max-time 10 || echo "  Status: Connection failed"; else echo "  Status: URL not available"; fi; \
+	echo "Consul ($$CONSUL_URL):"; \
+	if [ ! -z "$$CONSUL_URL" ]; then curl -s -o /dev/null -w "  Status: %{http_code}\n" $$CONSUL_URL --max-time 10 || echo "  Status: Connection failed"; else echo "  Status: URL not available"; fi; \
+	echo "Nexus ($$NEXUS_URL):"; \
+	if [ ! -z "$$NEXUS_URL" ]; then curl -s -o /dev/null -w "  Status: %{http_code}\n" http://$$NEXUS_URL:8081 --max-time 10 || echo "  Status: Connection failed"; else echo "  Status: URL not available"; fi
 	@echo ""
 	@echo "🎉 Complete Deployment Pipeline Finished!"
 	@echo "=========================================="
 	@echo ""
 	@echo "🌐 Application URLs:"
-	@echo "- Frontend: $$(kubectl get svc frontend-service -n frontend-dev -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null | sed 's/^/http:\/\//' || echo 'Load balancer provisioning...')"
-	@echo "- Backend:  $$(kubectl get svc backend-service -n backend-dev -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null | sed 's/^/http:\/\//' || echo 'Load balancer provisioning...')"
+	@FRONTEND_URL=$$(kubectl get svc frontend-service -n frontend-dev -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null); \
+	if [ ! -z "$$FRONTEND_URL" ]; then echo "- Frontend: http://$$FRONTEND_URL"; else echo "- Frontend: Not available yet"; fi
+	@BACKEND_URL=$$(kubectl get svc backend-service -n backend-dev -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null); \
+	if [ ! -z "$$BACKEND_URL" ]; then echo "- Backend:  http://$$BACKEND_URL"; else echo "- Backend: Not available yet"; fi
 	@echo ""
-	@echo "📊 Infrastructure:"
+	@echo "🔄 GitOps & CI/CD:"
+	@cd $(TG_PATH) && $(TG_CMD) output -raw argocd_url 2>/dev/null | sed 's/^/- ArgoCD:    /' || echo "- ArgoCD: Not available"
+	@cd $(TG_PATH) && $(TG_CMD) output -raw jenkins_url 2>/dev/null | sed 's/^/- Jenkins:   /' || echo "- Jenkins: Not available"
+	@echo ""
+	@echo "📊 Monitoring:"
+	@cd $(TG_PATH) && $(TG_CMD) output -raw grafana_url 2>/dev/null | sed 's/^/- Grafana:   /' || echo "- Grafana: Not available"
+	@cd $(TG_PATH) && $(TG_CMD) output -raw prometheus_url 2>/dev/null | sed 's/^/- Prometheus: /' || echo "- Prometheus: Not available"
+	@echo ""
+	@echo "🏗️ Infrastructure:"
+	@cd $(TG_PATH) && $(TG_CMD) output -raw consul_ui_url 2>/dev/null | sed 's/^/- Consul UI: /' || echo "- Consul UI: Not available"
+	@NEXUS_URL=$$(kubectl get svc nexus-terraform-nexus3 -n nexus-dev -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null); \
+	if [ ! -z "$$NEXUS_URL" ]; then echo "- Nexus:     http://$$NEXUS_URL:8081"; else echo "- Nexus: Not available yet"; fi
 	@echo "- EKS Cluster: $$(cd $(TG_PATH) && $(TG_CMD) output -raw eks_cluster_id 2>/dev/null || echo 'Not deployed')"
 	@echo "- GKE Cluster: $$(cd $(TG_PATH) && $(TG_CMD) output -raw gke_cluster_name 2>/dev/null || echo 'Not deployed')"
-	@echo "- Consul UI: $$(cd $(TG_PATH) && $(TG_CMD) output -raw consul_ui_url 2>/dev/null || echo 'Not available')"
-	@echo ""
-	@echo "🔍 Monitoring:"
-	@echo "- Check app status: make status ENV=$(ENV) REGION=$(REGION)"
-	@echo "- View logs: make logs ENV=$(ENV) REGION=$(REGION)"
-	@echo "- Full stack status: make deploy-full-stack ENV=$(ENV) REGION=$(REGION)"
 
 apply-infra-only: ## Apply only Terraform infrastructure changes (no app rebuild)
 	@echo "Applying Terraform changes for $(ENV)/$(REGION)..."
@@ -99,6 +155,34 @@ apply-infra-only: ## Apply only Terraform infrastructure changes (no app rebuild
 	@echo "- EKS Cluster: $$(cd $(TG_PATH) && $(TG_CMD) output -raw eks_cluster_id 2>/dev/null || echo 'Not deployed')"
 	@echo "- GKE Cluster: $$(cd $(TG_PATH) && $(TG_CMD) output -raw gke_cluster_name 2>/dev/null || echo 'Not deployed')"
 	@echo "- Consul UI: $$(cd $(TG_PATH) && $(TG_CMD) output -raw consul_ui_url 2>/dev/null || echo 'Not available')"
+
+apply-core-infra: ## Apply all cloud infrastructure (VPC, RDS, EKS, GKE) and ArgoCD
+	@echo "🏗️  Applying core cloud infrastructure and ArgoCD"
+	@cd $(TG_PATH) && $(TG_CMD) apply -auto-approve \
+		-target=module.aws_vpc \
+		-target=module.gcp_vpc \
+		-target=module.aws_eks \
+		-target=module.gcp_gke \
+		-target=module.consul_primary \
+		-target=module.aws_rds \
+		-target=module.aws_ecr \
+		-target=module.azure_vnet \
+		-target=module.azure_aks \
+		-target=module.azure_ansible_controller \
+		-target=module.jenkins \
+		-target=module.puppet_enterprise \
+		-target=module.argocd \
+		-target=random_password.consul_gossip_key \
+		-target=random_password.consul_wan_federation_secret \
+		-target=null_resource.wait_for_cluster
+
+apply-infra-and-k8s: ## Two-stage apply: cloud infra first, then Kubernetes/Helm add-ons
+	@echo "🚀 Phase 1 – core cloud infrastructure"
+	@$(MAKE) apply-core-infra ENV=$(ENV) REGION=$(REGION) AWS_PROFILE=$(AWS_PROFILE)
+	@echo "✅ Core infrastructure deployed"
+	@echo "🚀 Phase 2 – Kubernetes & Helm add-ons"
+	@cd $(TG_PATH) && $(TG_CMD) apply -auto-approve
+	@echo "🎉 Full infrastructure + Kubernetes add-ons deployed"
 
 deploy-full-stack: ## Deploy infrastructure + applications + images (full stack)
 	@echo "🚀 Starting full stack deployment for $(ENV)/$(REGION)..."
