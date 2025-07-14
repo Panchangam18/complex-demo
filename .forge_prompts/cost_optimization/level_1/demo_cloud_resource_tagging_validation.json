@@ -1,0 +1,65 @@
+{
+  "goal": "Validate and enforce consistent resource tagging across all cloud providers for cost allocation",
+  "steps": [
+    {
+      "name": "Check AWS resource tags in Terraform",
+      "type": "cli",
+      "command": "grep -r 'tags\\s*=' terraform/modules/aws/ | grep -v '.tfstate' | head -20",
+      "files": ["terraform/modules/aws/vpc/main.tf", "terraform/modules/aws/eks/main.tf", "terraform/modules/aws/s3/main.tf"]
+    },
+    {
+      "name": "Check Azure resource tags",
+      "type": "cli",
+      "command": "grep -r 'tags\\s*=' terraform/modules/azure/ | grep -v '.tfstate'",
+      "files": ["terraform/modules/azure/aks/main.tf", "terraform/modules/azure/vnet/main.tf"]
+    },
+    {
+      "name": "Check GCP labels",
+      "type": "cli",
+      "command": "grep -r 'labels\\s*=' terraform/modules/gcp/ | grep -v '.tfstate'",
+      "files": ["terraform/modules/gcp/gke/main.tf", "terraform/modules/gcp/vpc/main.tf"]
+    },
+    {
+      "name": "Validate required tag schema",
+      "type": "prompt",
+      "prompt": "Define and validate required tags across all resources: Environment, Project, Owner, CostCenter, Application, ManagedBy. Check for consistency in tag naming and values.",
+      "files": ["terraform/modules/aws/eks/variables.tf", "terraform/modules/azure/aks/variables.tf", "terraform/modules/gcp/gke/variables.tf"]
+    },
+    {
+      "name": "Create tagging policy template",
+      "type": "cli",
+      "command": "cat > /tmp/tagging-policy.json << 'EOF'\n{\n  \"required_tags\": [\n    {\"key\": \"Environment\", \"allowed_values\": [\"dev\", \"staging\", \"production\"]},\n    {\"key\": \"Project\", \"pattern\": \"^[A-Z][A-Z0-9-]+$\"},\n    {\"key\": \"Owner\", \"pattern\": \"^[a-z.]+@company.com$\"},\n    {\"key\": \"CostCenter\", \"pattern\": \"^CC-[0-9]{4}$\"},\n    {\"key\": \"Application\", \"required\": true},\n    {\"key\": \"ManagedBy\", \"allowed_values\": [\"terraform\", \"manual\"]}\n  ]\n}\nEOF",
+      "files": ["/tmp/tagging-policy.json"]
+    },
+    {
+      "name": "Check Kubernetes resource labels",
+      "type": "cli",
+      "command": "grep -r 'labels:' k8s/envs/dev/ | grep -v '.git' | head -20",
+      "files": ["k8s/envs/dev/backend/deployment.yaml", "k8s/envs/dev/frontend/deployment.yaml"]
+    },
+    {
+      "name": "Validate Datadog service tags",
+      "type": "cli",
+      "command": "grep -E '(tags:|labels:)' monitoring/datadog-servicemonitor.yaml",
+      "files": ["monitoring/datadog-servicemonitor.yaml", "monitoring/datadog-servicemonitors.yaml"]
+    },
+    {
+      "name": "Check script tagging practices",
+      "type": "cli",
+      "command": "grep -E '(--tag|--tags|-tag|-tags)' scripts/*.sh | head -10",
+      "files": ["scripts/build-and-push.sh", "scripts/deploy-full-stack.sh"]
+    },
+    {
+      "name": "Generate tagging compliance report",
+      "type": "prompt",
+      "prompt": "Create tagging compliance report showing: 1) Resources missing required tags, 2) Inconsistent tag values, 3) Cost allocation coverage percentage, 4) Recommendations for improvement.",
+      "files": []
+    },
+    {
+      "name": "Create tag enforcement script",
+      "type": "cli",
+      "command": "cat > /tmp/enforce-tags.sh << 'EOF'\n#!/bin/bash\n# Tag enforcement script\nREQUIRED_TAGS=(\"Environment\" \"Project\" \"Owner\" \"CostCenter\")\n\necho \"Checking Terraform files for required tags...\"\nfor tag in \"${REQUIRED_TAGS[@]}\"; do\n  echo \"Checking for tag: $tag\"\n  grep -r \"$tag\" terraform/modules/ | wc -l\ndone\nEOF\nchmod +x /tmp/enforce-tags.sh",
+      "files": ["/tmp/enforce-tags.sh"]
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "goal": "Validate and optimize load testing scripts for realistic performance testing",
+  "steps": [
+    {
+      "name": "Validate Artillery client stress test",
+      "type": "cli",
+      "command": "cd Code/client/src/tests/stresstests && artillery run --test stress_client.yml",
+      "files": ["Code/client/src/tests/stresstests/stress_client.yml", "Code/client/src/tests/stresstests/user-data.csv"]
+    },
+    {
+      "name": "Validate realistic client stress test",
+      "type": "cli",
+      "command": "cd Code/client/src/tests/stresstests && artillery run --test stress_client_realistic.yml",
+      "files": ["Code/client/src/tests/stresstests/stress_client_realistic.yml"]
+    },
+    {
+      "name": "Validate server stress test",
+      "type": "cli",
+      "command": "cd Code/server/src/tests/stresstests && artillery run --test stress_server.yml",
+      "files": ["Code/server/src/tests/stresstests/stress_server.yml"]
+    },
+    {
+      "name": "Validate intensive server test",
+      "type": "cli",
+      "command": "cd Code/server/src/tests/stresstests && artillery run --test stress_server_intensive.yml",
+      "files": ["Code/server/src/tests/stresstests/stress_server_intensive.yml"]
+    },
+    {
+      "name": "Check test data files",
+      "type": "cli",
+      "command": "head -n 10 Code/client/src/tests/stresstests/user-data.csv && echo '---' && wc -l Code/client/src/tests/stresstests/user-data.csv",
+      "files": ["Code/client/src/tests/stresstests/user-data.csv"]
+    },
+    {
+      "name": "Update load test URLs",
+      "type": "cli",
+      "command": "bash scripts/update-load-test-urls.sh",
+      "files": ["scripts/update-load-test-urls.sh"]
+    },
+    {
+      "name": "Analyze test scenarios",
+      "type": "prompt",
+      "prompt": "Review load test configurations for: 1) Realistic user patterns, 2) Appropriate ramp-up times, 3) Think time between requests, 4) Proper error handling, 5) Meaningful assertions.",
+      "files": ["Code/server/src/tests/stresstests/stress_server_template.yml"]
+    },
+    {
+      "name": "Validate client application config",
+      "type": "cli",
+      "command": "cd Code/client && npm run lint",
+      "files": ["Code/client/package.json", "Code/client/babel.config.js", "Code/client/vue.config.js"]
+    },
+    {
+      "name": "Validate server application config",
+      "type": "cli",
+      "command": "cd Code/server && npm run lint || echo 'No lint script defined'",
+      "files": ["Code/server/package.json", "Code/server/src/app.js"]
+    },
+    {
+      "name": "Generate performance testing plan",
+      "type": "prompt",
+      "prompt": "Create performance testing plan including: 1) Test scenarios coverage, 2) Load patterns (normal, peak, stress), 3) Success criteria (response time, error rate), 4) Monitoring setup.",
+      "files": ["Code/README.md", "Code/tests/README.md"]
+    }
+  ]
+}

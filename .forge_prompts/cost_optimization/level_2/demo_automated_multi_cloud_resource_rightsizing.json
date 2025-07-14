@@ -1,0 +1,177 @@
+{
+  "goal": "Automatically analyze and rightsize resources across AWS, GCP, and Azure to optimize costs",
+  "steps": [
+    {
+      "name": "Get AWS EC2 instance metrics",
+      "type": "integration",
+      "integration": "aws",
+      "method": "cloudwatch.GetMetricStatistics",
+      "parameters": {
+        "Namespace": "AWS/EC2",
+        "MetricName": "CPUUtilization",
+        "Dimensions": [{"Name": "InstanceId", "Value": "${INSTANCE_ID}"}],
+        "StartTime": "${START_TIME}",
+        "EndTime": "${END_TIME}",
+        "Period": 3600,
+        "Statistics": ["Average", "Maximum"]
+      },
+      "files": ["terraform/modules/aws/eks/main.tf"]
+    },
+    {
+      "name": "List Azure VM sizes and usage",
+      "type": "cli",
+      "command": "az vm list --query '[].{name:name, resourceGroup:resourceGroup, vmSize:hardwareProfile.vmSize, location:location}' -o json > /tmp/azure-vms.json",
+      "parameters": {},
+      "files": ["terraform/modules/azure/aks/main.tf"]
+    },
+    {
+      "name": "Get GCP instance metrics",
+      "type": "cli",
+      "command": "gcloud compute instances list --format=json > /tmp/gcp-instances.json",
+      "parameters": {},
+      "files": ["terraform/modules/gcp/gke/main.tf"]
+    },
+    {
+      "name": "Analyze resource utilization patterns",
+      "type": "prompt",
+      "prompt": "Analyze CPU, memory, and network metrics across all cloud providers. Identify: 1) Underutilized instances (<20% avg CPU), 2) Overprovisioned instances, 3) Better instance family matches, 4) Spot/preemptible opportunities.",
+      "parameters": {
+        "cpu_threshold_low": 20,
+        "cpu_threshold_high": 80,
+        "memory_threshold": 70
+      },
+      "files": []
+    },
+    {
+      "name": "Check Datadog metrics for application performance",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "MetricsApi.query_timeseries_data",
+      "parameters": {
+        "body": {
+          "data": {
+            "type": "timeseries_request",
+            "attributes": {
+              "formulas": [{"formula": "query1"}],
+              "queries": [{
+                "name": "query1",
+                "data_source": "metrics",
+                "query": "avg:system.cpu.user{*} by {host,cloud_provider}"
+              }],
+              "from": "now-7d",
+              "to": "now"
+            }
+          }
+        }
+      },
+      "files": ["scripts/deploy-datadog-multicloud.sh"]
+    },
+    {
+      "name": "Generate rightsizing recommendations",
+      "type": "prompt",
+      "prompt": "Based on utilization data, generate specific rightsizing recommendations for each cloud provider. Include instance type changes, cost savings, and performance impact assessment.",
+      "parameters": {
+        "include_reserved_instances": true,
+        "include_savings_plans": true,
+        "risk_tolerance": "medium"
+      },
+      "files": []
+    },
+    {
+      "name": "Update Terraform variables for AWS",
+      "type": "prompt",
+      "prompt": "Update instance types in Terraform AWS modules based on rightsizing recommendations. Ensure compatibility with current workloads.",
+      "parameters": {
+        "current_types": "${CURRENT_AWS_TYPES}",
+        "recommended_types": "${RECOMMENDED_AWS_TYPES}"
+      },
+      "files": ["terraform/modules/aws/eks/variables.tf", "terraform/modules/aws/vpc/variables.tf"]
+    },
+    {
+      "name": "Update Azure AKS node pools",
+      "type": "cli",
+      "command": "az aks nodepool update --resource-group ${RG_NAME} --cluster-name ${AKS_CLUSTER} --name ${NODEPOOL} --node-vm-size ${NEW_SIZE}",
+      "parameters": {},
+      "files": ["terraform/modules/azure/aks/variables.tf"]
+    },
+    {
+      "name": "Update GKE node pool configuration",
+      "type": "cli",
+      "command": "gcloud container node-pools update ${NODEPOOL} --cluster=${GKE_CLUSTER} --machine-type=${NEW_MACHINE_TYPE} --zone=${ZONE}",
+      "parameters": {},
+      "files": ["terraform/modules/gcp/gke/variables.tf"]
+    },
+    {
+      "name": "Test application performance with new sizes",
+      "type": "cli",
+      "command": "cd Code/client/src/tests/stresstests && artillery run stress_client_realistic.yml",
+      "parameters": {},
+      "files": ["Code/client/src/tests/stresstests/stress_client_realistic.yml"]
+    },
+    {
+      "name": "Monitor cost changes",
+      "type": "integration",
+      "integration": "aws",
+      "method": "ce.GetCostForecast",
+      "parameters": {
+        "TimePeriod": {
+          "Start": "${TODAY}",
+          "End": "${NEXT_MONTH}"
+        },
+        "Metric": "UNBLENDED_COST",
+        "Granularity": "MONTHLY"
+      },
+      "files": []
+    },
+    {
+      "name": "Update monitoring configurations",
+      "type": "cli",
+      "command": "bash scripts/monitoring-setup.sh",
+      "parameters": {},
+      "files": ["scripts/monitoring-setup.sh", "monitoring/datadog-servicemonitor.yaml"]
+    },
+    {
+      "name": "Configure auto-scaling policies",
+      "type": "integration",
+      "integration": "aws",
+      "method": "autoscaling.PutScalingPolicy",
+      "parameters": {
+        "AutoScalingGroupName": "${ASG_NAME}",
+        "PolicyName": "target-tracking-policy",
+        "PolicyType": "TargetTrackingScaling",
+        "TargetTrackingScalingPolicyConfiguration": {
+          "PredefinedMetricSpecification": {
+            "PredefinedMetricType": "ASGAverageCPUUtilization"
+          },
+          "TargetValue": 50.0
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Update cost allocation tags",
+      "type": "cli",
+      "command": "bash scripts/update-k8s-images.sh",
+      "parameters": {},
+      "files": ["scripts/update-k8s-images.sh"]
+    },
+    {
+      "name": "Generate cost optimization report",
+      "type": "prompt",
+      "prompt": "Create comprehensive report showing: 1) Original vs optimized costs per cloud, 2) Total monthly savings, 3) Performance impact analysis, 4) ROI timeline.",
+      "parameters": {
+        "aws_savings": "${AWS_SAVINGS}",
+        "azure_savings": "${AZURE_SAVINGS}",
+        "gcp_savings": "${GCP_SAVINGS}"
+      },
+      "files": []
+    },
+    {
+      "name": "Commit Terraform changes",
+      "type": "cli",
+      "command": "cd terraform && git add -A && git commit -m 'Apply multi-cloud resource rightsizing recommendations'",
+      "parameters": {},
+      "files": ["terraform/envs/dev/us-east-2/main.tf"]
+    }
+  ]
+}

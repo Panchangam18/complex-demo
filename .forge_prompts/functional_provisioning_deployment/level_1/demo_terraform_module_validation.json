@@ -1,0 +1,77 @@
+{
+  "goal": "Validate all Terraform modules for syntax, security, and best practices compliance",
+  "steps": [
+    {
+      "name": "Initialize Terraform modules",
+      "type": "cli",
+      "command": "cd terraform && bash scripts/init-aws-gcp.sh",
+      "files": ["terraform/scripts/init-aws-gcp.sh", "terraform/scripts/validate-modules.sh"]
+    },
+    {
+      "name": "Validate AWS VPC module",
+      "type": "cli",
+      "command": "cd terraform/modules/aws/vpc && terraform init && terraform validate",
+      "files": ["terraform/modules/aws/vpc/main.tf", "terraform/modules/aws/vpc/variables.tf", "terraform/modules/aws/vpc/outputs.tf"]
+    },
+    {
+      "name": "Validate AWS EKS module",
+      "type": "cli",
+      "command": "cd terraform/modules/aws/eks && terraform init && terraform validate",
+      "files": ["terraform/modules/aws/eks/main.tf", "terraform/modules/aws/eks/variables.tf", "terraform/modules/aws/eks/data.tf", "terraform/modules/aws/eks/irsa.tf"]
+    },
+    {
+      "name": "Validate Azure AKS module",
+      "type": "cli",
+      "command": "cd terraform/modules/azure/aks && terraform init && terraform validate",
+      "files": ["terraform/modules/azure/aks/main.tf", "terraform/modules/azure/aks/variables.tf", "terraform/modules/azure/aks/outputs.tf"]
+    },
+    {
+      "name": "Validate GCP GKE module",
+      "type": "cli",
+      "command": "cd terraform/modules/gcp/gke && terraform init && terraform validate",
+      "files": ["terraform/modules/gcp/gke/main.tf", "terraform/modules/gcp/gke/workload-identity.tf", "terraform/modules/gcp/gke/variables.tf"]
+    },
+    {
+      "name": "Run Terraform fmt check",
+      "type": "cli",
+      "command": "cd terraform && terraform fmt -check -recursive modules/",
+      "files": []
+    },
+    {
+      "name": "Run tflint on all modules",
+      "type": "cli",
+      "command": "docker run --rm -v $(pwd)/terraform:/data -t ghcr.io/terraform-linters/tflint --recursive",
+      "files": []
+    },
+    {
+      "name": "Run Checkov security scan",
+      "type": "cli",
+      "command": "docker run --rm -v $(pwd)/terraform:/tf bridgecrew/checkov -d /tf --framework terraform -o json > /tmp/checkov-terraform-results.json",
+      "files": ["terraform/modules/aws/s3/main.tf", "terraform/modules/aws/rds/main.tf"]
+    },
+    {
+      "name": "Validate Consul module configurations",
+      "type": "cli",
+      "command": "cd terraform/modules/consul/ec2-cluster && terraform init && terraform validate",
+      "files": ["terraform/modules/consul/ec2-cluster/main.tf", "terraform/modules/consul/ec2-cluster/templates/user-data.sh.tpl"]
+    },
+    {
+      "name": "Check module dependencies",
+      "type": "prompt",
+      "prompt": "Analyze Terraform modules for: 1) Proper version constraints, 2) Provider version pinning, 3) Module source references, 4) Output usage in other modules.",
+      "files": ["terraform/modules/jenkins/versions.tf", "terraform/modules/puppet-enterprise/versions.tf", "terraform/modules/k8s/nexus/versions.tf"]
+    },
+    {
+      "name": "Validate backend configuration",
+      "type": "cli",
+      "command": "cd terraform/envs/dev/us-east-2 && terraform init -backend=false && cat backend.tf",
+      "files": ["terraform/envs/dev/us-east-2/backend.tf", "terraform/bootstrap/main.tf"]
+    },
+    {
+      "name": "Generate validation report",
+      "type": "prompt",
+      "prompt": "Create validation report summarizing: 1) Module validation results, 2) Security findings from Checkov, 3) Formatting issues, 4) Best practice violations.",
+      "files": ["/tmp/checkov-terraform-results.json"]
+    }
+  ]
+}

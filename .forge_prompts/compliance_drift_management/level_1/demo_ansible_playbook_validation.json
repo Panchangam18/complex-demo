@@ -1,0 +1,77 @@
+{
+  "goal": "Validate Ansible playbooks for syntax, best practices, and security compliance",
+  "steps": [
+    {
+      "name": "Check Ansible playbook syntax",
+      "type": "cli",
+      "command": "cd ansible && ansible-playbook --syntax-check playbooks/day0-provisioning.yml",
+      "files": ["ansible/playbooks/day0-provisioning.yml"]
+    },
+    {
+      "name": "Validate Puppet integration playbook",
+      "type": "cli",
+      "command": "cd ansible && ansible-playbook --syntax-check playbooks/puppet-integration.yml",
+      "files": ["ansible/playbooks/puppet-integration.yml"]
+    },
+    {
+      "name": "Validate Elasticsearch integration",
+      "type": "cli",
+      "command": "cd ansible && ansible-playbook --syntax-check playbooks/puppet-elasticsearch-integration.yml",
+      "files": ["ansible/playbooks/puppet-elasticsearch-integration.yml"]
+    },
+    {
+      "name": "Run ansible-lint on all playbooks",
+      "type": "cli",
+      "command": "docker run --rm -v $(pwd)/ansible:/ansible cytopia/ansible-lint playbooks/*.yml",
+      "files": []
+    },
+    {
+      "name": "Check task includes",
+      "type": "cli",
+      "command": "ansible-playbook --syntax-check ansible/tasks/install-node-exporter.yml || echo 'This is a task file, not a playbook'",
+      "files": ["ansible/tasks/install-node-exporter.yml"]
+    },
+    {
+      "name": "Validate Jinja2 templates",
+      "type": "cli",
+      "command": "ls -la ansible/templates/ && echo 'Checking template syntax...' && for f in ansible/templates/*.j2; do echo \"Checking $f\"; python3 -c \"import jinja2; jinja2.Template(open('$f').read())\" && echo \"✓ Valid\" || echo \"✗ Invalid\"; done",
+      "files": ["ansible/templates/consul.json.j2", "ansible/templates/puppet.conf.j2", "ansible/templates/node-exporter.service.j2"]
+    },
+    {
+      "name": "Validate inventory script",
+      "type": "cli",
+      "command": "python3 ansible/inventory/terraform-inventory.py --list || echo 'Requires Terraform state file'",
+      "files": ["ansible/inventory/terraform-inventory.py"]
+    },
+    {
+      "name": "Check for hardcoded secrets",
+      "type": "cli",
+      "command": "grep -rE '(password|secret|key|token)\\s*[:=]\\s*[\"\\x27][^\"\\x27]+[\"\\x27]' ansible/ --include='*.yml' --include='*.yaml' || echo 'No hardcoded secrets found'",
+      "files": []
+    },
+    {
+      "name": "Validate variable usage",
+      "type": "prompt",
+      "prompt": "Check Ansible playbooks for: 1) Proper variable naming conventions, 2) Use of vault for sensitive data, 3) Default values for required variables, 4) Variable documentation.",
+      "files": ["ansible/templates/hiera.yaml.j2", "ansible/templates/elasticsearch_report_processor.rb.j2"]
+    },
+    {
+      "name": "Check idempotency markers",
+      "type": "cli",
+      "command": "grep -r 'changed_when:\\|creates:\\|removes:' ansible/playbooks/ | wc -l && echo 'idempotency markers found'",
+      "files": []
+    },
+    {
+      "name": "Validate Ansible Tower configuration script",
+      "type": "cli",
+      "command": "bash -n scripts/configure-ansible-tower.sh && bash -n scripts/validate-ansible-tower.sh",
+      "files": ["scripts/configure-ansible-tower.sh", "scripts/validate-ansible-tower.sh"]
+    },
+    {
+      "name": "Generate Ansible compliance report",
+      "type": "prompt",
+      "prompt": "Create compliance report including: 1) Syntax validation results, 2) Linting issues by severity, 3) Security findings, 4) Best practice violations, 5) Recommendations for improvement.",
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "goal": "Scan all Kubernetes manifests for security vulnerabilities and policy violations",
+  "steps": [
+    {
+      "name": "Collect all Kubernetes YAML files",
+      "type": "cli",
+      "command": "find k8s/ -name '*.yaml' -o -name '*.yml' | sort > /tmp/k8s-manifest-list.txt",
+      "files": []
+    },
+    {
+      "name": "Validate ArgoCD installation manifest",
+      "type": "cli",
+      "command": "kubectl apply --dry-run=client -f k8s/argocd/install.yaml",
+      "files": ["k8s/argocd/install.yaml"]
+    },
+    {
+      "name": "Scan backend deployment for security issues",
+      "type": "cli",
+      "command": "docker run --rm -v $(pwd)/k8s/envs/dev/backend:/manifests kubesec/kubesec:latest scan /manifests/deployment.yaml",
+      "files": ["k8s/envs/dev/backend/deployment.yaml"]
+    },
+    {
+      "name": "Scan frontend deployment",
+      "type": "cli",
+      "command": "docker run --rm -v $(pwd)/k8s/envs/dev/frontend:/manifests kubesec/kubesec:latest scan /manifests/deployment.yaml",
+      "files": ["k8s/envs/dev/frontend/deployment.yaml"]
+    },
+    {
+      "name": "Check Datadog secrets configuration",
+      "type": "cli",
+      "command": "kubectl apply --dry-run=client -f k8s/envs/dev/monitoring/datadog-secrets.yaml && echo 'Checking for hardcoded secrets...' && grep -E '(password|key|token|secret)' k8s/envs/dev/monitoring/datadog-secrets.yaml || echo 'No plaintext secrets found'",
+      "files": ["k8s/envs/dev/monitoring/datadog-secrets.yaml"]
+    },
+    {
+      "name": "Validate Elasticsearch secret",
+      "type": "cli",
+      "command": "kubectl apply --dry-run=client -f k8s/envs/dev/logging/elasticsearch-secret.yaml",
+      "files": ["k8s/envs/dev/logging/elasticsearch-secret.yaml"]
+    },
+    {
+      "name": "Scan Fluent Bit DaemonSet for security",
+      "type": "cli",
+      "command": "docker run --rm -v $(pwd)/k8s/envs/dev/logging:/manifests aquasec/trivy config /manifests/fluent-bit-daemonset.yaml",
+      "files": ["k8s/envs/dev/logging/fluent-bit-daemonset.yaml", "k8s/envs/dev/logging/fluent-bit-configmap.yaml"]
+    },
+    {
+      "name": "Check RBAC permissions in manifests",
+      "type": "prompt",
+      "prompt": "Analyze Kubernetes manifests for RBAC issues: 1) Overly permissive ClusterRoles, 2) Service accounts with cluster-admin, 3) Wildcard permissions, 4) Missing RBAC definitions.",
+      "files": ["k8s/envs/dev/monitoring/datadog-aws-eks.yaml", "k8s/envs/dev/monitoring/datadog-azure-aks.yaml", "k8s/envs/dev/monitoring/datadog-gcp-gke.yaml"]
+    },
+    {
+      "name": "Validate Prometheus configurations",
+      "type": "cli",
+      "command": "kubectl apply --dry-run=client -f k8s/envs/dev/aws/observability/prometheus.yaml && kubectl apply --dry-run=client -f k8s/envs/dev/aws/observability/prometheus-lite.yaml",
+      "files": ["k8s/envs/dev/aws/observability/prometheus.yaml", "k8s/envs/dev/aws/observability/prometheus-lite.yaml"]
+    },
+    {
+      "name": "Check for resource limits",
+      "type": "cli",
+      "command": "echo 'Checking for missing resource limits...' && grep -L 'resources:' k8s/envs/dev/**/deployment.yaml || echo 'All deployments have resource definitions'",
+      "files": []
+    },
+    {
+      "name": "Scan security findings integration",
+      "type": "cli",
+      "command": "kubectl apply --dry-run=client -f k8s/envs/dev/logging/security-findings-integration.yaml",
+      "files": ["k8s/envs/dev/logging/security-findings-integration.yaml"]
+    },
+    {
+      "name": "Validate JFrog pull secret",
+      "type": "cli",
+      "command": "kubectl apply --dry-run=client -f k8s/secrets/jfrog-pull-secret.yaml",
+      "files": ["k8s/secrets/jfrog-pull-secret.yaml"]
+    },
+    {
+      "name": "Generate security scan report",
+      "type": "prompt",
+      "prompt": "Create comprehensive security report including: 1) High-risk findings, 2) RBAC violations, 3) Missing security contexts, 4) Exposed secrets, 5) Network policy gaps.",
+      "files": []
+    }
+  ]
+}

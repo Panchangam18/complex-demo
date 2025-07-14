@@ -1,0 +1,150 @@
+{
+  "goal": "Automatically upgrade EKS cluster version while ensuring zero downtime for applications",
+  "steps": [
+    {
+      "name": "Check current EKS cluster version",
+      "type": "integration",
+      "integration": "aws",
+      "method": "eks.DescribeCluster",
+      "parameters": {
+        "name": "${CLUSTER_NAME}"
+      },
+      "files": ["terraform/modules/aws/eks/main.tf"]
+    },
+    {
+      "name": "List available EKS versions",
+      "type": "integration",
+      "integration": "aws",
+      "method": "eks.DescribeAddonVersions",
+      "parameters": {
+        "kubernetesVersion": "${CURRENT_VERSION}"
+      },
+      "files": []
+    },
+    {
+      "name": "Check node group compatibility",
+      "type": "integration",
+      "integration": "aws",
+      "method": "eks.ListNodegroups",
+      "parameters": {
+        "clusterName": "${CLUSTER_NAME}",
+        "maxResults": 100
+      },
+      "files": ["terraform/modules/aws/eks/variables.tf"]
+    },
+    {
+      "name": "Backup current cluster configuration",
+      "type": "cli",
+      "command": "kubectl get all --all-namespaces -o yaml > /tmp/cluster-backup-${DATE}.yaml",
+      "parameters": {},
+      "files": ["k8s/envs/dev/applications.yaml"]
+    },
+    {
+      "name": "Check application health before upgrade",
+      "type": "cli",
+      "command": "kubectl get deployments -n production -o json | jq '.items[] | {name: .metadata.name, replicas: .status.replicas, ready: .status.readyReplicas}'",
+      "parameters": {},
+      "files": ["k8s/envs/dev/backend/deployment.yaml", "k8s/envs/dev/frontend/deployment.yaml"]
+    },
+    {
+      "name": "Update cluster version in Terraform",
+      "type": "prompt",
+      "prompt": "Update the EKS cluster version in terraform/modules/aws/eks/variables.tf to the next minor version. Ensure compatibility with existing addons.",
+      "parameters": {
+        "current_version": "${CURRENT_VERSION}",
+        "target_version": "${TARGET_VERSION}"
+      },
+      "files": ["terraform/modules/aws/eks/variables.tf", "terraform/modules/aws/eks/main.tf"]
+    },
+    {
+      "name": "Run Terraform plan",
+      "type": "cli",
+      "command": "cd terraform/envs/dev/us-east-2 && terraform plan -out=eks-upgrade.tfplan",
+      "parameters": {},
+      "files": ["terraform/envs/dev/us-east-2/main.tf"]
+    },
+    {
+      "name": "Apply EKS cluster upgrade",
+      "type": "cli",
+      "command": "cd terraform/envs/dev/us-east-2 && terraform apply eks-upgrade.tfplan",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Monitor upgrade progress",
+      "type": "integration",
+      "integration": "aws",
+      "method": "eks.DescribeUpdate",
+      "parameters": {
+        "name": "${CLUSTER_NAME}",
+        "updateId": "${UPDATE_ID}"
+      },
+      "files": []
+    },
+    {
+      "name": "Update kubectl context",
+      "type": "cli",
+      "command": "aws eks update-kubeconfig --name ${CLUSTER_NAME} --region ${AWS_REGION}",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Verify cluster health",
+      "type": "cli",
+      "command": "kubectl get nodes && kubectl get pods --all-namespaces | grep -v Running | grep -v Completed",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Update node groups",
+      "type": "integration",
+      "integration": "aws",
+      "method": "eks.UpdateNodegroupVersion",
+      "parameters": {
+        "clusterName": "${CLUSTER_NAME}",
+        "nodegroupName": "${NODEGROUP_NAME}",
+        "version": "${TARGET_VERSION}"
+      },
+      "files": []
+    },
+    {
+      "name": "Restart Datadog monitoring",
+      "type": "cli",
+      "command": "kubectl rollout restart daemonset datadog-agent -n datadog",
+      "parameters": {},
+      "files": ["k8s/envs/dev/monitoring/datadog-aws-eks.yaml"]
+    },
+    {
+      "name": "Update Fluent Bit for new K8s version",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/envs/dev/logging/fluent-bit-daemonset.yaml",
+      "parameters": {},
+      "files": ["k8s/envs/dev/logging/fluent-bit-daemonset.yaml", "k8s/envs/dev/logging/fluent-bit-configmap.yaml"]
+    },
+    {
+      "name": "Verify ArgoCD synchronization",
+      "type": "cli",
+      "command": "kubectl get applications -n argocd -o json | jq '.items[] | {name: .metadata.name, sync: .status.sync.status, health: .status.health.status}'",
+      "parameters": {},
+      "files": ["k8s/argocd/install.yaml", "terraform/envs/dev/us-east-2/argocd.tf"]
+    },
+    {
+      "name": "Run post-upgrade validation",
+      "type": "cli",
+      "command": "bash scripts/validate-complete-setup.sh",
+      "parameters": {},
+      "files": ["scripts/validate-complete-setup.sh"]
+    },
+    {
+      "name": "Update documentation",
+      "type": "prompt",
+      "prompt": "Update the deployment guide with the new EKS version and any compatibility notes discovered during the upgrade.",
+      "parameters": {
+        "upgrade_date": "${DATE}",
+        "old_version": "${CURRENT_VERSION}",
+        "new_version": "${TARGET_VERSION}"
+      },
+      "files": ["docs/DEPLOYMENT_GUIDE.md", "docs/DEPLOYMENT_COMPLETE_COVERAGE.md"]
+    }
+  ]
+}

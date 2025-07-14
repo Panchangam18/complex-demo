@@ -1,0 +1,132 @@
+{
+  "goal": "Automatically optimize Elasticsearch indices by analyzing usage patterns and implementing retention policies",
+  "steps": [
+    {
+      "name": "Deploy Elasticsearch integration",
+      "type": "cli",
+      "command": "bash scripts/deploy-elasticsearch-integration.sh",
+      "parameters": {},
+      "files": ["scripts/deploy-elasticsearch-integration.sh"]
+    },
+    {
+      "name": "Get Elasticsearch cluster health",
+      "type": "cli",
+      "command": "kubectl exec -n logging deployment/elasticsearch -- curl -s localhost:9200/_cluster/health?pretty",
+      "parameters": {},
+      "files": ["k8s/envs/dev/logging/elasticsearch-secret.yaml"]
+    },
+    {
+      "name": "List all indices with sizes",
+      "type": "cli",
+      "command": "kubectl exec -n logging deployment/elasticsearch -- curl -s localhost:9200/_cat/indices?v&h=index,docs.count,store.size,pri.store.size&s=store.size:desc",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Analyze index patterns",
+      "type": "prompt",
+      "prompt": "Analyze Elasticsearch indices to identify: 1) Time-based indices older than retention period, 2) Indices with low query rates, 3) Oversized indices needing splitting, 4) Candidates for ILM policies.",
+      "parameters": {
+        "retention_days": 30,
+        "max_index_size_gb": 50,
+        "min_query_rate": 10
+      },
+      "files": ["monitoring/elasticsearch-log-dashboards.json"]
+    },
+    {
+      "name": "Configure Fluent Bit for optimized indexing",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/envs/dev/logging/fluent-bit-configmap.yaml",
+      "parameters": {},
+      "files": ["k8s/envs/dev/logging/fluent-bit-configmap.yaml"]
+    },
+    {
+      "name": "Create ILM policy",
+      "type": "cli",
+      "command": "kubectl exec -n logging deployment/elasticsearch -- curl -X PUT localhost:9200/_ilm/policy/logs-policy -H 'Content-Type: application/json' -d '{\"policy\":{\"phases\":{\"hot\":{\"actions\":{\"rollover\":{\"max_size\":\"50GB\",\"max_age\":\"7d\"}}},\"warm\":{\"min_age\":\"7d\",\"actions\":{\"shrink\":{\"number_of_shards\":1},\"forcemerge\":{\"max_num_segments\":1}}},\"delete\":{\"min_age\":\"30d\",\"actions\":{\"delete\":{}}}}}}'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Apply ILM to existing indices",
+      "type": "cli",
+      "command": "kubectl exec -n logging deployment/elasticsearch -- curl -X PUT 'localhost:9200/logs-*/_settings' -H 'Content-Type: application/json' -d '{\"index.lifecycle.name\":\"logs-policy\"}'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Update Grafana datasource configuration",
+      "type": "cli",
+      "command": "kubectl apply -f monitoring/grafana-elasticsearch-datasource.yaml",
+      "parameters": {},
+      "files": ["monitoring/grafana-elasticsearch-datasource.yaml"]
+    },
+    {
+      "name": "Configure security findings integration",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/envs/dev/logging/security-findings-integration.yaml",
+      "parameters": {},
+      "files": ["k8s/envs/dev/logging/security-findings-integration.yaml"]
+    },
+    {
+      "name": "Optimize shard allocation",
+      "type": "cli",
+      "command": "kubectl exec -n logging deployment/elasticsearch -- curl -X PUT localhost:9200/_cluster/settings -H 'Content-Type: application/json' -d '{\"transient\":{\"cluster.routing.allocation.disk.watermark.low\":\"85%\",\"cluster.routing.allocation.disk.watermark.high\":\"90%\",\"cluster.routing.allocation.disk.watermark.flood_stage\":\"95%\"}}'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Force merge old indices",
+      "type": "cli",
+      "command": "kubectl exec -n logging deployment/elasticsearch -- curl -X POST 'localhost:9200/logs-*-${LAST_MONTH}/_forcemerge?max_num_segments=1'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Create snapshot repository",
+      "type": "cli",
+      "command": "kubectl exec -n logging deployment/elasticsearch -- curl -X PUT localhost:9200/_snapshot/backup -H 'Content-Type: application/json' -d '{\"type\":\"s3\",\"settings\":{\"bucket\":\"${BACKUP_BUCKET}\",\"region\":\"${AWS_REGION}\"}}'",
+      "parameters": {},
+      "files": ["terraform/modules/aws/s3/main.tf"]
+    },
+    {
+      "name": "Take snapshot of critical indices",
+      "type": "cli",
+      "command": "kubectl exec -n logging deployment/elasticsearch -- curl -X PUT localhost:9200/_snapshot/backup/snapshot_${DATE}?wait_for_completion=false -H 'Content-Type: application/json' -d '{\"indices\":\"logs-*,security-*\",\"include_global_state\":false}'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Delete old indices",
+      "type": "cli",
+      "command": "kubectl exec -n logging deployment/elasticsearch -- curl -X DELETE 'localhost:9200/logs-*-${OLD_DATE}'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Update Puppet integration for ES monitoring",
+      "type": "cli",
+      "command": "cd ansible && ansible-playbook -i inventory/terraform-inventory.py playbooks/puppet-elasticsearch-integration.yml",
+      "parameters": {},
+      "files": ["ansible/playbooks/puppet-elasticsearch-integration.yml", "ansible/templates/elasticsearch_report_processor.rb.j2"]
+    },
+    {
+      "name": "Import optimized dashboards",
+      "type": "cli",
+      "command": "kubectl exec -n monitoring deployment/grafana -- curl -X POST http://admin:admin@localhost:3000/api/dashboards/db -H 'Content-Type: application/json' -d @/tmp/elasticsearch-log-dashboards.json",
+      "parameters": {},
+      "files": ["monitoring/elasticsearch-log-dashboards.json"]
+    },
+    {
+      "name": "Document optimization results",
+      "type": "prompt",
+      "prompt": "Create report documenting: 1) Space saved through optimization, 2) Query performance improvements, 3) ILM policies implemented, 4) Backup strategy.",
+      "parameters": {
+        "space_before_gb": "${SPACE_BEFORE}",
+        "space_after_gb": "${SPACE_AFTER}",
+        "query_improvement_percent": "${QUERY_IMPROVEMENT}"
+      },
+      "files": ["docs/ELASTICSEARCH_INTEGRATION_COMPLETE.md"]
+    }
+  ]
+}

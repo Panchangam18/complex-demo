@@ -1,0 +1,136 @@
+{
+  "goal": "Automatically clean up old artifacts in Nexus repository based on usage patterns and retention policies",
+  "steps": [
+    {
+      "name": "Get Nexus repository status",
+      "type": "cli",
+      "command": "kubectl exec -n nexus deployment/nexus -- curl -u admin:${NEXUS_ADMIN_PASSWORD} http://localhost:8081/service/rest/v1/repositories",
+      "parameters": {},
+      "files": ["terraform/modules/k8s/nexus/main.tf"]
+    },
+    {
+      "name": "Configure Nexus using script",
+      "type": "cli",
+      "command": "bash scripts/configure-nexus.sh",
+      "parameters": {},
+      "files": ["scripts/configure-nexus.sh"]
+    },
+    {
+      "name": "List all repositories and sizes",
+      "type": "cli",
+      "command": "kubectl exec -n nexus deployment/nexus -- curl -u admin:${NEXUS_ADMIN_PASSWORD} 'http://localhost:8081/service/rest/v1/repositories' | jq '.[] | {name: .name, type: .type, format: .format}'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Get storage metrics",
+      "type": "cli",
+      "command": "kubectl exec -n nexus deployment/nexus -- df -h /nexus-data",
+      "parameters": {},
+      "files": ["terraform/modules/k8s/nexus/templates/nexus-values.yaml.tpl"]
+    },
+    {
+      "name": "Query artifact download statistics",
+      "type": "cli",
+      "command": "kubectl exec -n nexus deployment/nexus -- curl -u admin:${NEXUS_ADMIN_PASSWORD} 'http://localhost:8081/service/rest/v1/search/assets/download?repository=maven-releases&sort=downloadCount' | jq '.items[] | {downloadCount: .downloadCount, path: .path, lastModified: .lastModified}'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Identify cleanup candidates",
+      "type": "prompt",
+      "prompt": "Analyze Nexus repositories to identify: 1) Artifacts not downloaded in 90+ days, 2) Snapshot versions older than 30 days, 3) Docker images with >5 versions, 4) Large artifacts (>1GB) with low usage.",
+      "parameters": {
+        "retention_days": 90,
+        "snapshot_retention_days": 30,
+        "docker_version_limit": 5,
+        "size_threshold_mb": 1024
+      },
+      "files": ["ci-cd/nexus/configs/nexus-monitoring.yaml"]
+    },
+    {
+      "name": "Create cleanup policy",
+      "type": "cli",
+      "command": "kubectl exec -n nexus deployment/nexus -- curl -u admin:${NEXUS_ADMIN_PASSWORD} -X POST 'http://localhost:8081/service/rest/v1/cleanup-policies' -H 'Content-Type: application/json' -d '{\"name\":\"auto-cleanup-policy\",\"format\":\"maven2\",\"mode\":\"delete\",\"criteria\":{\"lastDownloaded\":7776000,\"regex\":\".*SNAPSHOT.*\"}}'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Test Jenkins integration before cleanup",
+      "type": "cli",
+      "command": "cd ci-cd/jenkins/scripts && bash jenkins-nexus-integration-complete.sh",
+      "parameters": {},
+      "files": ["ci-cd/jenkins/scripts/jenkins-nexus-integration-complete.sh", "ci-cd/jenkins/pipelines/jenkins-nexus-integration.groovy"]
+    },
+    {
+      "name": "Execute cleanup for snapshots",
+      "type": "cli",
+      "command": "kubectl exec -n nexus deployment/nexus -- curl -u admin:${NEXUS_ADMIN_PASSWORD} -X POST 'http://localhost:8081/service/rest/v1/tasks/run' -H 'Content-Type: application/json' -d '{\"typeId\":\"repository.cleanup\",\"properties\":{\"repositoryName\":\"maven-snapshots\"}}'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Run Nexus performance demo",
+      "type": "cli",
+      "command": "cd ci-cd/nexus/scripts && bash demo-nexus-performance.sh",
+      "parameters": {},
+      "files": ["ci-cd/nexus/scripts/demo-nexus-performance.sh"]
+    },
+    {
+      "name": "Compact blob store",
+      "type": "cli",
+      "command": "kubectl exec -n nexus deployment/nexus -- curl -u admin:${NEXUS_ADMIN_PASSWORD} -X POST 'http://localhost:8081/service/rest/v1/tasks/run' -H 'Content-Type: application/json' -d '{\"typeId\":\"blobstore.compact\",\"properties\":{\"blobstoreName\":\"default\"}}'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Update JFrog pull secret",
+      "type": "cli",
+      "command": "kubectl apply -f k8s/secrets/jfrog-pull-secret.yaml",
+      "parameters": {},
+      "files": ["k8s/secrets/jfrog-pull-secret.yaml"]
+    },
+    {
+      "name": "Check cache usage",
+      "type": "cli",
+      "command": "cd ci-cd/nexus/scripts && bash nexus-cache-usage-demo.sh",
+      "parameters": {},
+      "files": ["ci-cd/nexus/scripts/nexus-cache-usage-demo.sh"]
+    },
+    {
+      "name": "Update Consul registration",
+      "type": "cli",
+      "command": "kubectl apply -f ci-cd/nexus/configs/nexus-consul-registration.yaml",
+      "parameters": {},
+      "files": ["ci-cd/nexus/configs/nexus-consul-registration.yaml"]
+    },
+    {
+      "name": "Configure CircleCI integration",
+      "type": "cli",
+      "command": "kubectl create configmap circleci-nexus-config --from-file=ci-cd/circleci/circleci-nexus-integration.yml",
+      "parameters": {},
+      "files": ["ci-cd/circleci/circleci-nexus-integration.yml"]
+    },
+    {
+      "name": "Generate cleanup report",
+      "type": "prompt",
+      "prompt": "Create cleanup report showing: 1) Space reclaimed, 2) Number of artifacts removed, 3) Repository health metrics, 4) Recommendations for ongoing maintenance.",
+      "parameters": {
+        "space_before_gb": "${SPACE_BEFORE}",
+        "space_after_gb": "${SPACE_AFTER}",
+        "artifacts_removed": "${ARTIFACTS_REMOVED}"
+      },
+      "files": ["docs/nexus-deployment-guide.md"]
+    },
+    {
+      "name": "Update deployment documentation",
+      "type": "prompt",
+      "prompt": "Update Nexus deployment documentation with cleanup policies, retention strategies, and maintenance schedule.",
+      "parameters": {
+        "cleanup_schedule": "weekly",
+        "retention_policies": "${RETENTION_POLICIES}"
+      },
+      "files": ["docs/nexus-deployment.md", "docs/JFROG_INTEGRATION.md"]
+    }
+  ]
+}

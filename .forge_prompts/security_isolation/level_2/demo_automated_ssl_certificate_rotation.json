@@ -1,0 +1,179 @@
+{
+  "goal": "Automatically rotate SSL certificates across all services before expiration with zero downtime",
+  "steps": [
+    {
+      "name": "List all ingress resources",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "NetworkingV1Api.list_ingress_for_all_namespaces",
+      "parameters": {
+        "limit": 500
+      },
+      "files": []
+    },
+    {
+      "name": "Check certificate expiration dates",
+      "type": "cli",
+      "command": "kubectl get certificates --all-namespaces -o json | jq '.items[] | {namespace: .metadata.namespace, name: .metadata.name, notAfter: .status.notAfter}'",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Identify certificates expiring soon",
+      "type": "prompt",
+      "prompt": "Analyze certificate expiration dates and identify certificates expiring within 30 days. Create a priority list based on criticality.",
+      "parameters": {
+        "expiry_threshold_days": 30,
+        "critical_namespaces": ["production", "payment", "auth"]
+      },
+      "files": []
+    },
+    {
+      "name": "Backup existing certificates",
+      "type": "cli",
+      "command": "kubectl get secrets -A -o json | jq '.items[] | select(.type==\"kubernetes.io/tls\")' > /tmp/certificate-backup-${DATE}.json",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Run certificate configuration script",
+      "type": "cli",
+      "command": "bash scripts/configure-ssl-certificates.sh",
+      "parameters": {},
+      "files": ["scripts/configure-ssl-certificates.sh"]
+    },
+    {
+      "name": "Generate new certificates using cert-manager",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "CustomObjectsApi.create_namespaced_custom_object",
+      "parameters": {
+        "group": "cert-manager.io",
+        "version": "v1",
+        "namespace": "${NAMESPACE}",
+        "plural": "certificates",
+        "body": {
+          "apiVersion": "cert-manager.io/v1",
+          "kind": "Certificate",
+          "metadata": {
+            "name": "${CERT_NAME}-new"
+          },
+          "spec": {
+            "secretName": "${CERT_NAME}-new",
+            "issuerRef": {
+              "name": "letsencrypt-prod",
+              "kind": "ClusterIssuer"
+            },
+            "dnsNames": ["${DNS_NAMES}"]
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Wait for certificate issuance",
+      "type": "cli",
+      "command": "kubectl wait --for=condition=Ready certificate/${CERT_NAME}-new -n ${NAMESPACE} --timeout=300s",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Update frontend nginx configuration",
+      "type": "prompt",
+      "prompt": "Update nginx.conf in the frontend to reference the new certificate. Ensure proper SSL protocols and ciphers are configured.",
+      "parameters": {
+        "ssl_protocols": "TLSv1.2 TLSv1.3",
+        "ssl_ciphers": "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256"
+      },
+      "files": ["Code/client/nginx.conf"]
+    },
+    {
+      "name": "Update ingress with new certificate",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "NetworkingV1Api.patch_namespaced_ingress",
+      "parameters": {
+        "name": "${INGRESS_NAME}",
+        "namespace": "${NAMESPACE}",
+        "body": {
+          "spec": {
+            "tls": [{
+              "hosts": ["${HOST}"],
+              "secretName": "${CERT_NAME}-new"
+            }]
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "name": "Test SSL configuration",
+      "type": "cli",
+      "command": "openssl s_client -connect ${HOST}:443 -servername ${HOST} < /dev/null | openssl x509 -noout -dates",
+      "parameters": {},
+      "files": []
+    },
+    {
+      "name": "Update load balancer SSL",
+      "type": "cli",
+      "command": "bash scripts/fix-load-balancer-access.sh",
+      "parameters": {},
+      "files": ["scripts/fix-load-balancer-access.sh"]
+    },
+    {
+      "name": "Update Datadog SSL monitoring",
+      "type": "integration",
+      "integration": "datadog",
+      "method": "SyntheticsApi.create_synthetics_api_test",
+      "parameters": {
+        "body": {
+          "config": {
+            "assertions": [{
+              "type": "certificate",
+              "operator": "isInMoreThan",
+              "target": 30
+            }],
+            "request": {
+              "method": "GET",
+              "url": "https://${HOST}"
+            }
+          },
+          "locations": ["aws:us-east-1"],
+          "message": "SSL certificate expiry check for ${HOST}",
+          "name": "SSL Monitor - ${HOST}",
+          "type": "api",
+          "subtype": "ssl"
+        }
+      },
+      "files": ["k8s/envs/dev/monitoring/datadog-aws-eks.yaml"]
+    },
+    {
+      "name": "Cleanup old certificates",
+      "type": "integration",
+      "integration": "kubernetes",
+      "method": "CoreV1Api.delete_namespaced_secret",
+      "parameters": {
+        "name": "${OLD_CERT_SECRET}",
+        "namespace": "${NAMESPACE}"
+      },
+      "files": []
+    },
+    {
+      "name": "Update security documentation",
+      "type": "prompt",
+      "prompt": "Update security documentation with new certificate details, rotation schedule, and any security improvements made.",
+      "parameters": {
+        "rotation_date": "${DATE}",
+        "next_rotation": "${NEXT_ROTATION_DATE}"
+      },
+      "files": ["security-enhancements/zero-trust-architecture.md"]
+    },
+    {
+      "name": "Verify application functionality",
+      "type": "cli",
+      "command": "cd Code/client && npm test && cd ../server && npm test",
+      "parameters": {},
+      "files": ["Code/client/package.json", "Code/server/package.json"]
+    }
+  ]
+}
