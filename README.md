@@ -206,3 +206,57 @@ To deploy this stack:
 5. **Deploy**: Follow the deployment guide in `/docs/DEPLOYMENT_GUIDE.md`
 
 For detailed setup instructions, see the documentation in the `/docs` directory.
+# Complex Demo Infrastructure Suite
+
+## Project Title
+Complex Demo Infrastructure Suite
+
+## Overview
+This repository provides a collection of infrastructure-as-code modules and scripts for deploying a multi-cloud, microservice-based application. It includes Terraform modules for AWS, Azure, GCP, and Kubernetes configurations, as well as auxiliary scripts for orchestration and maintenance.
+
+## Features
+- Reusable Terraform modules for AWS (VPC, EKS, RDS, S3, ECR, Transit Gateway)
+- Azure AKS, VNet, and Ansible Controller modules
+- GCP GKE and VPC modules
+- Consul integration for EC2 clusters and Kubernetes clients
+- Jenkins, Nexus, and Puppet Enterprise provisioning modules
+- Automation scripts for bootstrap, import, cleanup, and validation tasks
+
+## Prerequisites
+- Terraform v1.12.1
+- AWS Provider v6.3.0
+- AzureRM Provider v4.36.0
+- Google Provider v6.43.0
+- Helm v3.0.2 (for Kubernetes)
+- Kubectl configured for your clusters
+- Appropriate cloud credentials (AWS, Azure, GCP) configured in your environment
+
+## Installation
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/your-org/complex-demo.git
+   cd complex-demo
+   ```
+2. Initialize Terraform for the desired environment:
+   ```bash
+   cd terraform/bootstrap
+   terraform init
+   ```
+3. Provision infrastructure:
+   ```bash
+   terraform apply
+   ```
+
+## Usage
+- After bootstrap, switch to an environment folder (e.g., `terraform/envs/dev/us-east-2`) and run:
+  ```bash
+  terraform init
+  terraform apply
+  ```
+- To deploy Kubernetes resources, use the generated terraform outputs in your kubectl or Helm commands.
+
+## Contributing
+Contributions are welcome! Please fork the repository, create a feature branch, and submit a pull request. Ensure that you run `terraform validate` and `terraform fmt` before submitting.
+
+## License
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
