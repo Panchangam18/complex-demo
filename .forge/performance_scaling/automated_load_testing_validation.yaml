@@ -1,0 +1,76 @@
+goal: Automatically run load tests when new versions are deployed to validate performance
+steps:
+- name: Detect new deployment
+  type: integration
+  integration: kubernetes
+  method: AppsV1Api.read_namespaced_deployment
+  parameters:
+    name: backend
+    namespace: default
+- name: Update load test URLs
+  type: cli
+  command: ./scripts/update-load-test-urls.sh ${SERVICE_URL}
+- name: Run client stress test
+  type: cli
+  command: cd Code/client/src/tests/stresstests && artillery run stress_client.yml
+- name: Run realistic client load test
+  type: cli
+  command: cd Code/client/src/tests/stresstests && artillery run stress_client_realistic.yml
+- name: Run server stress test
+  type: cli
+  command: cd Code/server/src/tests/stresstests && artillery run stress_server.yml
+- name: Run intensive server test
+  type: cli
+  command: cd Code/server/src/tests/stresstests && artillery run stress_server_intensive.yml
+- name: Collect performance metrics
+  type: integration
+  integration: datadog
+  method: MetricsApi.query_timeseries_data
+  parameters:
+    body:
+      data:
+        type: timeseries_request
+        attributes:
+          formulas:
+          - formula: query1
+          queries:
+          - name: query1
+            data_source: metrics
+            query: avg:app.response_time{service:backend}
+          from: now-30m
+          to: now
+- name: Analyze test results
+  type: prompt
+  prompt: Analyze load test results and determine if performance meets SLA requirements.
+- name: Check pod resource usage during test
+  type: cli
+  command: kubectl top pods -n default | grep -E 'backend|frontend'
+- name: Scale if needed based on load test
+  type: integration
+  integration: kubernetes
+  method: AppsV1Api.patch_namespaced_deployment_scale
+  parameters:
+    name: backend
+    namespace: default
+    body:
+      spec:
+        replicas: ${NEW_REPLICA_COUNT}
+- name: Create performance baseline
+  type: integration
+  integration: aws
+  method: cloudwatch.PutMetricData
+  parameters:
+    Namespace: PerformanceBaseline
+    MetricData:
+    - MetricName: P95Latency
+      Value: ${P95_LATENCY}
+      Unit: Milliseconds
+      Dimensions:
+      - Name: Version
+        Value: ${VERSION}
+      - Name: Service
+        Value: backend
+- name: Validate complete setup
+  type: cli
+  command: ./scripts/validate-complete-setup.sh --include-performance
+

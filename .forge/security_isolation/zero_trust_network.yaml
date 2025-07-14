@@ -1,0 +1,55 @@
+goal: Implement zero trust network architecture with micro-segmentation
+steps:
+- name: Deploy identity proxy
+  type: cli
+  command: "kubectl apply -f - <<EOF\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n\
+    \  name: identity-proxy\n  namespace: zero-trust\nspec:\n  replicas: 3\n  template:\n\
+    \    spec:\n      containers:\n      - name: envoy\n        image: envoyproxy/envoy:v1.28.0\n\
+    \        volumeMounts:\n        - name: config\n          mountPath: /etc/envoy\n\
+    \      - name: opa\n        image: openpolicyagent/opa:latest-envoy\n        args:\
+    \ [\"run\", \"--server\", \"--addr=localhost:8181\"]\nEOF"
+- name: Configure network policies
+  type: cli
+  command: "kubectl apply -f - <<EOF\napiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\n\
+    metadata:\n  name: deny-all-ingress\n  namespace: production\nspec:\n  podSelector:\
+    \ {}\n  policyTypes:\n  - Ingress\n  - Egress\n  egress:\n  - to:\n    - namespaceSelector:\n\
+    \        matchLabels:\n          name: zero-trust\n    ports:\n    - protocol:\
+    \ TCP\n      port: 8443\nEOF"
+- name: Create service mesh policies
+  type: cli
+  command: "kubectl apply -f - <<EOF\napiVersion: security.istio.io/v1beta1\nkind:\
+    \ AuthorizationPolicy\nmetadata:\n  name: require-jwt\n  namespace: production\n\
+    spec:\n  selector:\n    matchLabels:\n      app: api\n  rules:\n  - from:\n  \
+    \  - source:\n        requestPrincipals: [\"*\"]\n    when:\n    - key: request.auth.claims[iss]\n\
+    \      values: [\"https://auth.example.com\"]\nEOF"
+- name: Deploy certificate manager
+  type: cli
+  command: helm install cert-manager jetstack/cert-manager --namespace cert-manager
+    --create-namespace --set installCRDs=true --set prometheus.enabled=true > /tmp/cert_manager_install.log
+- name: Configure mTLS between services
+  type: cli
+  command: "kubectl apply -f - <<EOF\napiVersion: cert-manager.io/v1\nkind: Certificate\n\
+    metadata:\n  name: service-mtls\n  namespace: production\nspec:\n  secretName:\
+    \ service-mtls-secret\n  issuerRef:\n    name: ca-issuer\n    kind: ClusterIssuer\n\
+    \  commonName: service.production.svc.cluster.local\n  dnsNames:\n  - service.production.svc.cluster.local\n\
+    \  - service\n  usages:\n  - digital signature\n  - key encipherment\n  - server\
+    \ auth\n  - client auth\nEOF"
+- name: Setup policy engine
+  type: cli
+  command: "cat > /tmp/zero_trust_policy.rego << 'EOF'\npackage envoy.authz\n\nimport\
+    \ input.attributes.request.http as http_request\n\ndefault allow = false\n\nallow\
+    \ {\n  valid_jwt\n  authorized_service\n  valid_mtls\n}\n\nvalid_jwt {\n  [_,\
+    \ encoded] := split(http_request.headers.authorization, \" \")\n  [header, payload,\
+    \ _] := io.jwt.decode(encoded)\n  payload.iss == \"https://auth.example.com\"\n\
+    \  payload.exp > time.now_ns() / 1000000000\n}\n\nauthorized_service {\n  http_request.headers[\"\
+    x-forwarded-client-cert\"] != \"\"\n  cert := http_request.headers[\"x-forwarded-client-cert\"\
+    ]\n  contains(cert, \"CN=authorized-service\")\n}\n\nvalid_mtls {\n  http_request.scheme\
+    \ == \"https\"\n  http_request.headers[\"x-forwarded-proto\"] == \"https\"\n}\n\
+    EOF\nkubectl create configmap opa-policy --from-file=/tmp/zero_trust_policy.rego\
+    \ -n zero-trust"
+- name: Verify zero trust implementation
+  type: prompt
+  prompt: Analyze the zero trust configuration including network policies, mTLS setup,
+    and OPA policies. Verify that all traffic is authenticated and authorized, test
+    the policy enforcement, and create a zero trust compliance report.
+

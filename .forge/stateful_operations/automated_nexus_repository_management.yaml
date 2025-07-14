@@ -1,0 +1,51 @@
+goal: Automatically configure and manage Nexus repository for artifact storage and
+  caching
+steps:
+- name: Check Nexus module status
+  type: cli
+  command: cd terraform/modules/k8s/nexus && terraform plan
+- name: Deploy Nexus using Terraform
+  type: cli
+  command: cd terraform/modules/k8s/nexus && terraform apply -auto-approve
+- name: Execute Nexus configuration script
+  type: cli
+  command: ./scripts/configure-nexus.sh
+- name: Apply Nexus Helm values
+  type: cli
+  command: helm upgrade --install nexus sonatype/nexus-repository-manager -f terraform/modules/k8s/nexus/templates/nexus-values.yaml.tpl
+- name: Wait for Nexus to be ready
+  type: cli
+  command: kubectl wait --for=condition=ready pod -l app=nexus -n nexus --timeout=600s
+- name: Configure Nexus repositories
+  type: cli
+  command: cd ci-cd/nexus && ./scripts/nexus-cache-usage-demo.sh
+- name: Set up Nexus monitoring
+  type: cli
+  command: kubectl apply -f ci-cd/nexus/configs/nexus-monitoring.yaml
+- name: Register Nexus with Consul
+  type: cli
+  command: kubectl apply -f ci-cd/nexus/configs/nexus-consul-registration.yaml
+- name: Test Nexus performance
+  type: cli
+  command: cd ci-cd/nexus && ./scripts/demo-nexus-performance.sh
+- name: Configure Jenkins integration
+  type: cli
+  command: cd ci-cd/jenkins && ./scripts/jenkins-nexus-demo.sh
+- name: Create artifact cleanup policy
+  type: prompt
+  prompt: Configure Nexus cleanup policies to remove old artifacts and manage storage
+    usage.
+- name: Monitor Nexus storage usage
+  type: integration
+  integration: aws
+  method: cloudwatch.PutMetricData
+  parameters:
+    Namespace: Nexus
+    MetricData:
+    - MetricName: StorageUsage
+      Value: ${STORAGE_USED_GB}
+      Unit: Gigabytes
+      Dimensions:
+      - Name: Repository
+        Value: maven-releases
+

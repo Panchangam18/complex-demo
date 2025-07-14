@@ -1,0 +1,67 @@
+goal: Implement runtime security scanning and threat detection
+steps:
+- name: Deploy Falco for runtime detection
+  type: cli
+  command: helm install falco falcosecurity/falco --namespace falco --create-namespace
+    --set falco.grpc.enabled=true --set falco.grpcOutput.enabled=true > /tmp/falco_install.log
+- name: Configure custom rules
+  type: cli
+  command: "cat > /tmp/custom_falco_rules.yaml << 'EOF'\n- rule: Unauthorized Process\
+    \ in Container\n  desc: Detect unauthorized process execution in containers\n\
+    \  condition: >\n    spawned_process and container and\n    not proc.name in (allowed_processes)\
+    \ and\n    not container.image.repository in (trusted_repos)\n  output: >\n  \
+    \  Unauthorized process started in container\n    (user=%user.name command=%proc.cmdline\
+    \ container=%container.name image=%container.image.repository)\n  priority: WARNING\n\
+    \  tags: [container, process, security]\n\n- rule: Sensitive File Access\n  desc:\
+    \ Detect access to sensitive files\n  condition: >\n    open_read and\n    fd.name\
+    \ in (/etc/shadow, /etc/passwd, /root/.ssh/*, /var/run/secrets/kubernetes.io/serviceaccount/token)\
+    \ and\n    not proc.name in (authorized_readers)\n  output: >\n    Sensitive file\
+    \ accessed (user=%user.name command=%proc.cmdline file=%fd.name container=%container.name)\n\
+    \  priority: ERROR\n  tags: [filesystem, secrets, security]\nEOF\nkubectl create\
+    \ configmap falco-custom-rules --from-file=/tmp/custom_falco_rules.yaml -n falco"
+- name: Setup vulnerability scanning
+  type: cli
+  command: "kubectl apply -f - <<EOF\napiVersion: batch/v1\nkind: CronJob\nmetadata:\n\
+    \  name: trivy-scan\n  namespace: security\nspec:\n  schedule: \"*/30 * * * *\"\
+    \n  jobTemplate:\n    spec:\n      template:\n        spec:\n          containers:\n\
+    \          - name: trivy\n            image: aquasec/trivy:latest\n          \
+    \  command:\n            - sh\n            - -c\n            - |\n           \
+    \   for image in \\$(kubectl get pods --all-namespaces -o jsonpath='{.items[*].spec.containers[*].image}'\
+    \ | tr ' ' '\\\\n' | sort -u); do\n                trivy image --format json --output\
+    \ /tmp/scan_\\$(echo \\$image | tr '/:' '_').json \\$image\n              done\n\
+    \              kubectl create configmap scan-results --from-file=/tmp --dry-run=client\
+    \ -o yaml | kubectl apply -f -\nEOF"
+- name: Configure SIEM integration
+  type: integration
+  integration: splunk
+  method: index.submit
+  parameters:
+    index: security
+    sourcetype: falco
+    source: kubernetes
+    event:
+      rule: ${FALCO_RULE}
+      priority: ${FALCO_PRIORITY}
+      output: ${FALCO_OUTPUT}
+      time: ${TIMESTAMP}
+- name: Deploy admission controller
+  type: cli
+  command: "kubectl apply -f - <<EOF\napiVersion: admissionregistration.k8s.io/v1\n\
+    kind: ValidatingWebhookConfiguration\nmetadata:\n  name: security-validation\n\
+    webhooks:\n- name: validate.security.io\n  clientConfig:\n    service:\n     \
+    \ name: security-webhook\n      namespace: security\n      path: \"/validate\"\
+    \n  rules:\n  - operations: [\"CREATE\", \"UPDATE\"]\n    apiGroups: [\"\"]\n\
+    \    apiVersions: [\"v1\"]\n    resources: [\"pods\"]\n  admissionReviewVersions:\
+    \ [\"v1\", \"v1beta1\"]\n  sideEffects: None\n  failurePolicy: Fail\nEOF"
+- name: Create security baseline
+  type: cli
+  command: 'kubectl get pods --all-namespaces -o json | jq ''[.items[] | {namespace:
+    .metadata.namespace, name: .metadata.name, securityContext: .spec.securityContext,
+    containers: [.spec.containers[] | {name: .name, image: .image, securityContext:
+    .securityContext}]}]'' > /tmp/security_baseline.json'
+- name: Analyze security posture
+  type: prompt
+  prompt: Analyze the Falco installation logs, custom rules, and security baseline.
+    Identify containers running with elevated privileges, detect any policy violations,
+    and create a remediation plan for security issues.
+

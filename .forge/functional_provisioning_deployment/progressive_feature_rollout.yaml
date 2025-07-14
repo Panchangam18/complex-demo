@@ -1,0 +1,73 @@
+goal: Implement progressive feature rollout with monitoring
+steps:
+- name: Configure feature flags
+  type: integration
+  integration: launchdarkly
+  method: client.flags.create
+  parameters:
+    project_key: production
+    feature_flag:
+      key: new-checkout-flow
+      name: New Checkout Flow
+      variations:
+      - value: false
+        name: Control
+      - value: true
+        name: Treatment
+      defaults:
+        onVariation: 1
+        offVariation: 0
+- name: Create user segments
+  type: integration
+  integration: segment
+  method: analytics.track
+  parameters:
+    user_id: ${USER_ID}
+    event: Feature Flag Evaluated
+    properties:
+      flag_key: new-checkout-flow
+      variation: ${VARIATION}
+      user_segment: ${SEGMENT}
+- name: Deploy with feature toggle
+  type: cli
+  command: kubectl set env deployment/checkout-service FEATURE_FLAG_KEY=new-checkout-flow
+    LAUNCHDARKLY_SDK_KEY=${SDK_KEY} -n production && kubectl rollout status deployment/checkout-service
+    -n production
+- name: Monitor feature metrics
+  type: integration
+  integration: mixpanel
+  method: api.export
+  parameters:
+    from_date: ${START_DATE}
+    to_date: ${END_DATE}
+    event:
+    - Checkout Started
+    - Checkout Completed
+    - Checkout Failed
+    where: properties["feature_flag"] == "new-checkout-flow"
+- name: Calculate conversion rates
+  type: cli
+  command: python3 /scripts/ab_test_analysis.py --control-group 'old-checkout' --treatment-group
+    'new-checkout-flow' --metrics 'conversion_rate,average_order_value,cart_abandonment'
+    --confidence-level 0.95 > /tmp/feature_analysis.json
+- name: Create rollout dashboard
+  type: integration
+  integration: datadog
+  method: api.Dashboard.create
+  parameters:
+    title: Feature Rollout - New Checkout Flow
+    widgets:
+    - definition:
+        type: timeseries
+        requests:
+        - q: sum:checkout.completed{feature:new-checkout-flow} by {version}.as_rate()
+    - definition:
+        type: query_value
+        requests:
+        - q: avg:checkout.conversion_rate{feature:new-checkout-flow}
+- name: Determine rollout strategy
+  type: prompt
+  prompt: Analyze the feature performance metrics and A/B test results. Create a phased
+    rollout plan that gradually increases the percentage of users seeing the new feature
+    based on conversion rates and error metrics. Include rollback triggers.
+

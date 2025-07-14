@@ -1,0 +1,75 @@
+goal: Schedule and monitor time-critical batch processing jobs
+steps:
+- name: Check job dependencies
+  type: cli
+  command: 'kubectl get jobs -n batch-processing -o json | jq ''.items[] | select(.metadata.labels.dependency
+    != null) | {name: .metadata.name, status: .status.conditions[0].type, dependency:
+    .metadata.labels.dependency}'' > /tmp/job_dependencies.json'
+- name: Verify data readiness
+  type: integration
+  integration: aws
+  method: s3.list_objects_v2
+  parameters:
+    Bucket: data-lake
+    Prefix: raw-data/${date}/
+    MaxKeys: 1000
+- name: Calculate processing windows
+  type: prompt
+  prompt: Based on job dependencies in /tmp/job_dependencies.json and typical processing
+    times, calculate optimal scheduling windows for batch jobs. Consider SLA requirements
+    (must complete by 6 AM), resource contention, and dependency chains.
+- name: Create CronJob with deadline
+  type: integration
+  integration: kubernetes
+  method: BatchV1Api.create_namespaced_cron_job
+  parameters:
+    namespace: batch-processing
+    body:
+      metadata:
+        name: daily-etl-${date}
+      spec:
+        schedule: 0 2 * * *
+        startingDeadlineSeconds: 3600
+        concurrencyPolicy: Forbid
+        jobTemplate:
+          spec:
+            activeDeadlineSeconds: 7200
+            backoffLimit: 2
+            template:
+              spec:
+                containers:
+                - name: etl-processor
+                  image: etl-processor:latest
+                  env:
+                  - name: PROCESSING_DATE
+                    value: ${date}
+                restartPolicy: OnFailure
+- name: Monitor job progress
+  type: cli
+  command: 'while true; do kubectl get jobs -n batch-processing -l cronjob-name=daily-etl-${date}
+    -o json | jq ''.items[0].status'' > /tmp/job_status.json; if grep -q ''"type":
+    "Complete"'' /tmp/job_status.json || grep -q ''"type": "Failed"'' /tmp/job_status.json;
+    then break; fi; sleep 60; done'
+- name: Create SLA monitoring alert
+  type: integration
+  integration: datadog
+  method: api.Monitor.create
+  parameters:
+    type: metric alert
+    query: max(last_5m):max:kubernetes.job.completion_time{job_name:daily-etl-*} >
+      14400
+    name: Batch Job SLA Violation
+    message: 'ETL job exceeding 4-hour SLA. Current duration: {{value}} seconds
+
+
+      Job: {{job_name.name}}
+
+      @pagerduty-critical'
+    tags:
+    - sla:batch-processing
+    - priority:p1
+    options:
+      thresholds:
+        critical: 14400
+        warning: 10800
+

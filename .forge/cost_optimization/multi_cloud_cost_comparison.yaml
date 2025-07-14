@@ -1,0 +1,129 @@
+goal: Compare costs across multiple cloud providers for optimization
+steps:
+- name: Collect AWS pricing
+  type: integration
+  integration: aws
+  method: client('pricing').get_products
+  parameters:
+    ServiceCode: AmazonEC2
+    Filters:
+    - Type: TERM_MATCH
+      Field: instanceType
+      Value: m5.large
+    - Type: TERM_MATCH
+      Field: location
+      Value: US East (N. Virginia)
+    - Type: TERM_MATCH
+      Field: operatingSystem
+      Value: Linux
+    MaxResults: 10
+- name: Get Azure pricing
+  type: cli
+  command: curl -s "https://prices.azure.com/api/retail/prices?api-version=2021-10-01-preview&\$filter=serviceName
+    eq 'Virtual Machines' and armRegionName eq 'eastus' and skuName eq 'Standard_D4s_v3'"
+    | jq '.Items[] | select(.productName | contains("Linux")) | {skuName, retailPrice,
+    unitOfMeasure, armRegionName}' > /tmp/azure_pricing.json
+- name: Get GCP pricing
+  type: cli
+  command: "python3 << 'EOF'\nimport json\nimport requests\n\n# GCP Pricing API is\
+    \ complex, so we'll use hardcoded values for demo\ngcp_pricing = {\n    'compute':\
+    \ {\n        'n2-standard-4': {\n            'hourly': 0.1928,\n            'monthly':\
+    \ 140.74,\n            'region': 'us-central1',\n            'vcpus': 4,\n   \
+    \         'memory_gb': 16\n        },\n        'n2-standard-8': {\n          \
+    \  'hourly': 0.3856,\n            'monthly': 281.49,\n            'region': 'us-central1',\n\
+    \            'vcpus': 8,\n            'memory_gb': 32\n        }\n    },\n   \
+    \ 'storage': {\n        'standard': 0.020,  # per GB/month\n        'nearline':\
+    \ 0.010,\n        'coldline': 0.004\n    },\n    'network': {\n        'egress_same_region':\
+    \ 0.01,\n        'egress_cross_region': 0.02,\n        'egress_internet': 0.12\n\
+    \    }\n}\n\nwith open('/tmp/gcp_pricing.json', 'w') as f:\n    json.dump(gcp_pricing,\
+    \ f, indent=2)\nEOF"
+- name: Analyze workload requirements
+  type: cli
+  command: "cat > /tmp/workload_requirements.json << 'EOF'\n{\n  \"workloads\": [\n\
+    \    {\n      \"name\": \"Web Servers\",\n      \"instances\": 20,\n      \"instance_type\"\
+    : \"4vCPU_16GB\",\n      \"storage_gb\": 100,\n      \"data_transfer_gb\": 1000,\n\
+    \      \"availability\": \"99.9%\",\n      \"regions\": [\"us-east\", \"us-west\"\
+    ]\n    },\n    {\n      \"name\": \"Database Cluster\",\n      \"instances\":\
+    \ 6,\n      \"instance_type\": \"8vCPU_32GB\",\n      \"storage_gb\": 1000,\n\
+    \      \"iops\": 10000,\n      \"data_transfer_gb\": 500,\n      \"availability\"\
+    : \"99.99%\"\n    },\n    {\n      \"name\": \"Analytics Platform\",\n      \"\
+    instances\": 10,\n      \"instance_type\": \"16vCPU_64GB\",\n      \"storage_gb\"\
+    : 5000,\n      \"data_transfer_gb\": 2000,\n      \"gpu_required\": true\n   \
+    \ },\n    {\n      \"name\": \"Container Platform\",\n      \"nodes\": 15,\n \
+    \     \"node_type\": \"4vCPU_16GB\",\n      \"persistent_storage_gb\": 2000,\n\
+    \      \"load_balancers\": 3\n    }\n  ],\n  \"constraints\": {\n    \"data_residency\"\
+    : [\"US\", \"EU\"],\n    \"compliance\": [\"SOC2\", \"HIPAA\"],\n    \"support_level\"\
+    : \"Enterprise\",\n    \"contract_term\": \"1 year\"\n  }\n}\nEOF"
+- name: Calculate multi-cloud costs
+  type: cli
+  command: "python3 << 'EOF'\nimport json\n\n# Load workload requirements\nwith open('/tmp/workload_requirements.json',\
+    \ 'r') as f:\n    requirements = json.load(f)\n\n# Cloud provider pricing (simplified\
+    \ for demo)\ncloud_pricing = {\n    'aws': {\n        'compute': {\n         \
+    \   '4vCPU_16GB': 0.17,    # m5.xlarge\n            '8vCPU_32GB': 0.34,    # m5.2xlarge\n\
+    \            '16vCPU_64GB': 0.68    # m5.4xlarge\n        },\n        'storage':\
+    \ 0.10,  # per GB/month\n        'data_transfer': 0.09,  # per GB\n        'load_balancer':\
+    \ 18.0,  # per month\n        'support': 0.10  # 10% of spend\n    },\n    'azure':\
+    \ {\n        'compute': {\n            '4vCPU_16GB': 0.166,   # D4s_v3\n     \
+    \       '8vCPU_32GB': 0.332,   # D8s_v3\n            '16vCPU_64GB': 0.664   #\
+    \ D16s_v3\n        },\n        'storage': 0.0184,  # per GB/month\n        'data_transfer':\
+    \ 0.087,  # per GB\n        'load_balancer': 22.5,  # per month\n        'support':\
+    \ 0.08  # 8% of spend\n    },\n    'gcp': {\n        'compute': {\n          \
+    \  '4vCPU_16GB': 0.1928,  # n2-standard-4\n            '8vCPU_32GB': 0.3856, \
+    \ # n2-standard-8\n            '16vCPU_64GB': 0.7712  # n2-standard-16\n     \
+    \   },\n        'storage': 0.020,  # per GB/month\n        'data_transfer': 0.12,\
+    \  # per GB\n        'load_balancer': 20.0,  # per month\n        'support': 0.09\
+    \  # 9% of spend\n    }\n}\n\n# Calculate costs for each cloud\ncost_comparison\
+    \ = {}\n\nfor cloud, pricing in cloud_pricing.items():\n    monthly_cost = 0\n\
+    \    breakdown = {}\n    \n    for workload in requirements['workloads']:\n  \
+    \      workload_cost = 0\n        \n        # Compute costs\n        instance_type\
+    \ = workload.get('instance_type')\n        if instance_type and instance_type\
+    \ in pricing['compute']:\n            compute_hours = workload.get('instances',\
+    \ workload.get('nodes', 0)) * 730\n            compute_cost = compute_hours *\
+    \ pricing['compute'][instance_type]\n            workload_cost += compute_cost\n\
+    \            \n        # Storage costs\n        storage_gb = workload.get('storage_gb',\
+    \ 0) + workload.get('persistent_storage_gb', 0)\n        storage_cost = storage_gb\
+    \ * pricing['storage']\n        workload_cost += storage_cost\n        \n    \
+    \    # Data transfer costs\n        transfer_gb = workload.get('data_transfer_gb',\
+    \ 0)\n        transfer_cost = transfer_gb * pricing['data_transfer']\n       \
+    \ workload_cost += transfer_cost\n        \n        # Load balancer costs\n  \
+    \      lb_count = workload.get('load_balancers', 0)\n        lb_cost = lb_count\
+    \ * pricing['load_balancer']\n        workload_cost += lb_cost\n        \n   \
+    \     breakdown[workload['name']] = round(workload_cost, 2)\n        monthly_cost\
+    \ += workload_cost\n    \n    # Add support costs\n    support_cost = monthly_cost\
+    \ * pricing['support']\n    breakdown['support'] = round(support_cost, 2)\n  \
+    \  monthly_cost += support_cost\n    \n    cost_comparison[cloud] = {\n      \
+    \  'monthly_total': round(monthly_cost, 2),\n        'annual_total': round(monthly_cost\
+    \ * 12, 2),\n        'breakdown': breakdown\n    }\n\n# Calculate savings\naws_cost\
+    \ = cost_comparison['aws']['monthly_total']\nfor cloud in ['azure', 'gcp']:\n\
+    \    cost_comparison[cloud]['savings_vs_aws'] = round(aws_cost - cost_comparison[cloud]['monthly_total'],\
+    \ 2)\n    cost_comparison[cloud]['savings_percent'] = round(\n        (aws_cost\
+    \ - cost_comparison[cloud]['monthly_total']) / aws_cost * 100, 2\n    )\n\nwith\
+    \ open('/tmp/multi_cloud_comparison.json', 'w') as f:\n    json.dump(cost_comparison,\
+    \ f, indent=2)\nEOF"
+- name: Analyze migration complexity
+  type: cli
+  command: "cat > /tmp/migration_analysis.json << 'EOF'\n{\n  \"migration_factors\"\
+    : {\n    \"aws_to_azure\": {\n      \"complexity\": \"medium\",\n      \"estimated_effort_days\"\
+    : 120,\n      \"key_challenges\": [\n        \"IAM role mapping to Azure AD\"\
+    ,\n        \"VPC to VNet migration\",\n        \"RDS to Azure SQL migration\"\
+    ,\n        \"Lambda to Azure Functions conversion\"\n      ],\n      \"tooling_available\"\
+    : [\n        \"Azure Migrate\",\n        \"Database Migration Service\",\n   \
+    \     \"Azure Site Recovery\"\n      ],\n      \"estimated_migration_cost\": 50000\n\
+    \    },\n    \"aws_to_gcp\": {\n      \"complexity\": \"high\",\n      \"estimated_effort_days\"\
+    : 150,\n      \"key_challenges\": [\n        \"Different networking model\",\n\
+    \        \"Container orchestration differences\",\n        \"Managed service equivalents\"\
+    ,\n        \"Monitoring and logging migration\"\n      ],\n      \"tooling_available\"\
+    : [\n        \"Migrate for Compute Engine\",\n        \"Database Migration Service\"\
+    ,\n        \"Transfer Appliance\"\n      ],\n      \"estimated_migration_cost\"\
+    : 75000\n    }\n  },\n  \"hybrid_cloud_option\": {\n    \"recommended\": true,\n\
+    \    \"strategy\": \"Keep critical workloads on AWS, migrate cost-optimizable\
+    \ workloads\",\n    \"candidates_for_migration\": [\n      \"Analytics Platform\
+    \ (to GCP for BigQuery)\",\n      \"Development/Test environments (to Azure for\
+    \ credits)\"\n    ],\n    \"estimated_savings\": \"15-20% overall\"\n  }\n}\n\
+    EOF"
+- name: Create optimization report
+  type: prompt
+  prompt: Analyze the multi-cloud cost comparison and migration complexity. Recommend
+    whether to stay with current provider, migrate completely, or adopt a hybrid approach.
+    Consider TCO including migration costs, operational overhead, and team expertise.
+

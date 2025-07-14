@@ -1,0 +1,51 @@
+goal: Deploy and configure service mesh with mTLS and observability
+steps:
+- name: Install Istio control plane
+  type: cli
+  command: istioctl install --set profile=production -y > /tmp/istio_install.log &&
+    kubectl get pods -n istio-system -o json > /tmp/istio_pods.json
+- name: Enable namespace injection
+  type: cli
+  command: kubectl label namespace production istio-injection=enabled --overwrite
+    && kubectl get namespace production -o yaml > /tmp/namespace_config.yaml
+- name: Configure mTLS policy
+  type: cli
+  command: "kubectl apply -f - <<EOF\napiVersion: security.istio.io/v1beta1\nkind:\
+    \ PeerAuthentication\nmetadata:\n  name: default\n  namespace: production\nspec:\n\
+    \  mtls:\n    mode: STRICT\n---\napiVersion: networking.istio.io/v1beta1\nkind:\
+    \ DestinationRule\nmetadata:\n  name: default\n  namespace: production\nspec:\n\
+    \  host: \"*.production.svc.cluster.local\"\n  trafficPolicy:\n    tls:\n    \
+    \  mode: ISTIO_MUTUAL\nEOF"
+- name: Deploy Kiali for visualization
+  type: cli
+  command: kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.20/samples/addons/kiali.yaml
+    && kubectl wait --for=condition=ready pod -l app=kiali -n istio-system --timeout=300s
+- name: Configure distributed tracing
+  type: integration
+  integration: datadog
+  method: api.api_client.call_api
+  parameters:
+    resource_path: /api/v2/apm/config/retention-filters
+    method: POST
+    body:
+      data:
+        type: apm_retention_filter
+        attributes:
+          name: Service Mesh Traces
+          enabled: true
+          filter:
+            query: '@trace.mesh:istio'
+          filter_type: spans-sampling-processor
+          rate: 1
+- name: Create service entry for external services
+  type: cli
+  command: "kubectl apply -f - <<EOF\napiVersion: networking.istio.io/v1beta1\nkind:\
+    \ ServiceEntry\nmetadata:\n  name: external-apis\n  namespace: production\nspec:\n\
+    \  hosts:\n  - api.external-service.com\n  ports:\n  - number: 443\n    name:\
+    \ https\n    protocol: HTTPS\n  location: MESH_EXTERNAL\n  resolution: DNS\nEOF"
+- name: Verify mesh configuration
+  type: prompt
+  prompt: Analyze the Istio installation logs and pod status. Verify that mTLS is
+    properly configured between services, check the service mesh topology in Kiali,
+    and create monitoring alerts for mesh health metrics.
+

@@ -1,0 +1,58 @@
+goal: Automatically scan container images in JFrog before deployment and block vulnerable
+  images
+steps:
+- name: Create JFrog pull secret
+  type: cli
+  command: kubectl apply -f k8s/secrets/jfrog-pull-secret.yaml
+- name: Get images from deployments
+  type: integration
+  integration: kubernetes
+  method: AppsV1Api.list_deployment_for_all_namespaces
+  parameters:
+    limit: 100
+- name: Extract container images
+  type: prompt
+  prompt: Extract all container images from deployments and identify which ones need
+    scanning.
+- name: Build and push images to JFrog
+  type: cli
+  command: ./scripts/build-and-push.sh ${IMAGE_NAME} ${VERSION}
+- name: Create image pull secrets
+  type: cli
+  command: ./scripts/create-image-pull-secrets.sh ${NAMESPACE}
+- name: Scan image in JFrog Xray
+  type: cli
+  command: jfrog rt scan ${JFROG_REGISTRY}/${IMAGE_NAME}:${VERSION} --fail=false
+- name: Check scan results
+  type: prompt
+  prompt: Analyze JFrog Xray scan results and determine if image has critical vulnerabilities
+    that should block deployment.
+- name: Update deployment with scanned image
+  type: cli
+  command: ./scripts/update-k8s-images.sh ${DEPLOYMENT} ${JFROG_REGISTRY}/${IMAGE_NAME}:${VERSION}
+- name: Apply security policies
+  type: cli
+  command: ./scripts/configure-security-policies.sh --enforce-image-scanning
+- name: Execute security hardening
+  type: cli
+  command: ./scripts/security-hardening.sh --container-security
+- name: Create security alert if vulnerabilities found
+  type: integration
+  integration: datadog
+  method: MetricsApi.submit_metrics
+  parameters:
+    body:
+      series:
+      - metric: security.vulnerabilities.count
+        points:
+        - - '{TIMESTAMP}'
+          - ${VULN_COUNT}
+        type: gauge
+        tags:
+        - image:${IMAGE_NAME}
+        - severity:${SEVERITY}
+- name: Block deployment if critical vulnerabilities
+  type: cli
+  command: if [ ${CRITICAL_VULNS} -gt 0 ]; then kubectl annotate deployment ${DEPLOYMENT}
+    security.scan/blocked=true; exit 1; fi
+

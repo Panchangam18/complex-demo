@@ -1,0 +1,71 @@
+goal: Test system behavior with time manipulation and clock skew
+steps:
+- name: Capture baseline timestamps
+  type: cli
+  command: kubectl exec -n production $(kubectl get pods -n production -l app=api
+    -o jsonpath='{.items[0].metadata.name}') -- date +%s > /tmp/baseline_time.txt
+    && kubectl exec -n production $(kubectl get pods -n production -l app=database
+    -o jsonpath='{.items[0].metadata.name}') -- mysql -u root -p${DB_PASSWORD} -e
+    "SELECT NOW(), UNIX_TIMESTAMP();" > /tmp/db_baseline_time.txt
+- name: Create time chaos experiment
+  type: cli
+  command: "kubectl apply -f - <<EOF\napiVersion: chaos-mesh.org/v1alpha1\nkind: TimeChaos\n\
+    metadata:\n  name: time-skew-test\n  namespace: production\nspec:\n  mode: all\n\
+    \  selector:\n    namespaces:\n      - production\n    labelSelectors:\n     \
+    \ app: api\n  timeOffset:\n    sec: 3600  # 1 hour forward\n    nsec: 0\n  duration:\
+    \ \"10m\"\nEOF"
+- name: Test JWT token validation
+  type: cli
+  command: "python3 << 'EOF'\nimport jwt\nimport time\nimport requests\nimport json\n\
+    \n# Generate tokens with different expiration times\nresults = []\nsecret = 'test-secret'\n\
+    \nfor exp_offset in [-3600, -60, 60, 3600, 7200]:  # Past and future expirations\n\
+    \    payload = {\n        'user_id': '12345',\n        'iat': int(time.time()),\n\
+    \        'exp': int(time.time()) + exp_offset\n    }\n    \n    token = jwt.encode(payload,\
+    \ secret, algorithm='HS256')\n    \n    try:\n        response = requests.get(\n\
+    \            'http://api-service.production.svc.cluster.local/api/v1/profile',\n\
+    \            headers={'Authorization': f'Bearer {token}'},\n            timeout=5\n\
+    \        )\n        \n        results.append({\n            'exp_offset': exp_offset,\n\
+    \            'status_code': response.status_code,\n            'response': response.text[:100]\n\
+    \        })\n    except Exception as e:\n        results.append({\n          \
+    \  'exp_offset': exp_offset,\n            'error': str(e)\n        })\n\nwith\
+    \ open('/tmp/jwt_time_test.json', 'w') as f:\n    json.dump(results, f, indent=2)\n\
+    EOF"
+- name: Test certificate validation
+  type: cli
+  command: 'for offset in -86400 0 86400; do echo "Testing with time offset: $offset
+    seconds" >> /tmp/cert_validation.log; kubectl exec -n production $(kubectl get
+    pods -n production -l app=api -o jsonpath=''{.items[0].metadata.name}'') -- sh
+    -c "date -s @$(($(date +%s) + $offset)) && curl -v https://internal-service:8443
+    2>&1 | grep -E ''(SSL certificate problem|certificate verify failed|SSL certificate
+    is valid)''" >> /tmp/cert_validation.log 2>&1; done'
+- name: Monitor cache expiration
+  type: cli
+  command: 'kubectl exec -n production $(kubectl get pods -n production -l app=cache
+    -o jsonpath=''{.items[0].metadata.name}'') -- redis-cli --scan --pattern ''*''
+    | head -20 | while read key; do kubectl exec -n production $(kubectl get pods
+    -n production -l app=cache -o jsonpath=''{.items[0].metadata.name}'') -- redis-cli
+    TTL "$key" | xargs -I {} echo "$key: {} seconds"; done > /tmp/cache_ttl_before.txt'
+- name: Test scheduled jobs
+  type: cli
+  command: 'kubectl get cronjobs -n production -o json | jq -r ''.items[] | .metadata.name
+    + ": " + .spec.schedule'' > /tmp/cronjobs.txt && kubectl get jobs -n production
+    --sort-by=.metadata.creationTimestamp -o json | jq -r ''.items[-5:] | .[] | .metadata.name
+    + ": " + .metadata.creationTimestamp'' > /tmp/recent_jobs.txt'
+- name: Test database time functions
+  type: cli
+  command: kubectl exec -n production $(kubectl get pods -n production -l app=database
+    -o jsonpath='{.items[0].metadata.name}') -- mysql -u root -p${DB_PASSWORD} -e
+    "SELECT NOW() as current_time, DATE_ADD(NOW(), INTERVAL 1 HOUR) as future_time,
+    TIMESTAMPDIFF(SECOND, '2024-01-01', NOW()) as seconds_since_2024; SELECT COUNT(*)
+    as expired_sessions FROM sessions WHERE expires_at < NOW(); SELECT COUNT(*) as
+    future_bookings FROM bookings WHERE start_time > NOW() AND start_time < DATE_ADD(NOW(),
+    INTERVAL 1 DAY);" > /tmp/db_time_queries.txt
+- name: Restore time sync
+  type: cli
+  command: kubectl delete timechaos time-skew-test -n production && sleep 30
+- name: Analyze time-based issues
+  type: prompt
+  prompt: Analyze the impact of time manipulation on JWT validation, certificate checks,
+    cache expiration, and scheduled jobs. Identify any time-dependent logic that failed
+    and recommend improvements for handling clock skew and time zone issues.
+

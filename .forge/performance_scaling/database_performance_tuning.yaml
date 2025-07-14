@@ -1,0 +1,74 @@
+goal: Tune database performance through query optimization and indexing
+steps:
+- name: Capture slow query log
+  type: cli
+  command: kubectl exec -n production $(kubectl get pods -n production -l app=database
+    -o jsonpath='{.items[0].metadata.name}') -- mysql -u root -p${DB_PASSWORD} -e
+    "SET GLOBAL slow_query_log = 'ON'; SET GLOBAL long_query_time = 1; SET GLOBAL
+    log_queries_not_using_indexes = 'ON';" && sleep 300 && kubectl exec -n production
+    $(kubectl get pods -n production -l app=database -o jsonpath='{.items[0].metadata.name}')
+    -- cat /var/log/mysql/slow-query.log > /tmp/slow_queries.log
+- name: Analyze query performance
+  type: cli
+  command: kubectl exec -n production $(kubectl get pods -n production -l app=database
+    -o jsonpath='{.items[0].metadata.name}') -- mysql -u root -p${DB_PASSWORD} -e
+    "SELECT digest_text, count_star, avg_timer_wait/1000000000 as avg_seconds, sum_timer_wait/1000000000
+    as total_seconds, first_seen, last_seen FROM performance_schema.events_statements_summary_by_digest
+    WHERE schema_name = 'production' ORDER BY sum_timer_wait DESC LIMIT 20;" > /tmp/query_performance.txt
+- name: Check table statistics
+  type: cli
+  command: kubectl exec -n production $(kubectl get pods -n production -l app=database
+    -o jsonpath='{.items[0].metadata.name}') -- mysql -u root -p${DB_PASSWORD} -e
+    "SELECT table_schema, table_name, table_rows, round(data_length/1024/1024, 2)
+    as data_mb, round(index_length/1024/1024, 2) as index_mb, round((data_length+index_length)/1024/1024,
+    2) as total_mb FROM information_schema.tables WHERE table_schema = 'production'
+    ORDER BY (data_length + index_length) DESC LIMIT 20;" > /tmp/table_stats.txt
+- name: Analyze missing indexes
+  type: cli
+  command: kubectl exec -n production $(kubectl get pods -n production -l app=database
+    -o jsonpath='{.items[0].metadata.name}') -- mysql -u root -p${DB_PASSWORD} -e
+    "SELECT * FROM sys.statements_with_full_table_scans WHERE db = 'production' ORDER
+    BY no_index_used_count DESC LIMIT 10;" > /tmp/missing_indexes.txt
+- name: Generate explain plans
+  type: cli
+  command: kubectl exec -n production $(kubectl get pods -n production -l app=database
+    -o jsonpath='{.items[0].metadata.name}') -- mysql -u root -p${DB_PASSWORD} -e
+    "EXPLAIN FORMAT=JSON SELECT o.*, u.name FROM orders o JOIN users u ON o.user_id
+    = u.id WHERE o.created_at > DATE_SUB(NOW(), INTERVAL 7 DAY) AND o.status = 'pending';"
+    > /tmp/explain_plan.json
+- name: Check buffer pool usage
+  type: cli
+  command: kubectl exec -n production $(kubectl get pods -n production -l app=database
+    -o jsonpath='{.items[0].metadata.name}') -- mysql -u root -p${DB_PASSWORD} -e
+    "SELECT page_type, sum(number_pages) as pages, round(sum(number_pages)*16/1024,
+    2) as size_mb FROM information_schema.innodb_buffer_page GROUP BY page_type ORDER
+    BY pages DESC; SHOW VARIABLES LIKE 'innodb_buffer_pool_size'; SHOW STATUS LIKE
+    'Innodb_buffer_pool_read%';" > /tmp/buffer_pool_stats.txt
+- name: Create optimization script
+  type: cli
+  command: "cat > /tmp/optimize_queries.sql << 'EOF'\n-- Add indexes for slow queries\n\
+    CREATE INDEX idx_orders_created_status ON orders(created_at, status);\nCREATE\
+    \ INDEX idx_users_email ON users(email);\nCREATE INDEX idx_products_category_active\
+    \ ON products(category_id, is_active);\n\n-- Optimize table statistics\nANALYZE\
+    \ TABLE orders;\nANALYZE TABLE users;\nANALYZE TABLE products;\n\n-- Partition\
+    \ large tables\nALTER TABLE order_history PARTITION BY RANGE (YEAR(created_at))\
+    \ (\n    PARTITION p2022 VALUES LESS THAN (2023),\n    PARTITION p2023 VALUES\
+    \ LESS THAN (2024),\n    PARTITION p2024 VALUES LESS THAN (2025),\n    PARTITION\
+    \ p_future VALUES LESS THAN MAXVALUE\n);\n\n-- Update configuration\nSET GLOBAL\
+    \ innodb_buffer_pool_size = 2147483648;  -- 2GB\nSET GLOBAL query_cache_size =\
+    \ 67108864;  -- 64MB\nSET GLOBAL tmp_table_size = 67108864;  -- 64MB\nSET GLOBAL\
+    \ max_heap_table_size = 67108864;  -- 64MB\nEOF"
+- name: Test query performance improvements
+  type: cli
+  command: kubectl exec -n production $(kubectl get pods -n production -l app=database
+    -o jsonpath='{.items[0].metadata.name}') -- mysqlslap --user=root --password=${DB_PASSWORD}
+    --host=localhost --concurrency=50 --iterations=10 --create-schema=production --query="SELECT
+    o.*, u.name FROM orders o JOIN users u ON o.user_id = u.id WHERE o.created_at
+    > DATE_SUB(NOW(), INTERVAL 7 DAY) AND o.status = 'pending' LIMIT 100;" --verbose
+    > /tmp/performance_test.txt
+- name: Analyze optimization impact
+  type: prompt
+  prompt: Review the slow query log, query performance metrics, and missing indexes.
+    Create a prioritized optimization plan including index additions, query rewrites,
+    and configuration changes. Estimate the performance improvement for each optimization.
+

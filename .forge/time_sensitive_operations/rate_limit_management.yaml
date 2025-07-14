@@ -1,0 +1,59 @@
+goal: Dynamically adjust rate limits based on time-sensitive traffic patterns
+steps:
+- name: Get current rate limit configuration
+  type: cli
+  command: kubectl get configmap rate-limit-config -n api-gateway -o yaml > /tmp/current_rate_limits.yaml
+- name: Query traffic patterns
+  type: integration
+  integration: datadog
+  method: api.Metric.query
+  parameters:
+    from: now - 24h
+    to: now
+    query: sum:nginx.requests{service:api-gateway} by {endpoint,hour}.rollup(sum,
+      3600)
+- name: Export traffic data
+  type: cli
+  command: datadog metric query 'sum:nginx.requests{service:api-gateway} by {endpoint}'
+    --from 'now-24h' --to 'now' --output json > /tmp/traffic_patterns.json && date
+    +%H > /tmp/current_hour.txt
+- name: Calculate optimal rate limits
+  type: prompt
+  prompt: Analyze traffic patterns in /tmp/traffic_patterns.json and current hour
+    in /tmp/current_hour.txt. Calculate time-based rate limits that allow legitimate
+    traffic spikes during peak hours (9-11 AM, 2-4 PM) while preventing abuse. Consider
+    95th percentile traffic with 20% headroom.
+- name: Update rate limit configuration
+  type: integration
+  integration: kubernetes
+  method: CoreV1Api.patch_namespaced_config_map
+  parameters:
+    name: rate-limit-config
+    namespace: api-gateway
+    body:
+      data:
+        limits.conf: 'limit_req_zone $binary_remote_addr zone=api_limit:10m rate=${rate_limit}r/s;
+
+          limit_req_zone $binary_remote_addr$request_uri zone=endpoint_limit:10m rate=${endpoint_rate}r/s;'
+- name: Reload rate limiter
+  type: cli
+  command: kubectl rollout restart deployment/api-gateway -n api-gateway && kubectl
+    rollout status deployment/api-gateway -n api-gateway
+- name: Monitor rate limit effectiveness
+  type: integration
+  integration: datadog
+  method: api.Monitor.create
+  parameters:
+    type: metric alert
+    query: sum(last_5m):sum:nginx.requests.rate_limited{service:api-gateway} by {endpoint}.as_rate()
+      > 100
+    name: Excessive Rate Limiting Detected
+    message: 'High rate of legitimate requests being rate limited on {{endpoint.name}}.
+      Consider adjusting limits.
+
+
+      Current rate: {{value}} requests/sec'
+    tags:
+    - rate-limiting
+    - auto-adjust
+
