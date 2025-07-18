@@ -29,8 +29,8 @@ resource "azurerm_resource_group" "network" {
     }
   )
   
+  # Lifecycle removed to allow full teardown
   lifecycle {
-    prevent_destroy = true
     ignore_changes = [tags]
   }
 }
