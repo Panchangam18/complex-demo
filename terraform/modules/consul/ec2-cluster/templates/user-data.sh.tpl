@@ -5,7 +5,7 @@ set -e
 exec > >(tee /var/log/user-data.log)
 exec 2>&1
 
-echo "Starting Consul installation v5 at $(date)"
+echo "Starting Consul installation v6 at $(date)"
 
 # Wait for cloud-init to complete
 sleep 60
@@ -30,10 +30,14 @@ which curl unzip jq aws || { echo "Failed to install dependencies"; exit 1; }
 
 # Install Consul
 cd /tmp
+echo "Downloading Consul ${consul_version}..."
 curl -O https://releases.hashicorp.com/consul/${consul_version}/consul_${consul_version}_linux_amd64.zip
 unzip consul_${consul_version}_linux_amd64.zip
 mv consul /usr/local/bin/
 chmod +x /usr/local/bin/consul
+
+# Verify Consul installation
+/usr/local/bin/consul version || { echo "Consul installation failed"; exit 1; }
 
 # Create consul user
 useradd --system --home /var/lib/consul --shell /bin/false consul
@@ -44,8 +48,10 @@ chown -R consul:consul /opt/consul /var/lib/consul /etc/consul.d /var/log/consul
 
 # Get the private IP address
 PRIVATE_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)
+echo "Private IP: $PRIVATE_IP"
 
 # Generate Consul configuration
+echo "Creating Consul configuration..."
 cat > /etc/consul.d/consul.json <<EOF
 {
   "datacenter": "${datacenter}",
@@ -63,30 +69,24 @@ cat > /etc/consul.d/consul.json <<EOF
     "enabled": ${enable_connect}
   },
   "ports": {
-    "grpc": 8502
+    "grpc": 8502,
+    "http": 8500
   },
   "client_addr": "0.0.0.0",
   "bind_addr": "$PRIVATE_IP",
   "retry_join": ["provider=aws tag_key=ConsulAutoJoin tag_value=${retry_join_tag} region=${aws_region}"],
-%{ if primary_datacenter ~}
-  "primary_datacenter": "${datacenter}",
-%{ endif ~}
-%{ if enable_acls ~}
-  "acl": {
-    "enabled": true,
-    "default_policy": "deny",
-    "enable_token_persistence": true,
-    "down_policy": "extend-cache"
-  },
-%{ endif ~}
-# WAN federation configuration removed - not needed for basic setup
   "performance": {
     "raft_multiplier": 1
   }
 }
 EOF
 
+# Validate configuration
+echo "Validating Consul configuration..."
+/usr/local/bin/consul validate /etc/consul.d/consul.json || { echo "Consul configuration validation failed"; exit 1; }
+
 # Create systemd service
+echo "Creating Consul systemd service..."
 cat > /etc/systemd/system/consul.service <<EOF
 [Unit]
 Description=Consul
@@ -103,17 +103,14 @@ ExecStart=/usr/local/bin/consul agent -config-dir=/etc/consul.d/
 ExecReload=/bin/kill -HUP \$MAINPID
 KillMode=process
 Restart=on-failure
+RestartSec=5
 LimitNOFILE=65536
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# Validate configuration
-echo "Validating Consul configuration..."
-/usr/local/bin/consul validate /etc/consul.d/consul.json
-
-# Start Consul
+# Enable and start Consul
 echo "Starting Consul service..."
 systemctl daemon-reload
 systemctl enable consul
@@ -121,119 +118,33 @@ systemctl start consul
 
 # Wait for Consul to start and validate
 echo "Waiting for Consul to start..."
-for i in {1..12}; do
+for i in {1..20}; do
   if systemctl is-active --quiet consul; then
     echo "Consul service is active"
     break
   else
-    echo "Consul not ready yet, waiting... ($i/12)"
+    echo "Consul not ready yet, waiting... ($i/20)"
+    sleep 15
+  fi
+done
+
+# Additional health check - test Consul HTTP API
+echo "Testing Consul HTTP API..."
+for i in {1..10}; do
+  if curl -f http://localhost:8500/v1/status/leader; then
+    echo "Consul API is responding"
+    break
+  else
+    echo "Consul API not ready yet, waiting... ($i/10)"
     sleep 10
   fi
 done
 
 # Final status check
+echo "Final Consul status check..."
 systemctl status consul --no-pager
+consul members || echo "Consul members not available yet"
 echo "Consul startup completed at $(date)"
-
-%{ if enable_acls && server_index == 0 ~}
-# Bootstrap ACLs (only on first server)
-echo "Bootstrapping ACL system..."
-for i in {1..10}; do
-  if consul acl bootstrap -format=json > /tmp/acl-bootstrap.json 2>/dev/null; then
-    echo "ACL bootstrap successful"
-    break
-  else
-    echo "ACL bootstrap attempt $i failed, retrying in 10 seconds..."
-    sleep 10
-  fi
-done
-
-# Set the master token if ACL bootstrap was successful
-if [ -f /tmp/acl-bootstrap.json ]; then
-  MASTER_TOKEN=$(jq -r .SecretID /tmp/acl-bootstrap.json)
-  export CONSUL_HTTP_TOKEN=$MASTER_TOKEN
-  
-  # Create agent policy
-  consul acl policy create \
-    -name "agent-policy" \
-    -description "Policy for Consul agents" \
-    -rules 'node_prefix "" { policy = "write" } service_prefix "" { policy = "read" }'
-  
-  # Create agent token
-  consul acl token create \
-    -description "Agent token" \
-    -policy-name "agent-policy" \
-    -format=json > /tmp/agent-token.json
-  
-  AGENT_TOKEN=$(jq -r .SecretID /tmp/agent-token.json)
-  consul acl set-agent-token agent "$AGENT_TOKEN"
-fi
-%{ endif ~}
-
-# Install and configure Envoy (for Connect)
-%{ if enable_connect ~}
-echo "Installing Envoy for Consul Connect..."
-curl -L https://getenvoy.io/cli | bash -s -- -b /usr/local/bin
-/usr/local/bin/getenvoy run standard:1.22.2 -- --version || true
-%{ endif ~}
-
-# Configure mesh gateway for WAN federation
-%{ if wan_federation_secret != "" ~}
-echo "Configuring mesh gateway for WAN federation..."
-
-# Create mesh gateway configuration
-cat > /etc/consul.d/mesh-gateway.json <<EOF
-{
-  "service": {
-    "name": "mesh-gateway",
-    "kind": "mesh-gateway",
-    "port": 8443,
-    "proxy": {
-      "config": {
-        "envoy_mesh_gateway_bind_tagged_addresses": true,
-        "envoy_mesh_gateway_bind_addresses": {
-          "wan": {
-            "address": "{{ GetPrivateInterfaces | include \"network\" \"10.0.0.0/8\" | attr \"address\" }}",
-            "port": 8443
-          }
-        }
-      }
-    }
-  }
-}
-EOF
-
-# Create mesh gateway systemd service
-cat > /etc/systemd/system/consul-mesh-gateway.service <<EOF
-[Unit]
-Description=Consul Mesh Gateway
-Documentation=https://www.consul.io/
-Requires=consul.service
-After=consul.service
-ConditionFileNotEmpty=/etc/consul.d/mesh-gateway.json
-
-[Service]
-Type=exec
-User=consul
-Group=consul
-ExecStart=/usr/local/bin/consul connect envoy -mesh-gateway -register -service mesh-gateway -address "{{ GetPrivateInterfaces | include \"network\" \"10.0.0.0/8\" | attr \"address\" }}:8443"
-ExecStop=/bin/kill -TERM \$MAINPID
-Restart=on-failure
-RestartSec=2
-KillMode=mixed
-KillSignal=SIGINT
-TimeoutStopSec=5
-LimitNOFILE=65536
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Enable and start mesh gateway service
-systemctl daemon-reload
-systemctl enable consul-mesh-gateway
-systemctl start consul-mesh-gateway
-%{ endif ~}
 
 # Configure log rotation
 cat > /etc/logrotate.d/consul <<EOF
@@ -250,18 +161,4 @@ cat > /etc/logrotate.d/consul <<EOF
 }
 EOF
 
-# Create health check script
-cat > /usr/local/bin/consul-health-check.sh <<'EOF'
-#!/bin/bash
-# Simple health check for Consul
-curl -f http://localhost:8500/v1/agent/self > /dev/null 2>&1
-exit $?
-EOF
-chmod +x /usr/local/bin/consul-health-check.sh
-
-# Add consul health check to cron
-echo "*/1 * * * * consul /usr/local/bin/consul-health-check.sh || /bin/systemctl restart consul" | crontab -u consul -
-
-echo "Consul installation completed at $(date)"
-echo "Consul status:"
-systemctl status consul --no-pager 
+echo "Consul installation completed successfully at $(date)" 
