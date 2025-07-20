@@ -376,6 +376,45 @@ provider "helm" {
   }
 }
 
+# Data sources for GKE cluster (ensures proper dependency)
+data "google_container_cluster" "gke_cluster" {
+  name     = module.gcp_gke.cluster_name
+  location = var.gcp_region
+  project  = var.gcp_project_id
+
+  depends_on = [
+    module.gcp_gke
+  ]
+}
+
+# GKE Kubernetes Provider with proper dependencies
+provider "kubernetes" {
+  alias = "gke"
+  
+  host                   = "https://${data.google_container_cluster.gke_cluster.endpoint}"
+  cluster_ca_certificate = base64decode(data.google_container_cluster.gke_cluster.master_auth.0.cluster_ca_certificate)
+  
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "/opt/homebrew/share/google-cloud-sdk/bin/gke-gcloud-auth-plugin"
+  }
+}
+
+# GKE Helm Provider with proper dependencies
+provider "helm" {
+  alias = "gke"
+  
+  kubernetes {
+    host                   = "https://${data.google_container_cluster.gke_cluster.endpoint}"
+    cluster_ca_certificate = base64decode(data.google_container_cluster.gke_cluster.master_auth.0.cluster_ca_certificate)
+    
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "/opt/homebrew/share/google-cloud-sdk/bin/gke-gcloud-auth-plugin"
+    }
+  }
+}
+
 # EKS Consul Client (Secondary Datacenter) - FIXED: Now client-only mode
 module "consul_eks_client" {
   source = "../../../modules/consul/k8s-client"
@@ -404,6 +443,12 @@ module "consul_eks_client" {
   enable_connect_inject   = false  # FIXED: Disabled to avoid DNS resolution bug
   enable_sync_catalog     = false  # Not needed for infrastructure deployment
   enable_acls            = false   # Simplified for infrastructure deployment
+  
+  # Use EKS-specific providers
+  providers = {
+    kubernetes = kubernetes.eks
+    helm       = helm.eks
+  }
   
   depends_on = [
     module.aws_eks,
@@ -439,6 +484,12 @@ module "consul_gke_client" {
   enable_connect_inject   = false  # FIXED: Disabled to avoid DNS resolution bug
   enable_sync_catalog     = false  # Not needed for infrastructure deployment
   enable_acls            = false   # Simplified for infrastructure deployment
+  
+  # Use GKE-specific providers
+  providers = {
+    kubernetes = kubernetes.gke
+    helm       = helm.gke
+  }
   
   depends_on = [
     module.gcp_gke,
